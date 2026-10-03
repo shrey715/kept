@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -25,14 +26,23 @@ def serve(args: argparse.Namespace) -> int:
     """Track D. Until the real services are wired (G4), only --demo runs."""
     import uvicorn
 
-    from kept.app.api import create_app
-
     if not args.demo:
         print("kept serve: the real services are wired at G4; use `kept serve --demo` until then.")
         return 2
-    from kept.app.demo import demo_services
+    if args.reload:  # restarts on any change under src/ (demo state resets with it)
+        src = Path(__file__).resolve().parents[1]
+        uvicorn.run(
+            "kept.app.demo:demo_app",
+            factory=True,
+            reload=True,
+            reload_dirs=[str(src)],
+            host=args.host,
+            port=args.port,
+        )
+        return 0
+    from kept.app.demo import demo_app
 
-    uvicorn.run(create_app(demo_services()), host=args.host, port=args.port)
+    uvicorn.run(demo_app(), host=args.host, port=args.port)
     return 0
 
 
@@ -49,6 +59,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--demo", action="store_true", help="three in-memory cases, no warehouse needed")
             p.add_argument("--host", default="127.0.0.1")
             p.add_argument("--port", type=int, default=8000)
+            p.add_argument("--reload", action="store_true", help="restart when code under src/ changes")
     args = parser.parse_args(argv)
     handler = HANDLERS.get(args.command)
     if handler is None:

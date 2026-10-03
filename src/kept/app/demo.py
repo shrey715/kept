@@ -18,8 +18,9 @@ from zoneinfo import ZoneInfo
 
 import duckdb
 import pandas as pd
+from fastapi import FastAPI
 
-from kept.app.api import Services
+from kept.app.api import Services, create_app
 from kept.common.audit import DuckDBAuditLog, new_event_id
 from kept.config import RAW_DIR
 from kept.contracts.ask import (
@@ -527,3 +528,8 @@ def demo_services() -> Services:
         clock=_business_clock,
         add_note=world.add_note,
     )
+
+
+def demo_app() -> FastAPI:
+    """App factory for `kept serve --demo --reload` (uvicorn re-imports it on every code change)."""
+    return create_app(demo_services())
