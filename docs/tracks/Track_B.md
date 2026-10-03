@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G3 prep done (code); full benchmark scorecard in `docs/benchmark_scorecard.md` (dev 78%, recall 100%)
-- Working on: nothing; waiting for a Mistral key (Gemini's free quota is used up until ~05:30 IST)
-- Waiting on: the new model key; G3 for the fairness run on real recommendations (D's `kept score` output)
+- Phase: G3 ready (code, scorecard, quota plan). Phases 1 to 5 parallel tasks done.
+- Working on: nothing
+- Waiting on: D's `kept score` output for the fairness run on real recommendations; 4 Oct 19:00 IST for the extra questions (`kept benchmark`, commit before 21:00)
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -64,6 +64,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 23:55: teammate's Gemini key (a different project, fresh 500/day) works; full 35-question rerun with the final code: dev 78% (14 of 18), recall 100%, 109 calls; scorecard refreshed. Track B G3 ready.
 - 2026-10-03 23:40: Mistral key tested (14B 44%, codestral 39% vs Gemini 78%); router accepts null filters; Ask stays on Gemini.
 - 2026-10-03 23:30: Gemini free quota exhausted (500 per day per project per model); stopped the benchmark run; scorecard from the 23:11 run committed; waiting for a Mistral key.
 - 2026-10-03 23:11: full 35-question run, dev 78% / recall 100%.
