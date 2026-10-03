@@ -131,3 +131,21 @@ def test_bank_ids_are_not_redacted(redactor: PresidioRedactor, text: str) -> Non
 def test_phone_next_to_a_case_id_still_redacted(redactor: PresidioRedactor) -> None:
     out = redactor.redact("case CS-2026-614370, call back at 416-555-0123").text
     assert "CS-2026-614370" in out and "416-555-0123" not in out
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "cure_rate,n\n0.42059724349157736,26120",
+        "[{'cure_rate': 0.42059724349157736, 'n': 26120}]",
+        "cure_rate,n\n0.4206 26120",
+        "rate 12.5512345678901234 over 3 months",
+    ],
+)
+def test_decimals_are_not_cards_or_phones(redactor: PresidioRedactor, text: str) -> None:
+    assert redactor.redact(text).text == text
+
+
+def test_real_card_and_phone_still_removed(redactor: PresidioRedactor) -> None:
+    out = redactor.redact("rate 0.42, card 4520 3572 3838 5812, call 416-555-0123 or 416.555.0199.").text
+    assert "4520" not in out and "416-555" not in out and "416.555" not in out and "0.42" in out
