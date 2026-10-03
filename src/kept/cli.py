@@ -76,13 +76,16 @@ def match(args: argparse.Namespace) -> int:
     conn = connect(read_only=True)
     try:
         previous = pd.read_parquet(args.previous) if args.previous else None
-        run = run_matching(conn, sample_mod=args.sample_mod, previous=previous)
+        run = run_matching(
+            conn, sample_mod=args.sample_mod, train_sample_mod=args.train_sample_mod, previous=previous
+        )
     finally:
         conn.close()
     commit = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
     scope = f"sample{args.sample_mod}" if args.sample_mod else "full"
+    scope += f"-train{args.train_sample_mod}" if args.train_sample_mod else ""
     tag = f"{commit or 'nogit'}-{datetime.now(UTC):%Y%m%d}-{scope}"
     for path in write_run(run, args.out_dir, tag=tag):
         print(path)
@@ -117,6 +120,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if name == "match":
             p.add_argument(
                 "--sample-mod", type=int, default=None, help="tune on 1/N of the records (hash of DOB)"
+            )
+            p.add_argument(
+                "--train-sample-mod",
+                type=int,
+                default=None,
+                help="train Splink on 1/N of the records (hash of DOB), score all of them",
             )
             p.add_argument("--out-dir", type=Path, default=EXPORT_DIR / "identity_crosswalk")
             p.add_argument(
