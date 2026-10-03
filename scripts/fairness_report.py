@@ -28,6 +28,9 @@ def main() -> None:
         "--restricted", type=Path, help="gold.c360_restricted as Parquet (default: the warehouse)"
     )
     ap.add_argument("--out", type=Path, default=Path("docs/fairness_report.md"))
+    ap.add_argument(
+        "--notes", type=Path, default=Path("docs/fairness_findings.md"), help="hand-written findings appended"
+    )
     args = ap.parse_args()
 
     conn = duckdb.connect(str(args.warehouse), read_only=True)
@@ -43,7 +46,8 @@ def main() -> None:
     attributes = sorted((contract.protected_attributes | contract.proxy_attributes) & set(restricted.columns))
     report = fairness_report(cards, restricted, attributes)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("# Fairness report (Track B)\n\n" + report, encoding="utf-8")
+    notes = "\n" + args.notes.read_text(encoding="utf-8") if args.notes.exists() else ""
+    args.out.write_text("# Fairness report (Track B)\n\n" + report + notes, encoding="utf-8")
     print(f"{len(cards):,} cards, {len(attributes)} attributes -> {args.out}")
 
 

@@ -197,7 +197,8 @@ def test_fairness_report_flags_a_gap_and_names_the_group() -> None:
     )
     assert "### gender_code" in text and "FLAG" in text  # b gets a call 30% of the time, a 60%: ratio ~0.5
     assert "| a | 100 | 100.0% | 60.0% |" in text  # any contact action, call, then hardship review
-    assert "unknown" in text  # the 5 cases with no protected attributes
+    assert "blank, not compared" in text  # the 5 cases with no protected attributes: reported, not a group
+    assert "unknown" not in text
     assert "household_size" not in text.split("## Rates by group")[1]  # 195 distinct values: skipped
     assert "not_a_column" not in text
 
