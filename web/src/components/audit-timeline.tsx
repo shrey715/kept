@@ -1,6 +1,8 @@
 "use client";
 
+import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Flex, Text } from "@radix-ui/themes";
+import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { humanize, when, type AuditEvent, type AuditKind } from "@/lib/api";
 import { spring } from "./motion";
@@ -15,12 +17,17 @@ const KIND: Partial<Record<AuditKind, { color: "ruby" | "grass" | "amber" | "plu
   llm_call: { color: "cyan", label: "LLM call" },
 };
 
-function summary(e: AuditEvent): string {
+function summary(e: AuditEvent): ReactNode {
   const p = e.payload as Record<string, unknown>;
   if (e.kind === "recommendation")
     return p.action ? `${humanize(String(p.action))} · ${p.tier} tier · model ${p.model_version}` : String(p.no_action_reason ?? "no action");
   if (e.kind === "release" || e.kind === "override") return String(p.reason ?? "");
-  if (e.kind === "hardship_change") return `${p.from} → ${p.to} (${p.source})`;
+  if (e.kind === "hardship_change")
+    return (
+      <>
+        {String(p.from)} <ArrowRightIcon style={{ verticalAlign: "-2px" }} aria-label="to" /> {String(p.to)} ({String(p.source)})
+      </>
+    );
   if (e.kind === "proposal_cancelled") return String(p.reason ?? "");
   return Object.entries(p).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(" · ");
 }
