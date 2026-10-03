@@ -9,8 +9,10 @@ import time
 import duckdb
 import pytest
 
-from kept.ask.sql_guard import execute_guarded, guard_sql
 from kept.contracts import GuardResult, SqlPolicy
+
+pytest.importorskip("sqlglot")  # Track B's `ask` extra; CI installs core only
+from kept.ask.sql_guard import execute_guarded, guard_sql
 
 
 def _limit(sql: str) -> int | None:
