@@ -18,7 +18,8 @@ _SYSTEM = """You turn a collections analyst's question into a JSON intent.
 kind: "metric" when the question asks for one of the certified metrics below, "policy" when it asks what a
 policy, procedure or script says, otherwise "lookup" (a custom query over the data).
 For a metric set metric_id to exactly one of the metrics below. filters maps column names to values;
-group_by lists column names; date_from and date_to are ISO dates (inclusive). Leave out what the question
+group_by lists only the columns the question breaks the result down by ("by card product" is
+product_code, nothing else); date_from and date_to are ISO dates (inclusive). Leave out what the question
 does not say. For a metric use only the filter and group_by columns listed for it, and never repeat its
 default filters (they are already applied). A question about randomised cases needs the filter
 assignment_method = "random" where the metric allows it.

@@ -152,8 +152,8 @@ FROM b WHERE 1=1 {{where}} {{group_by}}""",
             f"SELECT {{group_by_select}} avg(CASE WHEN dpd >= 1 THEN 1.0 ELSE 0.0 END) AS delinquency_rate, "
             f"count(*) AS n FROM {_ACCOUNTS} WHERE 1=1 {{where}} {{group_by}}",
             (),
-            frozenset({"product_family", "product_code", "dpd_bucket"}),
-            frozenset({"product_family", "product_code", "dpd_bucket"}),
+            frozenset({"product_family", "product_code"}),  # not dpd_bucket: the metric is dpd >= 1, so a
+            frozenset({"product_family", "product_code"}),  # rate per bucket is always 0% or 100%
             "snapshot_date",
         ),
         _cases("average_dpd", "avg(current_dpd) AS average_dpd", ("outcome IS NULL",), None),

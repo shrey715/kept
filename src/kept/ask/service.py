@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -183,13 +183,14 @@ class CollectionsAsk:
         if not decision.in_scope:
             return refusal_for(decision, suggestion=None)
         fresh = self._freshness()
+        as_of = self._as_of(fresh)
         try:
             intent = route(
                 question,
                 self._llm,
                 known_metric_ids=self._known,
                 actor_id=request.user_id,
-                as_of=fresh.date() if fresh else None,
+                as_of=as_of,
                 metric_hints=self._hints,
             )
         except Exception:
@@ -199,7 +200,7 @@ class CollectionsAsk:
             return self._unsure(request, "I'm not sure what you mean.", intent)
 
         if intent.kind is IntentKind.POLICY:
-            return self._policy(request, question, intent, fresh)
+            return self._policy(request, question, intent, as_of)
         if intent.kind is IntentKind.METRIC:
             try:
                 sql, params = compile_metric(intent, self._metrics, self._queries)
@@ -210,7 +211,7 @@ class CollectionsAsk:
                 return _refuse(RefusalReason.SQL_GUARD, guarded.reason or "The query is not allowed.")
             ran = self._run(guarded, params)
         else:
-            outcome = self._lookup(request, question, intent, fresh)
+            outcome = self._lookup(request, question, intent, as_of)
             if not isinstance(outcome, tuple):
                 return outcome
             guarded, ran = outcome
@@ -220,12 +221,12 @@ class CollectionsAsk:
         return self._finish(request, question, intent, guarded, *ran, fresh)
 
     def _lookup(
-        self, request: AskRequest, question: RedactedText, intent: Intent, fresh: datetime | None
+        self, request: AskRequest, question: RedactedText, intent: Intent, as_of: date | None
     ) -> AskResponse | tuple[GuardResult, tuple[tuple[str, ...], Any]]:
         policy = self._sql_policy()
         drafts = generate_candidates(
             intent,
-            self._schema_doc(policy, fresh),
+            self._schema_doc(policy, as_of),
             self._llm,
             n=SQL_CANDIDATES,
             actor_id=request.user_id,
@@ -280,11 +281,11 @@ class CollectionsAsk:
         )
 
     def _policy(
-        self, request: AskRequest, question: RedactedText, intent: Intent, fresh: datetime | None
+        self, request: AskRequest, question: RedactedText, intent: Intent, as_of: date | None
     ) -> AskResponse:
         if self._policy_index is None:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "Policy search isn't available right now.")
-        found = self._policy_index.search(request.question, as_of=(fresh or datetime.now(UTC)).date())
+        found = self._policy_index.search(request.question, as_of=as_of or datetime.now(UTC).date())
         if not found:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "I found no current policy section on that.")
         # grounding reads numbers out of the snippets and the cited ids and sections (POL-COLL-001 §5.2)
@@ -343,10 +344,10 @@ class CollectionsAsk:
     def _sql_policy(self) -> SqlPolicy:
         return build_sql_policy(self._conn, self._contract)
 
-    def _schema_doc(self, policy: SqlPolicy, fresh: datetime | None) -> str:
+    def _schema_doc(self, policy: SqlPolicy, as_of: date | None) -> str:
         if self._schema_cache is None:  # the warehouse is rebuilt nightly, so describe it once per service
             self._schema_cache = _describe(self._conn, policy)
-        today = f" The data's as-of date is {fresh.date()}." if fresh else ""
+        today = f" The data's as-of date is {as_of}." if as_of else ""
         return f"{self._schema_cache}\n\n{_CONVENTIONS}{today}"
 
     def _run(
@@ -356,6 +357,15 @@ class CollectionsAsk:
             return execute_guarded(self._conn, guarded, params=params, timeout_s=ASK_SQL_TIMEOUT_S)
         except Exception:  # timeout, missing table, bad SQL: this candidate has no result
             return None
+
+    def _as_of(self, fresh: datetime | None) -> date | None:
+        """The data's snapshot date, the 'today' of every relative date. Not refreshed_at: that is when gold
+        was built (3 Oct), and a snapshot-dated table has no rows on a day after its snapshot."""
+        try:
+            row = self._conn.execute("SELECT max(as_of_date) FROM gold.c360_customer").fetchone()
+        except duckdb.Error:
+            row = None
+        return row[0] if row and row[0] else (fresh.date() if fresh else None)
 
     def _freshness(self) -> datetime | None:
         try:

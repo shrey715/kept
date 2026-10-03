@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 5 (parallel tasks done early at the user's call; PR #19). G1 closed; G2 is next.
-- Working on: nothing; first real-model baseline on the dev split recorded (see Done)
-- Waiting on: G2 (A's gold, C's hardship extractions) for the 10-question check on real gold; G3 for the full benchmark
+- Phase: 5 code merged (PR #19). G2 item done. Waiting for G2/G3 for the full run.
+- Working on: nothing
+- Waiting on: G2 close-out; G3 for the full benchmark run, tuning to 80% / 95% and the fairness run on real recommendations
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -27,6 +27,10 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 5 (PR #19): `kept benchmark` (answers CSV in the release template, dev scoring, LLM calls per question), `build_ask`, `lineage_violations` (+ CI check on the real contract), `recommendation_rates`. 1012 tests pass.
 - First real-model baseline (19:01, Gemini 3.5 Flash-Lite, local silver, pass-through redactor on the synthetic benchmark questions): dev accuracy **67% (12 of 18)**, refusal recall 100% (3 of 3), 2.8 LLM calls per question. Went from 44% by: scope classifier that no longer refuses policy and regulatory questions, value lists and conventions in the lookup schema doc, per-metric filter hints for the router, `assignment_method` and `prior_broken_ptp_count` on the promise metrics, and a scorer that allows 2% on group sizes.
 
+- G2 check (19:58): `kept benchmark` with the real Presidio redactor, the real Gemini model and the real gold C360 (`data/exports/c360_customer/part-000.parquet`, 1,052,300 rows, pulled from the shared folder) on 10 dev questions: **7 of 8 in scope correct (88%), refusals 2 of 2, 2.7 LLM calls per question**, 1 min 45 s. Lookups vary run to run (the 3-draft vote can disagree: BQ-010 passed once and was refused once).
+- Found by the G2 run and fixed: relative dates ("today") came from gold's `refreshed_at` (build time, 3 Oct) instead of its `as_of_date` (the data snapshot, 28 Sep), so snapshot questions came back empty; the router over-grouped delinquency by `dpd_bucket` (removed from that metric: a rate per bucket is always 0% or 100%).
+- **The gold I tested on is a pre-backfill export (3 Oct 18:48).** Its `hardship_status` (32,306 confirmed, 3,998 possible) comes from the agent flags, account programmes and the 50 real extractions only; the SetFit backfill has not landed. No hardship number from it is an answer. Rerun hardship questions after the backfill and a gold rebuild.
+
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
 - Refusal labels for the hidden questions: the local scorecard only covers the dev split. A dev case's `should_refuse` is "gold_answer starts with `Refuse`" (BQ-018, BQ-024, BQ-031). Test-split questions can't be scored here; `kept benchmark` still answers them and writes the CSV, and the organisers grade it.
@@ -42,6 +46,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - The gateway generates its own event ids (uuid4) so it doesn't depend on Track D's `new_event_id` stub.
 
 ## Open questions
+- **For C:** the real redactor turns a case id into a phone number: `CS-2026-614370` becomes `CS-<PHONE_NUMBER>`, so any question that names a case (BQ-016, 021, 022) loses its id before the Ask sees it. Local setup note: Hugging Face's spaCy wheels are the 3.7.x models (en 3.7.1, fr 3.7.0) run on spaCy 3.8 here (GitHub's 3.8.0 models downloaded at ~100 KB/s); the redaction output may differ slightly from C's machine.
 - **Gold vs correct (team call).** Three dev gold answers differ from what the data supports: BQ-017 (the reference SQL drops the MM/DD date format), BQ-035 (gold counts use the raw `current_bucket` label; the dev note says ~4% are wrong and a strong answer recomputes from `current_dpd`, which gives 35,000 / 25,000 / ...), and BQ-003 (the gold folds 3 or more prior broken promises into one row). We compute from clean data. Matching the gold would mean copying its omissions. Not decided.
 - **Transcript questions (BQ-016, 021, 022).** "Summarise the most recent recorded call" needs call transcripts, which are not an Ask table (PII). They are refused today (3 of 35 questions). Option: a redacted-transcript lookup fed by C's `text.transcripts`.
 - **Quota.** 2.8 LLM calls per question on average (lookups cost more): a full 35-question run is about 100 calls, the extra 4 Oct questions about the same. Free-tier rate limits slow it (up to ~30 s on a throttled question) but did not fail it.
@@ -54,6 +59,9 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 19:58: G2 check done on real gold with the real redactor (7 of 8, refusals 2 of 2); fixed the as-of date and the delinquency router bug.
+- 2026-10-03 19:25: pulled the gold C360 from the shared folder with rclone and loaded it into the local warehouse.
+- 2026-10-03 19:16: PR #19 merged (kept benchmark, lineage check, fairness rates, Ask quality fixes).
 - 2026-10-03 19:01: Phase 5 code done (PR #19); real-model dev baseline 67% / recall 100%; fixes to the classifier, schema doc and router hints.
 - 2026-10-03 18:42: Gemini key in `.env` (gitignored); `gemini/gemini-3.5-flash-lite` verified with one call.
 - 2026-10-03 17:46: Phase 4 parallel tasks done locally (policy index + service path); not pushed, C is merging.
