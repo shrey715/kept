@@ -51,7 +51,6 @@ _ASK_TABLES = frozenset(
         "card_accounts",
         "loan_accounts",
         "deposit_accounts",
-        "channel_capacity",
     )
 )
 
@@ -70,9 +69,11 @@ def test_certified_sql_passes_the_guard_on_the_ask_table_list(metric_id: str) ->
     assert g.allowed, g.reason
 
 
-def test_cost_per_contact_reads_the_channel_unit_cost() -> None:
+def test_cost_per_contact_is_the_certified_formula_over_contact_history() -> None:
+    """metric_definitions: sum(contact_cost_cad) / count(contact_id), system events excluded."""
     sql, _ = _compile("cost_per_contact", group_by=("channel",))
-    assert "silver.channel_capacity" in sql and "unit_cost_cad" in sql and "contact_history" not in sql
+    assert "silver.contact_history" in sql and "sum(contact_cost_cad) / count(*)" in sql
+    assert "channel <> 'system'" in sql and "channel_capacity" not in sql
 
 
 def test_cure_rate_compares_agents_certified_for_vulnerable_customers_on_randomised_cases() -> None:

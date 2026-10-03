@@ -3,7 +3,7 @@
 
 Reads silver tables with the data dictionary's names (K2). Tables used, for the Ask table list at G0:
 collections_cases, promises_to_pay, agents, contact_history, account_monthly_snapshot,
-card_accounts, loan_accounts, deposit_accounts, channel_capacity. Values come back as ratios (0..1), CAD or days;
+card_accounts, loan_accounts, deposit_accounts. Values come back as ratios (0..1), CAD or days;
 the narration turns ratios into percentages. Every query ends with `n`, the group size.
 
 Date bounds are inclusive and apply to the metric's own date column (the roll-rate start snapshot,
@@ -139,17 +139,11 @@ WHERE 1=1 {where} {group_by}""",
         _contacts(
             "ptp_rate", "avg(CASE WHEN ptp_made_flag THEN 1.0 ELSE 0.0 END) AS ptp_rate", ("rpc_flag",)
         ),
-        # The channel's unit cost per contact attempt (channel_capacity.unit_cost_cad), weighted by the attempts
-        # made. Averaging contact_history.contact_cost_cad instead gives a different number for calls (1.46
-        # outbound, 3.00 inbound, against the 2.40 unit cost), and the reference answer is the unit cost.
-        CertifiedQuery(
+        _contacts(
             "cost_per_contact",
-            "SELECT {group_by_select} sum(unit_cost_cad * used_units) / nullif(sum(used_units), 0) AS cost_per_contact, "
-            "sum(used_units) AS n FROM silver.channel_capacity WHERE 1=1 {where} {group_by}",
-            ("used_units > 0",),
-            frozenset({"channel", "time_band"}),
-            frozenset({"channel", "time_band"}),
-            "date",
+            "sum(contact_cost_cad) / count(*) AS cost_per_contact",
+            _NO_SYSTEM,
+            _CONTACT_COLS | {"channel"},
         ),
         _contacts(
             "cost_per_rpc",
