@@ -146,8 +146,19 @@ def test_protected_question_refused_before_any_llm_call(build) -> None:  # type:
     r = svc.ask(_req("kept rate by gender_code"))
     assert isinstance(r, Refusal) and r.reason is RefusalReason.PROTECTED_ATTRIBUTE
     assert "gender_code" in r.message
-    assert r.suggestion is None or r.suggestion.startswith("Try: ")
+    assert r.suggestion == "Try: What is the promise kept rate for cards?"  # nearest allowed question
     assert llm.calls == []
+
+
+def test_nearest_question_needs_shared_words(metrics) -> None:  # type: ignore[no-untyped-def]
+    from kept.ask.service import nearest_question
+
+    assert (
+        nearest_question("Which customers broke a promise, by gender?", metrics)
+        == metrics["promise_kept_rate"].example_question
+    )
+    assert nearest_question("What will the weather be in Toronto tomorrow?", metrics) is None
+    assert nearest_question("draft metric please", {"d": metrics["draft_metric"]}) is None  # uncertified
 
 
 def test_disagreeing_candidates_clarify_then_refuse(build) -> None:  # type: ignore[no-untyped-def]
