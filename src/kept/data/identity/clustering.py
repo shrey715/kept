@@ -164,6 +164,12 @@ class GoldenIdRegistry:
         self._ids.update(result)
         return result
 
+    def seed(self, mapping: dict[SourceKey, str]) -> None:
+        """Start from a previous run's key -> golden ID mapping, so reruns keep the same IDs."""
+        self._ids.update(mapping)
+        numbers = [int(g.removeprefix(self._prefix)) for g in mapping.values()]
+        self._issued = max([self._issued, *numbers])
+
     def golden_id(self, key: SourceKey) -> str | None:
         return self._ids.get(key)
 

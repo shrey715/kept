@@ -13,6 +13,8 @@ import duckdb
 from duckdb import sqltypes as T
 
 from kept.data.clean import (
+    first_name_key,
+    match_first_name,
     match_name,
     match_name_parts,
     name_match_key,
@@ -43,6 +45,10 @@ FUNCTIONS: dict[str, tuple[Any, Any]] = {
     "kept_match_name_last_initials": (lambda raw: match_name(raw, style="last_first_initials"), T.VARCHAR),
     "kept_match_name_last_comma": (lambda raw: match_name(raw, style="last_comma_first"), T.VARCHAR),
     "kept_match_name_card": (lambda raw: match_name(raw, style="card"), T.VARCHAR),
+    "kept_first_name": (first_name_key, T.VARCHAR),  # CRM first_name
+    "kept_first_name_first_last": (lambda raw: match_first_name(raw, style="first_last"), T.VARCHAR),
+    "kept_first_name_last_comma": (lambda raw: match_first_name(raw, style="last_comma_first"), T.VARCHAR),
+    "kept_first_name_card": (lambda raw: match_first_name(raw, style="card"), T.VARCHAR),
     "kept_date": (lambda raw: parse_date(raw), T.DATE),  # any column typed DATE that arrives in mixed formats
     "kept_phone": (lambda raw: normalize_phone_e164(raw), T.VARCHAR),  # one argument: DuckDB counts them
     "kept_postal": (normalize_postal_code, T.VARCHAR),
@@ -51,7 +57,11 @@ FUNCTIONS: dict[str, tuple[Any, Any]] = {
 
 def register(conn: duckdb.DuckDBPyConnection) -> None:
     conn.create_function(
-        "kept_match_name_parts", match_name_parts, [T.VARCHAR, T.VARCHAR], T.VARCHAR, null_handling="special"
+        "kept_match_name_parts",
+        match_name_parts,
+        [T.VARCHAR, T.VARCHAR],
+        T.VARCHAR,
+        null_handling="special",  # type: ignore[call-overload]
     )
     for name, (fn, returns) in FUNCTIONS.items():
         # SPECIAL: the functions return None for input they can't parse (that row goes to quarantine)

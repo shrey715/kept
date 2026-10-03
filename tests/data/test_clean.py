@@ -9,6 +9,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from kept.data.clean import (
+    first_name_key,
+    match_first_name,
     match_name,
     match_name_parts,
     name_match_key,
@@ -192,6 +194,8 @@ def test_invalid_postal_codes_are_none(raw: str | None) -> None:
         ("Dorothée Béland", "first_last", "beland d"),
         ("DUVAL G T", "last_first_initials", "duval g"),
         ("ST-PIERRE G G", "last_first_initials", "stpierre g"),
+        ("DE LEON J", "last_first_initials", "deleon j"),  # multi-word surname
+        ("DELA CRUZ M T", "last_first_initials", "delacruz m"),
         ("DOE, JANE MARY", "last_comma_first", "doe j"),
         ("J. KAUFMAN", "card", "kaufman j"),
         ("TRACIE HARPER", "card", "harper t"),
@@ -214,3 +218,11 @@ def test_same_person_gets_the_same_key_in_every_system() -> None:
         match_name("Kaufman, Jane", style="last_comma_first"),  # bureau
     }
     assert keys == {"kaufman j"}
+
+
+def test_first_name_only_when_the_system_holds_one() -> None:
+    assert first_name_key("Anne-Marie") == "annemarie"
+    assert first_name_key("J.") is None and first_name_key(None) is None
+    assert match_first_name("Kaufman, Jane", style="last_comma_first") == "jane"
+    assert match_first_name("J. KAUFMAN", style="card") is None  # initial only
+    assert match_first_name("SHAH M", style="last_first_initials") is None

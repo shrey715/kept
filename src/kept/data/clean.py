@@ -83,6 +83,39 @@ def _initial(token: str) -> str:
     return _letters(token)[:1]
 
 
+def _name_parts(raw: str | None, *, style: str) -> tuple[str, str] | None:
+    """(surname, first name or initial) as written, from one system's name format; None if unreadable."""
+    if raw is None:
+        return None
+    text = normalize_name(raw)
+    if text is None:
+        return None
+    if style == "card":
+        if "/" in text:
+            style = "last_slash_first"
+        elif re.match(r"^\w\.? ", text):
+            style = "initial_last"
+        else:
+            style = "first_last"
+    tokens = text.replace(",", " ").replace(".", " ").split()
+    if style == "last_slash_first":
+        surname, _, first = text.partition("/")
+    elif style == "last_comma_first":
+        surname, _, first = text.partition(",")
+    elif style == "last_first_initials":  # "DE LEON J T": the surname is everything before the initials
+        cut = len(tokens)
+        while cut > 1 and len(_letters(tokens[cut - 1])) == 1:
+            cut -= 1
+        surname, first = (" ".join(tokens[:cut]), tokens[cut]) if cut < len(tokens) else ("", "")
+    elif style == "initial_last":
+        surname, first = (" ".join(tokens[1:]), tokens[0]) if len(tokens) > 1 else ("", "")
+    elif style == "first_last":
+        surname, first = (tokens[-1], tokens[0]) if len(tokens) > 1 else ("", "")
+    else:
+        raise ValueError(f"unknown name style {style!r}")
+    return surname, first
+
+
 def match_name(raw: str | None, *, style: str) -> str | None:
     """Cross-system matching key "<surname> <first initial>" ("kaufman j") from one system's
     name format (data dictionary examples): the systems disagree on order and on initials.
@@ -92,32 +125,21 @@ def match_name(raw: str | None, *, style: str) -> str | None:
           "last_comma_first":     "DOE, JANE MARY"                   (bureau)
           "card":                 "J. KAUFMAN", "STOUT/MCKENZIE" (Last/First) or "TRACIE HARPER"
     Returns None when no surname or no initial can be read."""
-    if raw is None:
-        return None
-    text = normalize_name(raw)
-    if text is None:
-        return None
-    if style == "card":
-        if "/" in text:
-            style, text = "last_slash_first", text
-        elif re.match(r"^\w\.? ", text):
-            style, text = "initial_last", text
-        else:
-            style = "first_last"
-    tokens = text.replace(",", " ").replace(".", " ").split()
-    if style == "last_slash_first":
-        surname, _, first = text.partition("/")
-        return _key(surname, first)
-    if style == "last_comma_first":
-        surname, _, first = text.partition(",")
-        return _key(surname, first)
-    if style == "last_first_initials":
-        return _key(tokens[0], tokens[1]) if len(tokens) > 1 else None
-    if style == "initial_last":
-        return _key(" ".join(tokens[1:]), tokens[0]) if len(tokens) > 1 else None
-    if style == "first_last":
-        return _key(tokens[-1], tokens[0]) if len(tokens) > 1 else None
-    raise ValueError(f"unknown name style {style!r}")
+    parts = _name_parts(raw, style=style)
+    return _key(*parts) if parts else None
+
+
+def match_first_name(raw: str | None, *, style: str) -> str | None:
+    """The first name in letters only ("jane"), or None when the system only holds an initial."""
+    parts = _name_parts(raw, style=style)
+    return first_name_key(parts[1]) if parts else None
+
+
+def first_name_key(first: str | None) -> str | None:
+    """Letters of the first given name ("Anne-Marie" -> "annemarie"); None for an initial or nothing."""
+    tokens = (first or "").replace(".", " ").split()
+    letters = _letters(tokens[0]) if tokens else ""
+    return letters if len(letters) > 1 else None
 
 
 def _key(surname: str, first: str) -> str | None:

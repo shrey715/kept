@@ -9,6 +9,8 @@ import pandas as pd
 from kept.config import STEWARD_REVIEW_THRESHOLD
 
 MATCH_COLUMNS = ("name_key", "dob", "phone_e164", "postal_code")
+# optional extra: the full first name where the system holds one (twins share surname and initial)
+OPTIONAL_COLUMNS = ("first_name_key",)
 
 # Where each match column comes from, per source system (data dictionary names).
 # silver cleans them into MATCH_COLUMNS with kept.data.clean.
@@ -60,7 +62,10 @@ def build_settings() -> dict[str, object]:
             "l.name_key = r.name_key and l.postal_code = r.postal_code",
         ],
         "comparisons": [
-            {"column": "name_key", "kind": "jaro_winkler", "thresholds": [0.92, 0.80]},
+            # name_key = "<surname> <initial>", compared as two parts: a different initial counts against
+            {"column": "surname", "kind": "jaro_winkler", "thresholds": [0.92, 0.80]},
+            {"column": "first_initial", "kind": "exact"},
+            {"column": "first_name_key", "kind": "jaro_winkler", "thresholds": [0.92, 0.80]},
             {"column": "dob", "kind": "damerau_levenshtein", "thresholds": [1, 2]},  # typos, swapped digits
             {"column": "phone_e164", "kind": "exact"},
             {"column": "postal_code", "kind": "exact"},
@@ -95,7 +100,25 @@ def score_pairs(records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = N
 
     spec = build_settings()
     people = records.assign(unique_id=records["source_system"] + ":" + records["source_key"])
-    people = people[["unique_id", "source_system", "source_key", *MATCH_COLUMNS]]
+    for col in OPTIONAL_COLUMNS:
+        if col not in people:
+            people[col] = None
+        people[col] = people[col].astype(
+            "string"
+        )  # an all-null column would otherwise reach DuckDB as INTEGER
+    parts = people["name_key"].str.split(" ", n=1, expand=True)
+    people["surname"], people["first_initial"] = parts[0], (parts[1] if parts.shape[1] > 1 else None)
+    people = people[
+        [
+            "unique_id",
+            "source_system",
+            "source_key",
+            *MATCH_COLUMNS,
+            *OPTIONAL_COLUMNS,
+            "surname",
+            "first_initial",
+        ]
+    ]
     settings = SettingsCreator(
         link_type="dedupe_only",
         unique_id_column_name=str(spec["unique_id_column_name"]),
