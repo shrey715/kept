@@ -11,7 +11,7 @@ import pytest
 
 from kept.contracts.feature_registry import FEATURES
 from kept.contracts.features import FeatureVector
-from kept.features.parity import parity_report, run_parity
+from kept.features.parity import parity_markdown, parity_report, run_parity
 from tests.fakes import StaticFeatureProvider
 
 pytestmark = pytest.mark.track_a
@@ -146,3 +146,15 @@ def test_run_parity_sample_draws_the_same_cases_every_time() -> None:
     a = run_parity(_warehouse(vectors), StaticFeatureProvider(vectors), sample=7, seed=3)
     b = run_parity(_warehouse(vectors), StaticFeatureProvider(vectors), sample=7, seed=3)
     assert a.n_cells == b.n_cells == 7 * (len(FEATURES) + 2) and a.passed
+
+
+def test_parity_markdown_states_the_result_and_the_worst_features() -> None:
+    off = _frame(1000)
+    on = off.copy()
+    on.loc[:4, "max_dpd"] = -1
+    text = parity_markdown(parity_report(off, on), cases=1000, as_of="2026-09-28", generated="now")
+    assert "**FAIL**" in text and "5 of 4,000 cells" in text and "| max_dpd | 5 |" in text
+    assert "Cases compared: 1,000" in text
+    assert "| none | 0 |" in parity_markdown(
+        parity_report(off, off.copy()), cases=1000, as_of="x", generated="y"
+    )
