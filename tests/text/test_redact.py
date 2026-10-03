@@ -62,3 +62,14 @@ def test_idempotent(redactor: PresidioRedactor) -> None:
 @pytest.mark.parametrize("text", ["", "   ", "Customer will call back."])
 def test_no_pii_passes_through(redactor: PresidioRedactor, text: str) -> None:
     assert redactor.redact(text).text == text
+
+
+def test_card_number_without_luhn_removed(redactor: PresidioRedactor) -> None:
+    # Synthetic notes carry 16-digit cards that fail Luhn; the built-in recognizer misses them.
+    out = redactor.redact("spoke w/ cust; card 4520 3572 3838 5812; CB scheduled").text
+    assert "4520" not in out and "CB scheduled" in out
+
+
+def test_french_note_keeps_content(redactor: PresidioRedactor) -> None:
+    note = "client a appelé. a perdu son emploi en juin. demande si pmt peut être réduit. réf. équipe difficultés"
+    assert redactor.redact(note).text == note
