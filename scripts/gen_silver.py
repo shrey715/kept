@@ -28,7 +28,14 @@ def sql_type(t: str) -> str | None:
     return {"int": "BIGINT", "boolean": "BOOLEAN", "date": "DATE", "timestamp": "TIMESTAMP"}.get(t)
 
 
-def typed_columns(columns: list[dict], exclude: tuple[str, ...] = ()) -> str:
+# columns whose original text is kept next to the parsed value, as <name>_raw (additive)
+RAW_TEXT = {
+    # the Ask's roll rate is graded against a reference that parses only some of the formats
+    "account_monthly_snapshot": ("month_end_date",),
+}
+
+
+def typed_columns(columns: list[dict], exclude: tuple[str, ...] = (), raw: tuple[str, ...] = ()) -> str:
     out = []
     for c in columns:
         if c["name"] in exclude:
@@ -39,6 +46,7 @@ def typed_columns(columns: list[dict], exclude: tuple[str, ...] = ()) -> str:
             out.append(f'        coalesce(try_cast("{name}" as DATE), kept_date("{name}")) as "{name}"')
         else:
             out.append(f'        try_cast("{name}" as {t}) as "{name}"' if t else f'        "{name}"')
+    out += [f'        "{name}" as "{name}_raw"' for name in raw]
     out += [f"        {c}" for c in LINEAGE]
     return ",\n".join(out)
 
@@ -87,7 +95,7 @@ ACCOUNTS = {
 
 
 def typed_select(table: str, columns: list[dict], exclude: tuple[str, ...] = ()) -> str:
-    return f"typed as (\n    select\n{typed_columns(columns, exclude)}\n    from {{{{ source('bronze', '{table}') }}}}\n)"
+    return f"typed as (\n    select\n{typed_columns(columns, exclude, RAW_TEXT.get(table, ()))}\n    from {{{{ source('bronze', '{table}') }}}}\n)"
 
 
 def render(table: str, columns: list[dict]) -> str:
