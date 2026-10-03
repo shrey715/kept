@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -325,3 +326,46 @@ class CollectionsAsk:
                 payload=payload,
             )
         )
+
+
+def build_ask(
+    conn: duckdb.DuckDBPyConnection,
+    audit_log: AuditLog,
+    *,
+    llm: LLMGateway | None = None,
+    redactor: Redactor | None = None,
+    policy_dir: str | None = None,
+) -> CollectionsAsk:
+    """The real Ask: certified metrics from silver.metric_definitions, the contract's table list,
+    the hosted free model (KEPT_ASK_LLM_MODEL) through the gateway, Presidio redaction, and the policy
+    index when one is built (KEPT_LANCEDB_DIR, default data/policy/lancedb)."""
+    from pathlib import Path
+
+    from kept.ask.certified import CERTIFIED_QUERIES
+    from kept.ask.metrics import load_metric_definitions
+    from kept.ask.scope import make_classifier
+    from kept.common.llm import LiteLLMGateway
+    from kept.contracts.data_contract import load_data_contract
+
+    llm = llm or LiteLLMGateway(
+        model=os.environ["KEPT_ASK_LLM_MODEL"], audit_log=audit_log, max_retries=6, backoff_s=4.0
+    )
+    if redactor is None:
+        from kept.text.redact import PresidioRedactor
+
+        redactor = PresidioRedactor()
+    cur = conn.execute("SELECT * FROM silver.metric_definitions")
+    names = [d[0] for d in cur.description]
+    metrics = load_metric_definitions([dict(zip(names, r, strict=True)) for r in cur.fetchall()])
+    index_dir = Path(policy_dir or os.environ.get("KEPT_LANCEDB_DIR", "data/policy/lancedb"))
+    return CollectionsAsk(
+        conn=conn,
+        contract=load_data_contract(),
+        llm=llm,
+        redactor=redactor,
+        classifier=make_classifier(llm, redactor, actor_id="system:ask-scope"),
+        metrics=metrics,
+        certified_queries=CERTIFIED_QUERIES,
+        policy_index=PolicyIndex(index_dir) if index_dir.exists() else None,
+        audit_log=audit_log,
+    )

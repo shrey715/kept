@@ -10,6 +10,8 @@ from kept.contracts.feature_registry import FEATURES, FeatureOrigin, FeatureSpec
 from kept.governance.fairness import recommendation_rates
 from kept.governance.lineage import lineage_violations
 
+pytestmark = pytest.mark.track_b  # governance/ defaults to track_c; this file is Track B's (plan §1)
+
 
 @pytest.fixture
 def contract() -> DataContract:
@@ -62,6 +64,13 @@ def spec(name: str, *cols: str) -> FeatureSpec:
 def test_registered_features_have_clean_lineage(contract: DataContract) -> None:
     """Fails the build if any registered feature comes from a protected attribute or proxy."""
     assert lineage_violations(FEATURES, contract) == []
+
+
+def test_registered_features_have_clean_lineage_under_the_real_contract() -> None:
+    """The same CI check against the contract A ships, so a contract change can't hide a leak."""
+    from kept.contracts.data_contract import load_data_contract
+
+    assert lineage_violations(FEATURES, load_data_contract()) == []
 
 
 # ----------------------------------------------------------------- detector
