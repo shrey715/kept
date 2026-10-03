@@ -353,7 +353,9 @@ def score(args: argparse.Namespace) -> int:
 NIGHTLY = (
     ("land", ["land"]),
     ("silver", ["build", "--silver-only"]),
-    ("match", ["match"]),
+    # train Splink on a 1-in-5 DOB-hash sample, score every key (as the crosswalk in use was built):
+    # training on all 3.84M keys ran out of RAM on a 30 GB machine
+    ("match", ["match", "--train-sample-mod", "5"]),
     ("gold", ["build", "--gold-only"]),
     ("gate", ["gate"]),
     ("extract", ["extract", "--new"]),  # C: tonight's notes -> text.extractions

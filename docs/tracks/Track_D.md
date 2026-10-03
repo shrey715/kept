@@ -118,6 +118,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Batch scoring needs one shared read-only connection:** each reader opens the warehouse per call (K5), about 60 ms each, so a card takes about 0.3 s; `kept score` (G3) should read the case rows, gold and extractions in bulk.
 
 ## Log
+- 4 Oct: nightly match trains Splink on a 1-in-5 DOB-hash sample (`--train-sample-mod 5`): full-data training ran out of RAM on a 30 GB machine.
 - 4 Oct: `kept nightly`; real queue, steward queue and programmes in `kept serve`; Red share explained; track file brought up to date.
 - 4 Oct: `kept score` 96,000 cards in 152 s; hardship review for protected cases; MLflow sqlite.
 - 3 Oct: C's G3 asks done: real services and `kept serve`, live add-note, extractions route + cease confirm, 30/90 rule, Qini vs legacy in `kept train`.
