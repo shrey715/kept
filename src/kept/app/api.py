@@ -20,6 +20,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from kept import __version__
+from kept.common.audit import new_event_id
 from kept.contracts.ask import AskRequest, AskResponse
 from kept.contracts.audit import AuditEvent, AuditKind
 from kept.contracts.enums import Action, ReleaseTier, Role
@@ -36,6 +37,7 @@ from kept.contracts.interfaces import (
 from kept.contracts.nba import NBACard, Proposal, ProposalStatus, ReleaseDecision, ReleaseResult
 from kept.data.identity.steward import StewardQueue
 from kept.governance.access import can_view_case, masked_view
+from kept.text.extract import confirm
 
 CASE_WIDE_ROLES = frozenset({Role.HARDSHIP_SPECIALIST, Role.TEAM_LEAD, Role.COMPLIANCE})
 
@@ -130,7 +132,8 @@ def create_app(services: Services) -> FastAPI:
     POST /ask                                     200 AskAnswer | Refusal | Clarification
     GET  /steward/queue                           200 list[StewardItemOut]
     POST /steward/items/{item_id}                 200 {"status": ...}; 404 unknown item
-    POST /extractions/{source_id}/confirm         200 TextExtraction
+    POST /extractions/{source_id}/confirm         200 TextExtraction; 403 not the assigned agent;
+                                                  404 unknown source/case; 422 bad edit; 503 no store
     """
     app = FastAPI(title="Kept", version=__version__)
     cards: dict[str, NBACard] = {}  # latest card per case; `kept score` warms it nightly (G3)
@@ -284,6 +287,34 @@ def create_app(services: Services) -> FastAPI:
 
     @app.post("/extractions/{source_id}/confirm", response_model=TextExtraction)
     def confirm_extraction(source_id: str, body: ExtractionConfirmIn) -> TextExtraction:
-        raise NotImplementedError("Track C")
+        if services.extractions is None:
+            raise HTTPException(503, "extraction store not configured")
+        x = services.extractions.get(source_id)
+        if x is None:
+            raise HTTPException(404, f"unknown extraction {source_id}")
+        guard_case(x.case_id, body.agent_id, Role.AGENT)  # confirmed_by_agent_id: the assigned agent
+        now = services.clock()
+        try:
+            confirmed = confirm(x, agent_id=body.agent_id, at=now, edits=body.edits)
+        except ValueError as e:  # unknown field, or pydantic ValidationError on a bad value
+            raise HTTPException(422, str(e)) from None
+        services.extractions.put(confirmed)
+        services.audit_log.append(
+            AuditEvent(
+                event_id=new_event_id(),
+                at=now,
+                kind=AuditKind.OVERRIDE,  # ponytail: no extraction-confirm kind in the shared contract
+                actor_id=body.agent_id,
+                actor_role=Role.AGENT,
+                subject_id=x.case_id,
+                payload={
+                    "case_id": x.case_id,
+                    "source_id": source_id,
+                    "action": "extraction_confirm",
+                    "edited_fields": sorted(body.edits),  # names only: values may be sensitive
+                },
+            )
+        )
+        return confirmed
 
     return app
