@@ -40,6 +40,7 @@ models:
         data_tests: [not_null]
       - name: collections_hold
         data_tests: [not_null]
+      - name: hard_stop_flags
       - name: hardship_status
         data_tests:
           - not_null

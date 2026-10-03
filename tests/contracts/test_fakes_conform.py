@@ -13,6 +13,7 @@ from ..fakes import (
     DictC360Reader,
     FixedContextBuilder,
     InMemoryAuditLog,
+    InMemoryExtractionStore,
     PassThroughRedactor,
     PurposeLLM,
     ScriptedLLM,
@@ -28,6 +29,7 @@ PAIRS = [
     (StaticFeatureProvider(), I.FeatureProvider),
     (FixedContextBuilder(), I.CaseContextBuilder),
     (ConstantScorer({}), I.UpliftScorer),
+    (InMemoryExtractionStore(), I.ExtractionStore),
 ]
 
 
