@@ -17,8 +17,12 @@ INTENT_JSON_SCHEMA: Mapping[str, Any] = Intent.model_json_schema()
 _SYSTEM = """You turn a collections analyst's question into a JSON intent.
 kind: "metric" when the question asks for one of the certified metrics below, "policy" when it asks what a
 policy, procedure or script says, otherwise "lookup" (a custom query over the data).
-For a metric set metric_id to exactly one of: {metrics}. filters maps column names to values; group_by lists
-column names; date_from and date_to are ISO dates (inclusive). Leave out what the question does not say.
+For a metric set metric_id to exactly one of the metrics below. filters maps column names to values;
+group_by lists column names; date_from and date_to are ISO dates (inclusive). Leave out what the question
+does not say. For a metric use only the filter and group_by columns listed for it, and never repeat its
+default filters (they are already applied). A question about randomised cases needs the filter
+assignment_method = "random" where the metric allows it.
+{metrics}
 confidence is 0 to 1: how sure you are of the whole intent.{as_of}"""
 
 
@@ -29,12 +33,16 @@ def route(
     known_metric_ids: frozenset[str],
     actor_id: str,
     as_of: date | None = None,
+    metric_hints: Mapping[str, str] | None = None,
 ) -> Intent:
     """Ask the LLM for an Intent. Reject (ValueError) a METRIC intent whose metric_id is
     not in known_metric_ids, or any reply that fails Intent validation.
-    `as_of` is the data's snapshot date, so "last month" means the same thing every time."""
+    `as_of` is the data's snapshot date, so "last month" means the same thing every time.
+    `metric_hints` maps metric_id to a one-line description (what it is, allowed filters and group-bys)."""
     system = _SYSTEM.format(
-        metrics=", ".join(sorted(known_metric_ids)),
+        metrics="\n".join(
+            f"- {m}: {(metric_hints or {}).get(m, '')}".rstrip(": ") for m in sorted(known_metric_ids)
+        ),
         as_of=f" Relative dates (today, this month, last quarter) are relative to {as_of}." if as_of else "",
     )
     reply = llm.complete(

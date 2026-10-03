@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -56,6 +57,53 @@ def _refuse(reason: RefusalReason, message: str) -> Refusal:
     return Refusal(reason=reason, message=message)
 
 
+_CONVENTIONS = """Conventions (from the data dictionary):
+- An open case has collections_cases.outcome IS NULL. A randomised case has assignment_method = 'random'.
+- Delinquency buckets, from days past due (dpd / current_dpd): 'current' (0), '1-30', '31-60', '61-90',
+  '91-120', '121-150', '151-180', '180+'. Use exactly these labels and compute them from dpd.
+- A resolved promise has ptp_status in ('kept', 'partially_kept', 'broken'); open and cancelled are not
+  resolved.
+- An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
+- contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
+  agent_id. province_code, queue and test_cell live on collections_cases.
+- Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
+  is the hour 0-23. Disputes and complaints raised in a period are contacts with dispute_raised_flag or
+  complaint_raised_flag; collections_cases.dispute_flag is only the case's current state."""
+
+
+def _describe(conn: duckdb.DuckDBPyConnection, policy: SqlPolicy) -> str:
+    """One line per allowed table: its non-blocked columns, and for text columns with at most 12 distinct
+    values the values themselves, so the LLM writes `ptp_status = 'kept'` and not `= 'fulfilled'`."""
+    types = {
+        (f"{s}.{t}".lower(), c.lower()): d
+        for s, t, c, d in conn.execute(
+            "SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns"
+        ).fetchall()
+    }
+    lines = []
+    for table, cols in sorted(policy.table_columns.items()):
+        keep = sorted(cols - policy.blocked_columns)
+        text = [c for c in keep if types.get((table, c)) == "VARCHAR"]
+        values: dict[str, list[object]] = {}
+        if text:
+            counts = conn.execute(
+                "SELECT " + ", ".join(f'approx_count_distinct("{c}")' for c in text) + f" FROM {table}"
+            ).fetchone()
+            for c, n in zip(text, counts or (), strict=False):
+                if n <= 12:
+                    got = conn.execute(
+                        f'SELECT DISTINCT "{c}" FROM {table} WHERE "{c}" IS NOT NULL ORDER BY 1 LIMIT 13'
+                    ).fetchall()
+                    if len(got) <= 12:
+                        values[c] = [r[0] for r in got]
+        lines.append(
+            f"{table}("
+            + ", ".join(f"{c} {{{'|'.join(map(str, values[c]))}}}" if c in values else c for c in keep)
+            + ")"
+        )
+    return "\n".join(lines)
+
+
 def build_sql_policy(conn: duckdb.DuckDBPyConnection, contract: DataContract) -> SqlPolicy:
     """The guard's policy: the contract's Ask tables and blocked columns, plus the real columns of
     each allowed table (read from the warehouse) so the star rule knows what a star would return."""
@@ -70,6 +118,15 @@ def build_sql_policy(conn: duckdb.DuckDBPyConnection, contract: DataContract) ->
         allowed_tables=allowed,
         blocked_columns=frozenset(c.lower() for c in contract.ask_blocked_columns()),
         table_columns={t: frozenset(c) for t, c in cols.items()},
+    )
+
+
+def _metric_hint(d: MetricDefinition, q: CertifiedQuery) -> str:
+    """What the router needs to know about a metric: its names, defaults, allowed filters and group-bys."""
+    return (
+        f"{d.metric_name} ({', '.join(d.synonyms)}). Default filters already applied: {d.default_filters}. "
+        f"Filters: {sorted(q.allowed_filters) or 'none'}. Group by: {sorted(q.allowed_group_by) or 'none'}. "
+        f"Dates apply to {q.date_column or 'nothing (no date range)'}."
     )
 
 
@@ -91,6 +148,8 @@ class CollectionsAsk:
         self._classifier, self._metrics, self._queries = classifier, metrics, certified_queries
         self._policy_index, self._audit = policy_index, audit_log
         self._known = frozenset(m for m, d in metrics.items() if d.certified_flag and m in certified_queries)
+        self._hints = {m: _metric_hint(metrics[m], certified_queries[m]) for m in self._known}
+        self._schema_cache: str | None = None
         self._allowed = frozenset(t.lower() for t in contract.ask_allowed_tables)
         self._blocked = frozenset(c.lower() for c in contract.ask_blocked_columns())
 
@@ -131,6 +190,7 @@ class CollectionsAsk:
                 known_metric_ids=self._known,
                 actor_id=request.user_id,
                 as_of=fresh.date() if fresh else None,
+                metric_hints=self._hints,
             )
         except Exception:
             return self._unsure(request, "I couldn't work out what you're asking.")
@@ -150,7 +210,7 @@ class CollectionsAsk:
                 return _refuse(RefusalReason.SQL_GUARD, guarded.reason or "The query is not allowed.")
             ran = self._run(guarded, params)
         else:
-            outcome = self._lookup(request, question, intent)
+            outcome = self._lookup(request, question, intent, fresh)
             if not isinstance(outcome, tuple):
                 return outcome
             guarded, ran = outcome
@@ -160,12 +220,12 @@ class CollectionsAsk:
         return self._finish(request, question, intent, guarded, *ran, fresh)
 
     def _lookup(
-        self, request: AskRequest, question: RedactedText, intent: Intent
+        self, request: AskRequest, question: RedactedText, intent: Intent, fresh: datetime | None
     ) -> AskResponse | tuple[GuardResult, tuple[tuple[str, ...], Any]]:
         policy = self._sql_policy()
         drafts = generate_candidates(
             intent,
-            self._schema_doc(policy),
+            self._schema_doc(policy, fresh),
             self._llm,
             n=SQL_CANDIDATES,
             actor_id=request.user_id,
@@ -283,11 +343,11 @@ class CollectionsAsk:
     def _sql_policy(self) -> SqlPolicy:
         return build_sql_policy(self._conn, self._contract)
 
-    def _schema_doc(self, policy: SqlPolicy) -> str:
-        return "\n".join(
-            f"{t}({', '.join(sorted(c - policy.blocked_columns))})"
-            for t, c in sorted(policy.table_columns.items())
-        )
+    def _schema_doc(self, policy: SqlPolicy, fresh: datetime | None) -> str:
+        if self._schema_cache is None:  # the warehouse is rebuilt nightly, so describe it once per service
+            self._schema_cache = _describe(self._conn, policy)
+        today = f" The data's as-of date is {fresh.date()}." if fresh else ""
+        return f"{self._schema_cache}\n\n{_CONVENTIONS}{today}"
 
     def _run(
         self, guarded: GuardResult, params: list[object] | None = None
@@ -325,3 +385,46 @@ class CollectionsAsk:
                 payload=payload,
             )
         )
+
+
+def build_ask(
+    conn: duckdb.DuckDBPyConnection,
+    audit_log: AuditLog,
+    *,
+    llm: LLMGateway | None = None,
+    redactor: Redactor | None = None,
+    policy_dir: str | None = None,
+) -> CollectionsAsk:
+    """The real Ask: certified metrics from silver.metric_definitions, the contract's table list,
+    the hosted free model (KEPT_ASK_LLM_MODEL) through the gateway, Presidio redaction, and the policy
+    index when one is built (KEPT_LANCEDB_DIR, default data/policy/lancedb)."""
+    from pathlib import Path
+
+    from kept.ask.certified import CERTIFIED_QUERIES
+    from kept.ask.metrics import load_metric_definitions
+    from kept.ask.scope import make_classifier
+    from kept.common.llm import LiteLLMGateway
+    from kept.contracts.data_contract import load_data_contract
+
+    llm = llm or LiteLLMGateway(
+        model=os.environ["KEPT_ASK_LLM_MODEL"], audit_log=audit_log, max_retries=6, backoff_s=4.0
+    )
+    if redactor is None:
+        from kept.text.redact import PresidioRedactor
+
+        redactor = PresidioRedactor()
+    cur = conn.execute("SELECT * FROM silver.metric_definitions")
+    names = [d[0] for d in cur.description]
+    metrics = load_metric_definitions([dict(zip(names, r, strict=True)) for r in cur.fetchall()])
+    index_dir = Path(policy_dir or os.environ.get("KEPT_LANCEDB_DIR", "data/policy/lancedb"))
+    return CollectionsAsk(
+        conn=conn,
+        contract=load_data_contract(),
+        llm=llm,
+        redactor=redactor,
+        classifier=make_classifier(llm, redactor, actor_id="system:ask-scope"),
+        metrics=metrics,
+        certified_queries=CERTIFIED_QUERIES,
+        policy_index=PolicyIndex(index_dir) if index_dir.exists() else None,
+        audit_log=audit_log,
+    )

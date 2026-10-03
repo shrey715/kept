@@ -124,12 +124,17 @@ def refusal_for(decision: ScopeDecision, *, suggestion: str | None) -> Refusal:
     return Refusal(reason=reason, message=message, suggestion=f"Try: {suggestion}" if suggestion else None)
 
 
-_CLASSIFIER_SYSTEM = """You decide whether a question can be answered from Maple Bank's collections data
-(cases, promises to pay, contacts, accounts, collections policy documents). Answer in_scope false with a
-reason when the question is: about something else (data_unavailable, e.g. weather, other banks); asks for
-protected attributes such as gender, marital status, citizenship, newcomer status, disability, age, postal
-code or language (protected_attribute); asks for lists of personal data (bulk_personal_data); or asks to
-change data or contact customers (write_action). Otherwise in_scope true. reason is null when in scope."""
+_CLASSIFIER_SYSTEM = """You decide whether a question can be answered by Maple Bank's collections Ask.
+In scope: metrics and counts over cases, promises to pay, contacts, accounts and agents; how collections
+practice works (contact limits, calling hours, consent, the National Do Not Call List, hardship programmes,
+promises, disputes, complaints, escalation, regulatory rules for collectors), answered from the policy and
+procedure documents; questions about how a metric behaves. When unsure, answer in_scope true: later checks
+catch missing data.
+Answer in_scope false with a reason only when the question is: about something else entirely
+(data_unavailable, e.g. weather, sports, other banks); asks for protected attributes such as gender, marital
+status, citizenship, newcomer status, disability, age, postal code or language (protected_attribute); asks
+for lists of personal data (bulk_personal_data); or asks to change data or contact customers
+(write_action). reason is null when in scope."""
 _CLASSIFIER_SCHEMA = {
     "type": "object",
     "properties": {

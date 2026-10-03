@@ -166,3 +166,29 @@ def test_card_example_pay_down_27_percent_triggers() -> None:
 )
 def test_is_ei_deposit(descriptor: str | None, expected: bool) -> None:
     assert is_ei_deposit(descriptor) is expected
+
+
+def test_fresh_note_extractions_flip_hardship() -> None:
+
+    from kept.common.llm import Purpose
+    from kept.contracts import RedactedText
+    from kept.hardship.combine import combine, observations_from_extractions
+    from kept.text.extract import LLMExtractor, confirm
+
+    from ..fakes import PurposeLLM
+    from ..text.test_extract_and_eval import _reply
+
+    note = RedactedText(
+        text="<PERSON> says shifts cut at the plant since Aug. Will pay $140 on 3 Oct after payday. Wife on the line.",
+        redactor_version="test",
+    )
+    x = LLMExtractor(PurposeLLM({Purpose.TEXT_EXTRACT: [_reply()]})).extract(
+        note, source_id="N-9", case_id="C-1"
+    )
+    none = x.model_copy(
+        update={"hardship_signal": x.hardship_signal.model_copy(update={"value": HardshipSignal.NONE})}
+    )
+    assert observations_from_extractions([none]) == []
+    assert combine(observations_from_extractions([x])) == (HardshipStatus.POSSIBLE, HardshipSource.LLM)
+    confirmed = confirm(x, agent_id="agent-7", at=x.extracted_at)
+    assert combine(observations_from_extractions([confirmed]))[0] is HardshipStatus.CONFIRMED
