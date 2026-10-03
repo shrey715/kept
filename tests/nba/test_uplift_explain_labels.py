@@ -205,3 +205,8 @@ def test_roll_forward_rate_uses_1_30_entry_cohort() -> None:
     assert roll_forward_rate(cases) == pytest.approx(0.5)
     with pytest.raises(ValueError):
         roll_forward_rate(cases[cases.entry_dpd > 30])
+
+
+def test_roll_forward_rate_skips_cases_younger_than_30_days() -> None:
+    cases = pd.DataFrame({"entry_dpd": [5, 10, 12], "dpd_at_day_30": [40, None, 0]})
+    assert roll_forward_rate(cases) == pytest.approx(0.5)  # the null is not a cure

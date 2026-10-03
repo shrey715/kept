@@ -15,6 +15,7 @@ from datetime import datetime
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from kept import __version__
 from kept.contracts.ask import AskRequest, AskResponse
 from kept.contracts.enums import Role
 from kept.contracts.features import TextExtraction
@@ -67,11 +68,11 @@ def create_app(services: Services) -> FastAPI:
     POST /steward/items/{item_id}                 200 {"status": ...}; 404 unknown item
     POST /extractions/{source_id}/confirm         200 TextExtraction
     """
-    app = FastAPI(title="Kept", version="0.1.0")
+    app = FastAPI(title="Kept", version=__version__)
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        raise NotImplementedError("Track D")
+        return HealthResponse(status="ok", version=__version__)
 
     @app.get("/cases/{case_id}/nba", response_model=NBACard)
     def get_nba(case_id: str, user_id: str, role: Role, now: datetime | None = None) -> NBACard:
