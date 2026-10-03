@@ -182,3 +182,25 @@ def test_kappa_self_agreement_is_one(labels: list[str]) -> None:
 
 def test_adjudicate_lists_disagreements() -> None:
     assert adjudicate(["a", "b", "c", "d"], ["a", "x", "c", "y"]) == [1, 3]
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("2026-10-03", date(2026, 10, 3)),
+        ("day:2", date(2026, 10, 2)),
+        ("weekday:friday", date(2026, 9, 18)),  # written on a Friday: same day
+        ("weekday:monday", date(2026, 9, 21)),
+        ("01-05", date(2027, 1, 5)),
+        ("09-30", date(2026, 9, 30)),
+        ("someday", None),
+    ],
+)
+def test_relative_promised_dates(value: str, expected: date | None) -> None:
+    llm = PurposeLLM(
+        {Purpose.TEXT_EXTRACT: [_reply(promised_date={"value": value, "quote": "3 Oct", "confidence": 0.9})]}
+    )
+    x = LLMExtractor(llm).extract(
+        NOTE, source_id="N-1", case_id="C-1", written_at=datetime(2026, 9, 18, 15, tzinfo=UTC)
+    )
+    assert x.promised_date.value == expected
