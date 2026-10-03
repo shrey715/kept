@@ -161,7 +161,12 @@ def answer_row(question_id: str, response: AskResponse) -> dict[str, object]:
             for r in response.rows[:50]:
                 w.writerow([_cell(c, v) for c, v in zip(response.columns, r, strict=False)])
         text = (buf.getvalue() + response.narrative).strip()
-        sources = response.sql or "; ".join(f"{c.document_id} {c.section}" for c in response.citations)
+        sources = response.sql or "; ".join(
+            f"{c.document_id}, {c.section}"
+            if c.document_id.startswith("text.")
+            else f"{c.document_id} {c.section}"
+            for c in response.citations
+        )
         return {"question_id": question_id, "answer": text, "sql_or_sources": sources, "refused": False}
     message = response.message if isinstance(response, Refusal) else response.question
     return {"question_id": question_id, "answer": f"Refuse: {message}", "sql_or_sources": "", "refused": True}
@@ -211,11 +216,13 @@ def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse)
         return None
     sources = json.loads(gold["gold_sources"]) if gold.get("gold_sources") else []
     if sources:
-        cited = {c.document_id for c in response.citations}
+        # a policy source is cited by its document id ("POL-COLL-001 §5.2"); a call by its transcript
+        # ("transcript 5010384", the section of the text.redacted_notes citation)
+        cited = {c.document_id for c in response.citations} | {c.section for c in response.citations}
         figures = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", gold["gold_answer"])}
         have = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", response.narrative)}
         return (
-            any(src.split()[0] in cited for src in sources if not src.startswith("transcript"))
+            any((src if src.startswith("transcript") else src.split()[0]) in cited for src in sources)
             and figures <= have
         )
     try:

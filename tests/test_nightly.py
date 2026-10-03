@@ -28,7 +28,11 @@ def test_runs_every_step_in_order() -> None:
     names = [n for n, _ in NIGHTLY]  # A's order, then text, features, parity, score
     assert names.index("gate") < names.index("features") < names.index("parity") < names.index("score")
     assert names.index("extract") < names.index("features")  # tonight's notes reach the features
-    assert dict(NIGHTLY)["match"] == ["match", "--train-sample-mod", "5"]  # full-data training runs out of RAM
+    assert dict(NIGHTLY)["match"] == [
+        "match",
+        "--train-sample-mod",
+        "5",
+    ]  # full-data training runs out of RAM
 
 
 def test_a_failing_gate_publishes_nothing() -> None:

@@ -76,6 +76,8 @@ At 19:00:
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-04 04:55: Akshat's review of PR #55: `cost_per_contact` reverted to the certified formula over `contact_history` (call 1.75, chat 1.50, ivr 0.15, letter 1.10, sms 0.01, email and push 0.001); full BQ-015 table posted (matches his counts for all six products).
+- 2026-10-04 04:40: audit fixes done: call summaries via Track C's summarise_call (BQ-016/022 match gold, BQ-021 answered), BQ-014/015/020/027/030 answered, scorer bug fixed. Dev **94% (17 of 18), recall 100%**; full 35-question run: 30 answered, 5 correct refusals.
 - 2026-10-04 02:40: G4 passed, freeze announced. README lines for Track B merged (PR #46). Runbook for the 19:00 run written.
 - 2026-10-04 02:10: fairness report on the full nightly cards merged (PR #43): no material gap on contact actions; vulnerable customers go to hardship review by design.
 - 2026-10-04 00:33: Satvik's `month_end_date_raw` (PR #36) merged and verified (his counts match mine); roll rate now equals the reference for all 7 products; one repair round for lookup drafts that fail to run. Dev **83% (15 of 18), recall 100%**: both targets met. Scorecard refreshed.
