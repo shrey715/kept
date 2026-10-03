@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRightIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
+import { ArrowDownIcon, ArrowRightIcon, CheckIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Button, Container, Flex, Grid, Heading, IconButton, Text, Theme, Tooltip } from "@radix-ui/themes";
 import {
   motion,
@@ -103,20 +103,32 @@ export default function Landing() {
             className="glass"
             style={{ position: "absolute", inset: 0, opacity: barOpacity, background: `${bg}c7`, borderBottom: "1px solid var(--gray-a4)" }}
           />
-          <Flex justify="between" align="center" px="5" py="4" style={{ maxWidth: 1320, margin: "0 auto", position: "relative" }}>
-            <Wordmark />
-            <Flex gap="2" align="center">
+          <Grid columns="1fr auto 1fr" align="center" gap="4" px={{ initial: "4", md: "6" }} style={{ height: 64, position: "relative" }}>
+            <Flex align="center" gap="3">
+              <Wordmark />
+              <Box display={{ initial: "none", md: "block" }}>
+                <Text size="1" style={{ color: "var(--gray-10)", letterSpacing: "0.02em" }}>Promises customers can keep</Text>
+              </Box>
+            </Flex>
+            <Flex gap="1" align="center" display={{ initial: "none", md: "flex" }} asChild>
+              <nav aria-label="Sections">
+                <Button size="2" variant="ghost" color="gray" onClick={() => jump(0.2)}>The story</Button>
+                <Button size="2" variant="ghost" color="gray" onClick={() => document.getElementById("numbers")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>The numbers</Button>
+                <Button size="2" variant="ghost" color="gray" onClick={() => document.getElementById("safety")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>Safety</Button>
+                <Button size="2" variant="ghost" color="gray" onClick={demo}>Guided demo</Button>
+              </nav>
+            </Flex>
+            <Flex gap="3" align="center" justify="end">
               <Tooltip content={light ? "Dark mode" : "Light mode"}>
-                <IconButton size="3" variant="soft" color="gray" aria-label="Toggle colour mode" onClick={() => setTheme(light ? "dark" : "light")}>
+                <IconButton size="2" variant="ghost" color="gray" aria-label="Toggle colour mode" onClick={() => setTheme(light ? "dark" : "light")}>
                   {light ? <MoonIcon /> : <SunIcon />}
                 </IconButton>
               </Tooltip>
-              <Button size="3" variant="soft" color="gray" onClick={demo}>Guided demo</Button>
-              <Button size="3" variant="solid" onClick={enter}>
+              <Button size="2" variant="solid" radius="full" onClick={enter}>
                 {ready && me ? `Continue as ${me.name.split(" ")[0]}` : "Sign in"} <ArrowRightIcon />
               </Button>
             </Flex>
-          </Flex>
+          </Grid>
         </Box>
 
         {/* ------------------------------------------------ the story: one pinned scene, driven by scroll */}
@@ -151,7 +163,7 @@ export default function Landing() {
                   </Text>
                   <Flex gap="3" mt="6" wrap="wrap">
                     <Button size="4" onClick={demo}>Run the guided demo <ArrowRightIcon /></Button>
-                    <Button size="4" variant="surface" color="gray" onClick={() => jump(0.2)}>Scroll the story ↓</Button>
+                    <Button size="4" variant="surface" color="gray" onClick={() => jump(0.2)}>Scroll the story <ArrowDownIcon /></Button>
                   </Flex>
                 </motion.div>
               </Flex>
@@ -179,7 +191,6 @@ export default function Landing() {
               <JaneCard p={p} />
             </motion.div>
 
-            <Rail p={p} onJump={jump} bg={bg} />
           </Box>
         </Box>
 
@@ -196,7 +207,7 @@ export default function Landing() {
         </Box>
 
         {/* ------------------------------------------------ the ledger: numbers as entries */}
-        <Container size="3" px="5" py="9">
+        <Container id="numbers" size="3" px="5" py="9" style={{ scrollMarginTop: 72 }}>
           <Heading size="9" className="serif" style={{ lineHeight: 1 }}>
             <SplitText text="The books, as we found them." />
           </Heading>
@@ -204,7 +215,7 @@ export default function Landing() {
         </Container>
 
         {/* ------------------------------------------------ safe by construction, as a receipt */}
-        <Container size="4" px="5" pb="9">
+        <Container id="safety" size="4" px="5" pb="9" style={{ scrollMarginTop: 72 }}>
           <Grid columns={{ initial: "1", md: "1fr 380px" }} gap="8" align="center">
             <Box>
               <Text size="2" weight="bold" style={{ color: "var(--accent-10)", letterSpacing: "0.12em" }}>SAFE BY CONSTRUCTION</Text>
@@ -260,7 +271,7 @@ function JaneCard({ p }: { p: MotionValue<number> }) {
         {REASONS.map(([r, pts], i) => (
           <motion.div key={r} initial={false} animate={{ opacity: stage > i ? 1 : 0.15, x: stage > i ? 0 : -8 }} transition={{ type: "spring", stiffness: 300, damping: 26 }}
             style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-            <span>✓ {r}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><CheckIcon aria-hidden /> {r}</span>
             <span style={{ fontFamily: "var(--font-mono)", color: "#a8a29e" }}>+{pts}.0</span>
           </motion.div>
         ))}
@@ -279,24 +290,6 @@ function JaneCard({ p }: { p: MotionValue<number> }) {
         <Stamp text="Released" sub="2 of 2 · rechecked" ink="grass" rotate={-11} play={stage >= 6} />
       </div>
     </Paper>
-  );
-}
-
-function Rail({ p, onJump, bg }: { p: MotionValue<number>; onJump: (to: number) => void; bg: string }) {
-  const fill = useTransform(p, [0, 1], ["0%", "100%"]);
-  return (
-    <Flex direction="column" gap="3" align="end" style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)" }} display={{ initial: "none", lg: "flex" }}>
-      <Box position="absolute" style={{ right: 4, top: 6, bottom: 6, width: 2, background: "var(--gray-a4)", borderRadius: 1 }}>
-        <motion.div style={{ height: fill, width: 2, background: "var(--accent-9)", borderRadius: 1 }} />
-      </Box>
-      {CHAPTERS.map((c) => (
-        <button key={c.n} onClick={() => onJump(c.at + 0.04)} aria-label={`Chapter ${c.n}: ${c.title}`}
-          style={{ all: "unset", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, paddingRight: 0 }}>
-          <Text size="1" style={{ color: "var(--gray-10)", fontFamily: "var(--font-mono)" }}>{c.n}</Text>
-          <span style={{ width: 10, height: 10, borderRadius: 99, background: "var(--gray-8)", border: `2px solid ${bg}` }} />
-        </button>
-      ))}
-    </Flex>
   );
 }
 
@@ -324,7 +317,9 @@ function Ledger() {
       <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ delay: 0.5 }}
         style={{ display: "flex", justifyContent: "space-between", padding: "14px 0", borderBottom: "3px double var(--gray-a8)", fontSize: 18 }}>
         <span style={{ fontWeight: 700 }}>Views of each customer</span>
-        <span style={{ fontWeight: 700, color: "var(--accent-10)" }}>5 → 1</span>
+        <span style={{ fontWeight: 700, color: "var(--accent-10)", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          5 <ArrowRightIcon width={18} height={18} aria-label="becomes" /> 1
+        </span>
       </motion.div>
     </Box>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { ExclamationTriangleIcon, LockClosedIcon } from "@radix-ui/react-icons";
+import { CheckIcon, Cross2Icon, ExclamationTriangleIcon, LockClosedIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Callout, Card, DataList, Flex, Grid, Heading, Text, Tooltip } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -223,10 +223,10 @@ export function Checks({ card }: { card: NBACard }) {
                 initial={{ scale: 0, rotate: -45 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ ...spring, delay: 0.2 + i * 0.1 }}
-                style={{ color: c.passed ? "var(--grass-11)" : "var(--red-11)", fontWeight: 700 }}
+                style={{ color: c.passed ? "var(--grass-11)" : "var(--red-11)", display: "inline-flex" }}
                 aria-hidden
               >
-                {c.passed ? "✓" : "✕"}
+                {c.passed ? <CheckIcon width={16} height={16} /> : <Cross2Icon width={16} height={16} />}
               </motion.span>
               <span style={{ textTransform: "capitalize" }}>{c.check.replaceAll("_", " ")}</span>
               <span className="rt-sr-only" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>

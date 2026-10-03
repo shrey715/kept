@@ -208,25 +208,12 @@ body {
   white-space: nowrap;
 }
 
-/* ---------------------------------------------------------------- scrollbar: a thin progress line */
+/* ---------------------------------------------------------------- scrollbar: none (the page still scrolls) */
 html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--ruby-9, #e54666) transparent;
+  scrollbar-width: none; /* Firefox */
 }
 ::-webkit-scrollbar {
-  width: 3px;
-  height: 3px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #e54666, #c8102e);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #e54666;
-}
-::-webkit-scrollbar-button {
-  display: none;
+  display: none; /* Chrome, Safari, Edge */
+  width: 0;
+  height: 0;
 }
