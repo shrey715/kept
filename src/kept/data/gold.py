@@ -111,8 +111,9 @@ def _warehouse_path(conn: duckdb.DuckDBPyConnection) -> str:
     return str(row[0])
 
 
-def run_dbt(select: Iterable[str], *, warehouse: str) -> None:
-    """`dbt build --select ...` against `warehouse`. Raises RuntimeError if any model or test fails."""
+def run_dbt(select: Iterable[str], *, warehouse: str, exclude: Iterable[str] = ()) -> None:
+    """`dbt build --select ... [--exclude ...]` against `warehouse`. Raises RuntimeError if any model or
+    test fails."""
     from dbt.cli.main import dbtRunner
 
     os.environ["KEPT_WAREHOUSE_PATH"] = warehouse
@@ -121,6 +122,7 @@ def run_dbt(select: Iterable[str], *, warehouse: str) -> None:
         "build",
         "--select",
         *select,
+        *(["--exclude", *exclude] if exclude else []),
         "--threads",
         "1",
         "--profiles-dir",
