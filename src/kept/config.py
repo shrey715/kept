@@ -62,7 +62,7 @@ CALLING_HOURS_END: Final = time(21, 0)  # local, exclusive
 CONTACT_CAP_7D: Final = 3  # default only; each case carries collections_cases.contact_cap_7d
 PROMISE_DAYS_AFTER_PAYDAY: Final = (1, 2)  # promises due 1-2 days after expected payday
 TOP_REASONS: Final = 3  # TreeSHAP top 3
-CLOSE_CALL_MARGIN: Final = 0.05  # top two scores within 5% of the top: "close" (D: 7% of real cases)
+CLOSE_CALL_MARGIN: Final = 0.02  # top two scores within 2% of the top: "close" (D: 7% of real cases)
 HOLDOUT_SHARE: Final = 0.05  # permanent hold-out on the old strategy
 GREEN_BATCH_SAMPLE_SIZE: Final = 20  # team lead samples 20 cases before approving
 PROPOSAL_TTL: Final = timedelta(hours=4)  # TBC: approvals expire
