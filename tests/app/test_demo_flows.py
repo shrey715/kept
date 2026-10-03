@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from kept.app.api import create_app
 from kept.app.demo import demo_services
+from kept.config import RAW_DIR
 
 pytestmark = pytest.mark.track_d
 CASE = "CS-2026-118204"  # agent-7, plain Amber call
@@ -125,3 +126,52 @@ def test_notes_only_in_demo(make_customer) -> None:  # type: ignore[no-untyped-d
         "/demo/cases/C-118204/notes", json={"text": "x", "user_id": "agent-7", "role": "agent"}
     )
     assert r.status_code == 404
+
+
+# ----------------------------------------------------------------- notes -> extraction panel
+def test_note_extraction_carries_evidence_and_confirm_moves_hardship() -> None:
+    from kept.app.demo import demo_app
+
+    client = TestClient(demo_app())
+    note = "Cust says shifts were cut at the plant; can pay 140 on the 2nd. Her husband was on the line."
+    client.post(f"/demo/cases/{CASE}/notes", json={"text": note, **who("agent-7", "agent")})
+    (row,) = client.get(f"/demo/cases/{CASE}/extractions", params=who("agent-7", "agent")).json()
+    ex = row["extraction"]
+    assert row["note"] == note and ex["hardship_signal"]["value"] == "possible"
+    ev = ex["hardship_signal"]["evidence"]
+    assert note[ev["char_start"] : ev["char_end"]] == ev["quote"] == "shifts were cut"
+    assert ex["promise_intent"]["value"] is True and ex["promised_amount"]["value"] == "140.00"
+    assert ex["promised_amount"]["evidence"]["quote"] == "140"
+    assert ex["third_party_present"]["value"] is True and ex["stated_reason"]["value"] == "reduced_income"
+
+    card = client.get(f"/cases/{CASE}/nba", params=who("agent-7", "agent")).json()
+    assert "Possible hardship" in card["hardship_banner"]
+    if (RAW_DIR / "hardship_programs.csv").exists():  # the demo reads programmes from the dataset (not in CI)
+        assert "Eligible programmes" in card["hardship_banner"]
+
+    sid = ex["source_id"]
+    confirmed = client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {}}
+    ).json()
+    assert confirmed["confirmed_by_agent_id"] == "agent-7"
+    assert (
+        client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"]
+        == "confirmed"
+    )
+
+    client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"hardship_signal": "none"}}
+    )
+    assert (
+        client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"]
+        == "none"
+    )
+
+    client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"cease_request": True}}
+    )
+    assert client.get(f"/cases/{CASE}/nba", params=who("agent-7", "agent")).json()["hard_stop"]["blocked"]
+
+    bad = client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"nope": 1}})
+    assert bad.status_code == 422
+    assert client.get(f"/demo/cases/{CASE}/extractions", params=who("agent-8", "agent")).status_code == 403

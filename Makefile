@@ -62,7 +62,7 @@ dbt-build:  ## build bronze -> silver -> gold -> features
 serve:  ## run the API (real services from G4)
 	uv run kept serve
 
-serve-demo:  ## run the API on three in-memory demo cases (no warehouse needed)
+serve-demo:  ## run the API on twelve in-memory demo cases (no warehouse needed)
 	uv run kept serve --demo  # add --reload to restart on code changes (resets demo state)
 
 web-setup:  ## install the Next.js frontend (web/)

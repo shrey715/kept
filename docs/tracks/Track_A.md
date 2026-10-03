@@ -47,7 +47,7 @@ Settings: `kept.data.identity.probabilistic.build_settings()` (also in `run_summ
 - The release has `call_transcripts.csv` (call-level) plus separate JSON files; only the CSV lands in bronze. The `turns` JSON stays in `data/raw/files/transcripts/` for Track C. The `_source_file` column holds the absolute path on the machine that landed it.
 
 ## Open questions
-None blocking Phase 3. The earlier open items are decided below, on the data and docs we have (no new information from the organisers or the team).
+None. The open items from Phase 1-3 are decided below, on the data and docs we have (no new information from the organisers or the team).
 
 ## Decisions taken (with the reason)
 - **Ground-truth IDs (TEAM_PLAN §9):** assume none exist. We do not claim a precision measured against labels we don't have. The evidence we report instead: (1) Splink re-finds 99.9% of the exact links; (2) no auto-linked cluster holds two national IDs, and the 329-340 that would are held for review; (3) about 60 pairs eyeballed with no false auto-link; (4) the 300-pair human review in Phase 4 against the 98% target (`check_review_precision`). If the organisers answer, swap (4) for their labels.
@@ -60,10 +60,14 @@ None blocking Phase 3. The earlier open items are decided below, on the data and
 - **Account-key linkage (Q2):** an account key counts as linked when its golden ID also holds a CRM record.
 - **Agent-note mojibake:** not recoverable (U+FFFD replaced the characters); listed in the quality report, not "fixed".
 
+## Notes for the quality report (Phase 5)
+4,636 agent notes contain U+FFFD; 384,422 card phone numbers are masked in the source (`519555xxx42`) and sit in `quarantine.card_accounts`; 4,936 CRM phones are truncated to 9 digits; `account_monthly_snapshot.month_end_date` drifts across 3 formats; 2,115 CRM records are deleted (CDC) and excluded from silver.
+
 ## Log
 <!-- Newest first: time, what happened. -->
 - 2026-10-03: Phase 3 parallel tasks done; gold built on crosswalk v1; stop message for G2.
 - 2026-10-03: G1 integrated; merged main (C's PR #14, #15) into track-a.
+- 2026-10-03: Open questions decided (see Decisions taken).
 - 2026-10-03: Phase 2 done; `dbt build --select silver` 38/38 on real data; stop message for G1 posted. G0 PR #10 merged with my pre-hook fix.
 - 2026-10-03: Phase 2 parallel tasks done; silver built on real data; Splink tuning on a 10% sample running.
 - 2026-10-03: Reviewed G0 PR #10 (found the `+pre-hook` moved from `features:` to `text:`).

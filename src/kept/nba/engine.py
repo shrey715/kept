@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -103,8 +103,11 @@ class KeptEngine:
         proposals: dict[str, Proposal] | None = None,
         contact_cost: Mapping[Action, Decimal] = DEFAULT_CONTACT_COST,
         burden: Mapping[Action, Decimal] = DEFAULT_BURDEN,
+        programs: Callable[[CaseContext], Sequence[str]] | None = None,
     ) -> None:
-        """proposals: where new proposals are stored for the release gate (Releaser reads it)."""
+        """proposals: where new proposals are stored for the release gate (Releaser reads it).
+        programs: hardship programmes the case is eligible for, named for the banner
+        (C's hardship.programs.eligible_programs at G3; the demo reads hardship_programs)."""
         self._context = context
         self._features = features
         self._scorer = scorer
@@ -113,6 +116,7 @@ class KeptEngine:
         self._proposals = proposals if proposals is not None else {}
         self._cost = contact_cost
         self._burden = burden
+        self._programs = programs
 
     def recommend(self, case_id: str, now: datetime) -> NBACard:
         """An unknown case (KeyError from the context builder) propagates. After that it never
@@ -220,7 +224,7 @@ class KeptEngine:
             reasons=tuple(reasons),
             sizing_text=proposal.sizing.rationale if proposal.sizing else None,
             checks=checks.get(best.action, ()),
-            hardship_banner=_banner(ctx),
+            hardship_banner=self._banner(ctx),
         )
 
     def _legacy(
@@ -253,8 +257,20 @@ class KeptEngine:
             probabilities=(),
             sizing_text=sizing.rationale if sizing else None,
             checks=checks.get(a, ()),
-            hardship_banner=_banner(ctx),
+            hardship_banner=self._banner(ctx),
         )
+
+    def _banner(self, ctx: CaseContext) -> str | None:
+        """The hardship banner, naming eligible programmes when there are any. A failing
+        programmes lookup never costs the card: the banner just goes without them."""
+        text = _banner(ctx)
+        if text is None or self._programs is None:
+            return text
+        try:
+            names = list(self._programs(ctx))
+        except Exception:
+            names = []
+        return f"{text} Eligible programmes: {'; '.join(names)}." if names else text
 
     def _proposal(
         self,
@@ -302,7 +318,7 @@ class KeptEngine:
                 "headline": "No action today",
                 "proposal": None,
                 "probabilities": probabilities,
-                "hardship_banner": _banner(ctx),
+                "hardship_banner": self._banner(ctx),
                 "hard_stop": hard_stop,
                 "no_action_reason": reason,
             }
