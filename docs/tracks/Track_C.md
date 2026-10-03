@@ -3,11 +3,15 @@
 Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 1 (parallel tasks done)
-- Working on: G0 contract PR (`docs/NEXT_STEPS.md` §3), then Phase 2
-- Waiting on: owners' reviews of the G0 PR; B's hosted Ask model choice
+- Phase: 2
+- Working on: prompt tuning on the public labels (extract-v3), then the full redaction run
+- Waiting on: A's Splink settings (full match run)
 
 ## Done
+- G0 contract PR #10 merged (text schema, `ExtractionStore` + `for_case`, `Services` fields, `hard_stop_flags`, free LLM settings, §9 statuses).
+- Phase 2: `extract.py` (`resolve_day_of_month`, `locate_quote`, `LLMExtractor`, `confirm`, `transcript_text`): all extract/eval tests pass. `DuckDBExtractionStore` (`kept/text/store.py`) round-trips (`tests/text/test_store.py`).
+- Eval harness `scripts/eval_extraction.py`; batch redaction `scripts/redact_all.py` (256K distinct notes, ~255 notes/s/process).
+- Prompt v2 on the notes tuning split (~350): hardship 0.85 (recall 1.0), promise 0.93, amount 0.97, third party 0.88 pass; date 0.70, dispute 0.39, cease 0.60 fail. v3 fixes in progress.
 - `PresidioRedactor` (early provider): EN + FR spaCy, Canadian SIN/postal, non-Luhn cards, phones, context-gated bank accounts and DOBs, jargon allow-list, idempotent. `tests/text/test_redact.py` 16 pass.
 - `evaluate.py`: `binary_metrics`, `text_feature_gate`, `cohens_kappa`, `adjudicate`. Eval tests pass.
 - Public labels (500 notes, 500 transcripts) in `data/labels/`; mapping + 30% holdout in `kept/text/labels.py`. `tests/text/test_labels.py` pass.
@@ -16,6 +20,9 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - `make test-contract` green, `make lint` clean, track_c: 25 passed, rest stubbed for later phases.
 
 ## Decisions and changes from the plan
+- Promised amounts are scored within $1: notes write whole dollars ("$21") while labels hold the promise record's cents (21.03). Gold dates for "next payday" come from payroll data, not the text, so they stay misses.
+- The LLM returns dates as written (`MM-DD`, `day:N`, `weekday:x`, ISO); code resolves them against the note's local date. A month-day value whose quote names no month is read as a day of month.
+- Redactor v3 keeps a spaCy PERSON/LOCATION span only if it has a Titlecase non-month word: notes' typos, months and ALL-CAPS phrases were being redacted. Limit: an ALL-CAPS name passes (notes have almost none; transcripts use Titlecase).
 - Track D moved the UI (S7) from one static HTML page to Next.js + Tailwind in `web/` (D's call, 3 Oct). What it means for C: the demo runs on this machine (Phase 6), so it needs Node + pnpm and `kept serve` runs two processes (FastAPI + Next). Node 22.22.2 and npm 10.9.7 are here; pnpm is not. When `web/` lands on main: install pnpm, `pnpm install` in `web/` (~350 MB), and run the full demo here once before G4. C's `/extractions/{source_id}/confirm` stays a FastAPI route; the Next page calls it.
 - Redactor also loads `fr_core_news_lg` (Akshat chose lg over md): 14% of notes are French and the English NER redacted French words as names. French is picked per note by a word-list heuristic (`looks_french`), so the `Redactor` interface is unchanged. Anyone running the redactor needs both spaCy models; both are on Hugging Face (`spacy/en_core_web_lg`, `spacy/fr_core_news_lg`), which is much faster than GitHub here.
 - Custom CREDIT_CARD pattern without Luhn: 3,822 notes carry synthetic 16-digit cards that fail Luhn and leaked through Presidio's built-in recognizer.
@@ -33,6 +40,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 16:30 G0 merged. Phase 2: extractor, store, eval harness, prompt v2/v3, redactor v3.
 - 15:30 Merged all PRs (#2–#6) into main: fixed B's CI (sqlglot importorskip), resolved D's `cli.py` conflict, pinned dbt-duckdb<1.10. Wrote `docs/NEXT_STEPS.md` for all tracks.
 - 14:55 Phase 1 parallel tasks done; checks green. Waiting for G0.
 - 14:45 SetFit GPU smoke run and Ollama call OK. setfit bumped.

@@ -86,6 +86,7 @@ def run_matching(
     conn: duckdb.DuckDBPyConnection,
     *,
     sample_mod: int | None = None,
+    train_sample_mod: int | None = None,
     previous: pd.DataFrame | None = None,
     at: datetime | None = None,
 ) -> MatchRun:
@@ -115,7 +116,7 @@ def run_matching(
     ]
 
     hashed = records.dropna(subset=["national_id_hash"])[["source_system", "source_key", "national_id_hash"]]
-    model = train_model(records)
+    model = train_model(records, sample_mod=train_sample_mod)
     splink = score_pairs(records, exclude_pairs=exact, model=model)
     del records
     pairs = pd.concat([exact, splink], ignore_index=True)

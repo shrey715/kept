@@ -8,7 +8,7 @@ from typing import Any
 import duckdb
 import pandas as pd
 
-from kept.config import STEWARD_REVIEW_THRESHOLD
+from kept.config import DATA_DIR, STEWARD_REVIEW_THRESHOLD
 
 MATCH_COLUMNS = ("name_key", "dob", "phone_e164", "postal_code")
 # optional extra: the full first name where the system holds one (twins share surname and initial)
@@ -95,12 +95,15 @@ EM_MAX_PAIRS = 5_000_000  # EM on every blocked pair of the sample did not fit i
 SPLINK_MEMORY = os.environ.get("KEPT_SPLINK_MEMORY", "4GB")  # DuckDB spills to disk above this
 
 
-def _db() -> Any:
-    """Splink's DuckDB, capped: its default (80% of RAM) plus the pandas frames ran a 16 GB laptop dry."""
+def _db() -> tuple[Any, duckdb.DuckDBPyConnection]:
+    """Splink's DuckDB, capped: its default (80% of RAM) plus the pandas frames ran a 16 GB laptop dry.
+    An in-memory DuckDB has no spill directory unless it is given one."""
     from splink import DuckDBAPI
 
     conn = duckdb.connect(":memory:", config={"memory_limit": SPLINK_MEMORY})
-    return DuckDBAPI(conn)
+    conn.execute(f"set temp_directory = '{DATA_DIR / 'warehouse' / 'splink_tmp'}'")
+    conn.execute("set preserve_insertion_order = false")
+    return DuckDBAPI(conn), conn
 
 
 def _people(records: pd.DataFrame) -> pd.DataFrame:
@@ -132,19 +135,20 @@ def _settings() -> Any:
     )
 
 
-def train_model(records: pd.DataFrame, *, sample_mod: int = 20) -> dict[str, Any]:
+def train_model(records: pd.DataFrame, *, sample_mod: int | None = None) -> dict[str, Any]:
     """Train Splink (unsupervised: u by random sampling, m by EM) and return the model as a
-    JSON-able dict. Above TRAIN_ALL_BELOW records it trains on the records whose hash(dob) % sample_mod
-    is 0, so both sides of a true match are in the sample; EM over every record would need hundreds
-    of millions of pairs in memory."""
+    JSON-able dict. With `sample_mod` N (or by default 20 above TRAIN_ALL_BELOW records) it trains on the
+    records whose hash(dob) % N is 0, so both sides of a true match are in the sample; EM over every
+    record would need hundreds of millions of pairs in memory."""
     from splink import Linker, block_on
 
     people = _people(records)
-    if len(people) > TRAIN_ALL_BELOW:
-        in_sample = pd.util.hash_pandas_object(people["dob"].fillna(""), index=False) % sample_mod == 0
+    mod = sample_mod or (20 if len(people) > TRAIN_ALL_BELOW else None)
+    if mod:
+        in_sample = pd.util.hash_pandas_object(people["dob"].fillna(""), index=False) % int(mod) == 0
         people = people[in_sample & people["dob"].notna()]
     spec = build_settings()
-    linker = Linker(_db().register(people), _settings())
+    linker = Linker(_db()[0].register(people), _settings())
     linker.training.estimate_probability_two_random_records_match(
         [block_on(*spec["deterministic_rule"])],  # type: ignore[misc]
         recall=float(spec["recall_of_deterministic_rule"]),  # type: ignore[arg-type]
@@ -162,6 +166,7 @@ def score_pairs(
     *,
     exclude_pairs: pd.DataFrame | None = None,
     model: dict[str, Any] | None = None,
+    train_sample_mod: int | None = None,
 ) -> pd.DataFrame:
     """Splink match probabilities for candidate pairs.
 
@@ -169,47 +174,45 @@ def score_pairs(
     Output columns: left_system, left_key, right_system, right_key, rule ("splink"),
     score in [0, 1]. Pairs already in exclude_pairs (exact links) are not rescored.
     Only pairs at or above the steward-review threshold are returned: below it a pair is not a link.
-    `model` is a trained model from train_model; without one, one is trained on `records`.
+    `model` is a trained model from train_model; without one, one is trained on `records`
+    (on a 1/`train_sample_mod` DOB sample if given) and then every record is scored with it.
     """
     from splink import Linker
 
-    people = _people(records)
-    linker = Linker(_db().register(people), model or train_model(records))
-    predicted = linker.inference.predict(threshold_match_probability=STEWARD_REVIEW_THRESHOLD)
-    scored = linker.misc.query_sql(  # type: ignore[no-untyped-call]
-        "select source_system_l, source_key_l, source_system_r, source_key_r, match_probability "
-        f"from {predicted.physical_name}",
-        output_type="pandas",
+    model = model or train_model(records, sample_mod=train_sample_mod)
+    db, con = _db()
+    linker = Linker(db.register(_people(records)), model)
+    predictions = linker.inference.predict(threshold_match_probability=STEWARD_REVIEW_THRESHOLD)
+    # Order each pair, drop the exact links and sort in DuckDB, then pull the five columns once: the full
+    # run (4.8M pairs) overflowed 20 GB doing this in pandas next to DuckDB's buffers (C's fix, PR #14).
+    ordered = """select case when swap then {rs} else {ls} end as left_system,
+                        case when swap then {rk} else {lk} end as left_key,
+                        case when swap then {ls} else {rs} end as right_system,
+                        case when swap then {lk} else {rk} end as right_key{extra}
+                 from (select *, {ls} > {rs} or ({ls} = {rs} and {lk} > {rk}) as swap from {table})"""
+    pred = ordered.format(
+        ls="source_system_l",
+        lk="source_key_l",
+        rs="source_system_r",
+        rk="source_key_r",
+        extra=", greatest(least(match_probability, 1), 0) as score",
+        table=predictions.physical_name,
     )
-
-    out = pd.DataFrame(
-        {
-            "left_system": scored["source_system_l"],
-            "left_key": scored["source_key_l"],
-            "right_system": scored["source_system_r"],
-            "right_key": scored["source_key_r"],
-            "rule": "splink",
-            "score": scored["match_probability"].clip(0, 1),
-        }
-    )
-    swap = (out.left_system > out.right_system) | (
-        (out.left_system == out.right_system) & (out.left_key > out.right_key)
-    )
-    out.loc[swap, ["left_system", "left_key", "right_system", "right_key"]] = out.loc[
-        swap, ["right_system", "right_key", "left_system", "left_key"]
-    ].to_numpy()
+    sql = f"select *, 'splink' as rule from ({pred}) p"
     if exclude_pairs is not None and len(exclude_pairs):
-        pair = ["left_system", "left_key", "right_system", "right_key"]
-        ex = exclude_pairs[pair].copy()
-        flipped = ex.rename(
-            columns={
-                "left_system": "right_system",
-                "left_key": "right_key",
-                "right_system": "left_system",
-                "right_key": "left_key",
-            }
+        con.register("exclude_pairs", exclude_pairs[["left_system", "left_key", "right_system", "right_key"]])
+        ex = ordered.format(
+            ls="left_system",
+            lk="left_key",
+            rs="right_system",
+            rk="right_key",
+            extra="",
+            table="exclude_pairs",
         )
-        gone = pd.concat([ex, flipped]).drop_duplicates()
-        out = out.merge(gone.assign(_x=1), on=pair, how="left")
-        out = out[out["_x"].isna()].drop(columns="_x")
-    return out.sort_values(["left_system", "left_key", "right_system", "right_key"]).reset_index(drop=True)
+        sql += f" anti join ({ex}) e using (left_system, left_key, right_system, right_key)"
+    out = con.execute(
+        f"select left_system, left_key, right_system, right_key, rule, score from ({sql}) "
+        "order by left_system, left_key, right_system, right_key"
+    ).df()
+    con.close()  # give DuckDB's buffers back before the caller clusters millions of pairs
+    return out

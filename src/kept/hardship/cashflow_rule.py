@@ -8,6 +8,7 @@ EI is a benefit flag (a proxy), so it may only ever PROTECT: it feeds this rule,
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 
@@ -32,7 +33,11 @@ def cash_flow_hardship(
 ) -> bool:
     """True if any trigger fires: delay >= late_payroll_days, change <= salary_drop_threshold,
     or a new EI deposit. All-None inputs -> False (missing is not evidence)."""
-    raise NotImplementedError("Track C")
+    return (
+        (payroll_delay_days is not None and payroll_delay_days >= config.late_payroll_days)
+        or (pay_change_vs_3m_avg is not None and pay_change_vs_3m_avg <= config.salary_drop_threshold)
+        or new_ei_deposit is True
+    )
 
 
 def new_ei_deposit(
@@ -45,10 +50,19 @@ def new_ei_deposit(
     """True when EI deposits are flowing and the episode began within new_ei_window_days
     before as_of (inclusive). Flag True with no first date -> True (protective). Flag False ->
     False. Flag None -> None (unknown). A first deposit date after as_of -> False (point in time)."""
-    raise NotImplementedError("Track C")
+    if ei_deposit_flag is None:
+        return None
+    if not ei_deposit_flag:
+        return False
+    if ei_first_deposit_date is None:
+        return True
+    return 0 <= (as_of - ei_first_deposit_date).days <= config.new_ei_window_days
 
 
 def is_ei_deposit(descriptor: str | None, config: CashFlowRuleConfig = DEFAULT_CONFIG) -> bool:
     """For transactions.raw_description: case-insensitive whole-word match on EI keywords
     ("EI" must not match "REIMBURSE"). Prefer transactions.benefit_type == "ei" when present."""
-    raise NotImplementedError("Track C")
+    if not descriptor:
+        return False
+    words = "|".join(map(re.escape, config.ei_descriptor_keywords))
+    return re.search(rf"\b(?:{words})\b", descriptor, flags=re.IGNORECASE) is not None
