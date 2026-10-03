@@ -156,41 +156,36 @@ def score_pairs(
     if train_sample_mod:
         linker = Linker(db.register(people), linker.misc.save_model_to_json())
     predictions = linker.inference.predict(threshold_match_probability=STEWARD_REVIEW_THRESHOLD)
-    # Only the five columns we use: the full prediction table (every comparison column) for the
-    # full run didn't fit in RAM as pandas.
-    scored = con.execute(
-        "select source_system_l, source_key_l, source_system_r, source_key_r, match_probability "
-        f"from {predictions.physical_name}"
-    ).df()
-
-    out = pd.DataFrame(
-        {
-            "left_system": scored["source_system_l"],
-            "left_key": scored["source_key_l"],
-            "right_system": scored["source_system_r"],
-            "right_key": scored["source_key_r"],
-            "rule": "splink",
-            "score": scored["match_probability"].clip(0, 1),
-        }
+    # Order each pair, drop the exact links and sort in DuckDB, then pull the five columns once:
+    # the full run (4.8M pairs) overflowed 20 GB doing this in pandas next to DuckDB's buffers.
+    ordered = """select case when swap then {rs} else {ls} end as left_system,
+                        case when swap then {rk} else {lk} end as left_key,
+                        case when swap then {ls} else {rs} end as right_system,
+                        case when swap then {lk} else {rk} end as right_key{extra}
+                 from (select *, {ls} > {rs} or ({ls} = {rs} and {lk} > {rk}) as swap from {table})"""
+    pred = ordered.format(
+        ls="source_system_l",
+        lk="source_key_l",
+        rs="source_system_r",
+        rk="source_key_r",
+        extra=", greatest(least(match_probability, 1), 0) as score",
+        table=predictions.physical_name,
     )
-    swap = (out.left_system > out.right_system) | (
-        (out.left_system == out.right_system) & (out.left_key > out.right_key)
-    )
-    out.loc[swap, ["left_system", "left_key", "right_system", "right_key"]] = out.loc[
-        swap, ["right_system", "right_key", "left_system", "left_key"]
-    ].to_numpy()
+    sql = f"select *, 'splink' as rule from ({pred}) p"
     if exclude_pairs is not None and len(exclude_pairs):
-        pair = ["left_system", "left_key", "right_system", "right_key"]
-        ex = exclude_pairs[pair].copy()
-        flipped = ex.rename(
-            columns={
-                "left_system": "right_system",
-                "left_key": "right_key",
-                "right_system": "left_system",
-                "right_key": "left_key",
-            }
+        con.register("exclude_pairs", exclude_pairs[["left_system", "left_key", "right_system", "right_key"]])
+        ex = ordered.format(
+            ls="left_system",
+            lk="left_key",
+            rs="right_system",
+            rk="right_key",
+            extra="",
+            table="exclude_pairs",
         )
-        gone = pd.concat([ex, flipped]).drop_duplicates()
-        out = out.merge(gone.assign(_x=1), on=pair, how="left")
-        out = out[out["_x"].isna()].drop(columns="_x")
-    return out.sort_values(["left_system", "left_key", "right_system", "right_key"]).reset_index(drop=True)
+        sql += f" anti join ({ex}) e using (left_system, left_key, right_system, right_key)"
+    out = con.execute(
+        f"select left_system, left_key, right_system, right_key, rule, score from ({sql}) "
+        "order by left_system, left_key, right_system, right_key"
+    ).df()
+    con.close()  # give DuckDB's buffers back before the caller clusters millions of pairs
+    return out
