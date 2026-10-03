@@ -104,7 +104,7 @@ def build(args: argparse.Namespace) -> int:
     if not args.gold_only:
         run_dbt(["silver"], warehouse=warehouse)
     conn = connect()
-    build_gold(conn, crosswalk=args.crosswalk)  # closes conn
+    build_gold(conn, crosswalk=args.crosswalk, extractions=args.extractions)  # closes conn
     conn = connect()  # not read_only: dbt's connection in this process holds the file read-write
     try:
         export_parquet(conn, as_of_date=args.as_of_date)
@@ -208,6 +208,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if name == "build":
             p.add_argument("--gold-only", action="store_true", help="skip the silver build (about 3 min)")
             p.add_argument("--crosswalk", type=Path, default=None, help="crosswalk parquet (default: newest)")
+            p.add_argument(
+                "--extractions",
+                type=Path,
+                nargs="*",
+                default=None,
+                help="Track C's text.extractions parquet files (default: data/exports/extractions/*.parquet)",
+            )
             p.add_argument("--warehouse", type=Path, default=None)
             p.add_argument("--as-of-date", default="2026-09-28", help="snapshot date of the load")
         if name == "gate":
