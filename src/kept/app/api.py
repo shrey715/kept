@@ -60,6 +60,7 @@ class Services:
     steward: StewardQueue | None = None  # Track A: /steward routes
     extractions: ExtractionStore | None = None  # Track C: /extractions routes
     note_text: Callable[[str], str | None] | None = None  # source_id -> the note's text, for the panel
+    scored_queue: Callable[[str, Role], list[QueueItem]] | None = None  # real: nba.cards from kept score
     demo: bool = False
 
 
@@ -126,8 +127,9 @@ def create_app(services: Services) -> FastAPI:
     """Routes and their contracts:
 
     GET  /health                                  200 HealthResponse
-    GET  /queue?user_id&role                      200 list[QueueItem] the role may see, best first;
-                                                  403 for roles without case access
+    GET  /queue?user_id&role                      200 list[QueueItem] the role may see, best first
+                                                  (real: from nba.cards, an agent's own cases, else
+                                                  the top 500); 403 for roles without case access
     GET  /cases/{case_id}/nba?user_id&role[&now]  200 NBACard; 403 if access.can_view_case is
                                                   False; 404 unknown case
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
@@ -177,6 +179,8 @@ def create_app(services: Services) -> FastAPI:
     def queue(user_id: str, role: Role) -> list[QueueItem]:
         if role is not Role.AGENT and role not in CASE_WIDE_ROLES:
             raise HTTPException(403, "this role has no case queue")
+        if services.scored_queue is not None:  # the nightly's cards; opening a case re-checks it live
+            return services.scored_queue(user_id, role)
         out = []
         for case_id in services.open_cases() if services.open_cases else []:
             c = customer(case_id)

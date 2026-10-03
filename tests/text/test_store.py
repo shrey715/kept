@@ -53,3 +53,25 @@ def test_replace_and_for_case(tmp_path: Path) -> None:
     edited = store.get("N-1")
     assert edited is not None and edited.confirmed_by_agent_id == "agent-7"
     assert edited.promised_amount.value == Decimal("120.00") and edited.promised_amount.evidence is None
+
+
+def test_load_redacted_notes(tmp_path: Path) -> None:
+    import pandas as pd
+
+    from kept.text.store import load_redacted_notes
+
+    parquet = tmp_path / "redacted_notes_x.parquet"
+    pd.DataFrame(
+        {
+            "source_id": ["N-1", "10002"],
+            "source_type": ["note", "transcript"],
+            "case_id": ["C-1", "C-1"],
+            "written_at_local": ["2026-09-01 10:00:00", "2026-09-02 11:00:00"],
+            "text": ["a", "agent: hi"],
+            "entity_types_removed": ["", "PERSON"],
+            "redactor_version": ["presidio-v5", "presidio-v5"],
+        }
+    ).to_parquet(parquet)
+    warehouse = tmp_path / "w.duckdb"
+    assert load_redacted_notes(parquet, warehouse) == 2
+    assert load_redacted_notes(parquet, warehouse) == 2  # replaces, never appends
