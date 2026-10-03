@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (SQL strings)
 """Reviewed SQL for each certified metric (metric_definitions.csv). The LLM never writes these.
 
 Reads silver tables with the data dictionary's names (K2). Tables used, for the Ask table list at G0:
@@ -36,7 +37,9 @@ _NO_SYSTEM = ("channel <> 'system'",)
 _BUCKETS = "['current','1-30','31-60','61-90','91-120','121-150','151-180','180+']"
 
 
-def _ptp(metric_id: str, value: str, where: tuple[str, ...] = (_RESOLVED,), date: str = "ptp_due_date") -> CertifiedQuery:
+def _ptp(
+    metric_id: str, value: str, where: tuple[str, ...] = (_RESOLVED,), date: str = "ptp_due_date"
+) -> CertifiedQuery:
     return CertifiedQuery(
         metric_id,
         f"SELECT {{group_by_select}} {value}, count(*) AS n FROM {_PTP} WHERE 1=1 {{where}} {{group_by}}",
@@ -47,7 +50,9 @@ def _ptp(metric_id: str, value: str, where: tuple[str, ...] = (_RESOLVED,), date
     )
 
 
-def _contacts(metric_id: str, value: str, where: tuple[str, ...], cols: frozenset[str] = _CONTACT_COLS) -> CertifiedQuery:
+def _contacts(
+    metric_id: str, value: str, where: tuple[str, ...], cols: frozenset[str] = _CONTACT_COLS
+) -> CertifiedQuery:
     return CertifiedQuery(
         metric_id,
         f"SELECT {{group_by_select}} {value}, count(*) AS n FROM silver.contact_history WHERE 1=1 {{where}} {{group_by}}",
@@ -95,9 +100,16 @@ FROM s WHERE 1=1 {{where}} {{group_by}}""",
             frozenset({"product_type", "dpd_bucket"}),
             "month_end_date",
         ),
-        _cases("cure_rate", "avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate", _HOLDS, "case_open_date"),
+        _cases(
+            "cure_rate",
+            "avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate",
+            _HOLDS,
+            "case_open_date",
+        ),
         _ptp("promise_kept_rate", "avg(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate"),
-        _ptp("broken_promise_rate", "avg(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate"),
+        _ptp(
+            "broken_promise_rate", "avg(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate"
+        ),
         _contacts("rpc_rate", "avg(CASE WHEN rpc_flag THEN 1.0 ELSE 0.0 END) AS rpc_rate", _CALLS),
         _contacts(
             "ptp_rate", "avg(CASE WHEN ptp_made_flag THEN 1.0 ELSE 0.0 END) AS ptp_rate", ("rpc_flag",)
@@ -114,8 +126,18 @@ FROM s WHERE 1=1 {{where}} {{group_by}}""",
             _NO_SYSTEM,
             _CONTACT_COLS | {"channel"},
         ),
-        _ptp("collected_amount", "sum(amount_paid_against) AS collected_amount", ("amount_paid_against > 0",), "paid_date"),
-        _cases("hardship_rate", "avg(CASE WHEN hardship_flag THEN 1.0 ELSE 0.0 END) AS hardship_rate", (), "case_open_date"),
+        _ptp(
+            "collected_amount",
+            "sum(amount_paid_against) AS collected_amount",
+            ("amount_paid_against > 0",),
+            "paid_date",
+        ),
+        _cases(
+            "hardship_rate",
+            "avg(CASE WHEN hardship_flag THEN 1.0 ELSE 0.0 END) AS hardship_rate",
+            (),
+            "case_open_date",
+        ),
         CertifiedQuery(
             "delinquency_rate",
             f"SELECT {{group_by_select}} avg(CASE WHEN dpd >= 1 THEN 1.0 ELSE 0.0 END) AS delinquency_rate, "

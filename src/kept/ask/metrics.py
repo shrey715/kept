@@ -39,7 +39,9 @@ class CertifiedQuery:
     """Our reviewed SQL translation of one certified metric."""
 
     metric_id: str
-    sql_template: str  # SELECT with {group_by_select}, {where} and {group_by}; own WHERE, {where} adds ' AND ...'
+    sql_template: (
+        str  # SELECT with {group_by_select}, {where} and {group_by}; own WHERE, {where} adds ' AND ...'
+    )
     default_where: tuple[str, ...]  # the metric's default_filters as SQL predicates
     allowed_filters: frozenset[str]
     allowed_group_by: frozenset[str]

@@ -68,7 +68,9 @@ class LiteLLMGateway:
         import litellm  # lazy: core installs (contracts, Purpose) don't carry it
 
         if json_schema is not None:
-            system += "\n\nReply with only a JSON object matching this JSON schema:\n" + json.dumps(json_schema)
+            system += "\n\nReply with only a JSON object matching this JSON schema:\n" + json.dumps(
+                json_schema
+            )
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user.text}],
@@ -80,7 +82,11 @@ class LiteLLMGateway:
             kwargs["response_format"] = {"type": "json_object"}
 
         call_id, t0, attempts = uuid.uuid4().hex, time.perf_counter(), 0
-        payload: dict[str, Any] = {"purpose": purpose, "model": self.model, "redactor_version": user.redactor_version}
+        payload: dict[str, Any] = {
+            "purpose": purpose,
+            "model": self.model,
+            "redactor_version": user.redactor_version,
+        }
         try:
             while True:
                 attempts += 1
@@ -99,7 +105,9 @@ class LiteLLMGateway:
                 "prompt_tokens": getattr(usage, "prompt_tokens", None),
                 "completion_tokens": getattr(usage, "completion_tokens", None),
             }
-            return LLMResponse(text=text, parsed=parsed, model=getattr(reply, "model", self.model), call_id=call_id)
+            return LLMResponse(
+                text=text, parsed=parsed, model=getattr(reply, "model", self.model), call_id=call_id
+            )
         except Exception as e:
             payload |= {"ok": False, "error": type(e).__name__}
             raise
@@ -107,7 +115,11 @@ class LiteLLMGateway:
             payload |= {"attempts": attempts, "latency_ms": round((time.perf_counter() - t0) * 1000)}
             self.audit_log.append(
                 AuditEvent(
-                    event_id=call_id, at=datetime.now(UTC), kind=AuditKind.LLM_CALL, actor_id=actor_id, payload=payload
+                    event_id=call_id,
+                    at=datetime.now(UTC),
+                    kind=AuditKind.LLM_CALL,
+                    actor_id=actor_id,
+                    payload=payload,
                 )
             )
 

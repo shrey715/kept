@@ -456,8 +456,18 @@ def test_write_answers_matches_the_release_template(tmp_path) -> None:  # type: 
     write_answers(
         str(out),
         [
-            {"question_id": "BQ-018", "answer": "Refuse: outside scope", "sql_or_sources": "", "refused": True},
-            {"question_id": "BQ-004", "answer": "queue,avg\na,1", "sql_or_sources": "SELECT 1,2", "refused": False},
+            {
+                "question_id": "BQ-018",
+                "answer": "Refuse: outside scope",
+                "sql_or_sources": "",
+                "refused": True,
+            },
+            {
+                "question_id": "BQ-004",
+                "answer": "queue,avg\na,1",
+                "sql_or_sources": "SELECT 1,2",
+                "refused": False,
+            },
         ],
     )
     lines = out.read_text().splitlines()
