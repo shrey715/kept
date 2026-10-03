@@ -224,3 +224,25 @@ def test_window_starts_on_a_half_hour(engine) -> None:  # type: ignore[no-untype
     assert p is not None and p.window_start is not None
     local = p.window_start.astimezone(ZoneInfo("America/Toronto"))
     assert (local.hour, local.minute, local.second) == (14, 30, 0)
+
+
+def _with_programs(make_ctx, programs):  # type: ignore[no-untyped-def]
+    ctx = make_ctx(hardship_status=HardshipStatus.POSSIBLE)
+    fv = FeatureVector(case_id=ctx.case_id, golden_customer_id=ctx.golden_customer_id, as_of=ctx.features_as_of, feature_set_version="fs-0")
+    return KeptEngine(
+        context=FixedContextBuilder({ctx.case_id: ctx}), features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(PROBS), audit_log=InMemoryAuditLog(), programs=programs,
+    ).recommend(ctx.case_id, NOW)
+
+
+def test_banner_names_eligible_programmes(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    card = _with_programs(make_ctx, lambda ctx: ["3-month reduced payment (HP-LOAN-RED3 2026.1)"])
+    assert card.hardship_banner and "Eligible programmes: 3-month reduced payment" in card.hardship_banner
+
+
+def test_programmes_lookup_failure_keeps_the_card(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    def boom(ctx):  # type: ignore[no-untyped-def]
+        raise NotImplementedError("Track C")
+
+    card = _with_programs(make_ctx, boom)
+    assert card.proposal is not None and card.hardship_banner and "Eligible" not in card.hardship_banner
