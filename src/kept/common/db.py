@@ -8,7 +8,7 @@ import duckdb
 
 from kept.config import WAREHOUSE_PATH
 
-SCHEMAS = ("bronze", "silver", "gold", "features", "quarantine", "steward")
+SCHEMAS = ("bronze", "silver", "gold", "features", "quarantine", "steward", "text")
 
 
 def connect(path: Path | str = WAREHOUSE_PATH, *, read_only: bool = False) -> duckdb.DuckDBPyConnection:

@@ -89,6 +89,7 @@ schema:
       - {name: sunday_contact_permitted, logicalType: boolean, required: false, classification: internal, description: "customers.sunday_contact_permitted, most restrictive across records"}
       - {name: do_not_contact, logicalType: boolean, required: true, classification: sensitive, description: "Internal do-not-call or cease (national_dncl_flag never sets it: DNCL covers telemarketing, not collections)"}
       - {name: collections_hold, logicalType: boolean, required: true, classification: sensitive, description: "Insolvency, bankruptcy or deceased"}
+      - {name: hard_stop_flags, logicalType: array, required: false, classification: sensitive, description: "Which hard stops fired: cease | insolvency | bankruptcy | deceased"}
       - {name: hardship_status, logicalType: string, required: true, classification: sensitive, description: "none | possible | confirmed"}
       - {name: hardship_source, logicalType: string, required: false, classification: sensitive, description: "agent | customer_form | account_programme | model | llm | cash_flow"}
       - {name: vulnerability_flag, logicalType: boolean, required: false, classification: sensitive, description: "customers.vulnerability_flag or a disclosed vulnerability; protects like hardship (vulnerability_type itself is protected)"}

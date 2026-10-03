@@ -26,6 +26,9 @@ models:
       +schema: features
       +materialized: table
       +pre-hook: "set TimeZone = 'UTC'"  # source timestamps are naive UTC (K7)
+    text:
+      +schema: text
+      +materialized: table
 
 vars:
   # Track D features: as_of is naive UTC. Nightly = one as_of; training adds features_start.
