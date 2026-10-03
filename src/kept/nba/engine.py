@@ -196,6 +196,11 @@ class KeptEngine:
             p_paid=p_paid, balance_at_risk=ctx.balance_at_risk, contact_cost=self._cost, burden=self._burden
         )
         best = ranked[0]
+        if best.action is Action.WAIT and _protective_status(ctx) is not HardshipStatus.NONE:
+            # the hardship override sits outside the model (design §6.3): when the customer is
+            # protected and a hardship review is allowed, offer it rather than "no action", even
+            # if no contact pays more in 14 days. Red tier: a specialist still decides.
+            best = next((s for s in ranked if s.action is Action.HARDSHIP_REVIEW), best)
         probs = _alternatives(best.action, ranked)
         if best.action is Action.WAIT:
             return self._no_action(

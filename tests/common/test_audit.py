@@ -71,10 +71,19 @@ def test_persists_across_reopen(tmp_path: Path) -> None:
 def test_no_update_or_delete_api() -> None:
     log = DuckDBAuditLog()
     public = {n for n in dir(log) if not n.startswith("_")}
-    assert public == {"append", "read"}
+    assert public == {"append", "append_many", "read"}  # append-only: no update or delete
 
 
 def test_event_ids_unique_and_sortable() -> None:
     ids = [new_event_id() for _ in range(1000)]
     assert len(set(ids)) == 1000
     assert ids == sorted(ids)
+
+
+def test_append_many_is_all_or_nothing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    log = DuckDBAuditLog(tmp_path / "audit.duckdb")
+    first = [ev(i) for i in range(3)]
+    log.append_many(first)
+    with pytest.raises(ValueError, match="duplicate"):
+        log.append_many([ev(10), first[0]])  # one duplicate: nothing from this batch lands
+    assert [e.event_id for e in log.read()] == [e.event_id for e in first]

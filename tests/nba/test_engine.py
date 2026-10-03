@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -282,3 +283,35 @@ def test_model_without_promise_plan_or_review_arms(make_ctx, hardship, want) -> 
     assert card.proposal.action is want
     shown = {p.action for p in card.probabilities}
     assert (Action.HARDSHIP_REVIEW in shown) is (hardship is not HardshipStatus.NONE)
+
+
+@pytest.mark.parametrize("hardship", [HardshipStatus.POSSIBLE, HardshipStatus.CONFIRMED])
+def test_protected_case_is_offered_a_hardship_review_even_when_waiting_scores_best(
+    make_ctx, hardship
+) -> None:  # type: ignore[no-untyped-def]
+    """A small balance where no contact beats waiting on money: an unprotected case waits, a
+    protected one is offered the hardship review (Red), not "no action"."""
+    flat = {a: 0.25 for a in ("wait", "email", "push", "sms_payment_link", "call")}
+
+    def card(**over):  # type: ignore[no-untyped-def]
+        ctx = make_ctx(balance_at_risk=Decimal("59.41"), **over)
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
+            scorer=ConstantScorer(flat),
+            audit_log=InMemoryAuditLog(),
+        )
+        return eng.recommend(ctx.case_id, NOW)
+
+    assert card().proposal is None
+    protected = card(hardship_status=hardship)
+    assert protected.proposal is not None and protected.proposal.action is Action.HARDSHIP_REVIEW
+    assert protected.proposal.tier is ReleaseTier.RED
+    # still no review when a hard stop blocks contact
+    assert card(hardship_status=hardship, hard_stop_flags=frozenset({HardStop.CEASE})).proposal is None

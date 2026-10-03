@@ -133,19 +133,25 @@ class TLearnerUplift:
         to the uplift; use the shap package's probability explainer if exact additivity matters."""
         if len(row) != 1:
             raise ValueError("contributions takes exactly one row")
-        X = _frame(row[self._columns])
-        out = self._prob_contrib(action, X) - self._prob_contrib(baseline, X)
+        out = self.contributions_many(row, action, baseline=baseline)[0]
         return {c: float(v) for c, v in zip(self._columns, out, strict=True)}
+
+    def contributions_many(
+        self, rows: pd.DataFrame, action: Action, *, baseline: Action = Action.WAIT
+    ) -> np.ndarray:
+        """`contributions` for many rows at once: an array of rows x model columns."""
+        X = _frame(rows[self._columns])
+        return np.asarray(self._prob_contrib(action, X) - self._prob_contrib(baseline, X))
 
     def _prob_contrib(self, a: Action, X: pd.DataFrame) -> np.ndarray:
         m = self._models[a]
         if isinstance(m, float):  # constant model: no feature moves it
-            return np.zeros(len(self._columns))
-        contrib = np.asarray(m.predict_proba(X, pred_contrib=True))[0]
-        logit, c = contrib.sum(), contrib[:-1]  # last entry is the bias
+            return np.zeros((len(X), len(self._columns)))
+        contrib = np.asarray(m.predict_proba(X, pred_contrib=True), dtype=float)
+        logit, c = contrib.sum(axis=1, keepdims=True), contrib[:, :-1]  # last column is the bias
 
-        def sig(z: np.ndarray | float) -> np.ndarray:
-            return np.asarray(1 / (1 + np.exp(-np.asarray(z, dtype=float))))
+        def sig(z: np.ndarray) -> np.ndarray:
+            return np.asarray(1 / (1 + np.exp(-z)))
 
         return np.asarray(sig(logit) - sig(logit - c), dtype=float)
 

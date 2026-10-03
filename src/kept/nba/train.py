@@ -91,7 +91,8 @@ def _qini_ties(
 
 
 def run(conn: duckdb.DuckDBPyConnection, *, cutoff: datetime, out: Path, seed: int = 0) -> dict[str, Any]:
-    """Load, train, pickle the model to `out`, log params/metrics/model to MLflow (./mlruns)."""
+    """Load, train, pickle the model to `out`, log params/metrics/model to MLflow
+    (MLFLOW_TRACKING_URI; sqlite:///mlflow.db when unset)."""
     import mlflow
 
     rows = load_rows(conn)
