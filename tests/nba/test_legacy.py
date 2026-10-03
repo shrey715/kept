@@ -12,7 +12,10 @@ from kept.nba.legacy import legacy_to_action, treatment_to_action
     "code,action",
     [
         ("call_evening", Action.CALL),  # dictionary example for nba_recommendation_last
-        ("call_morning", Action.CALL),
+        ("call_daytime", Action.CALL),
+        ("sms_payment_link", Action.SMS_PAYMENT_LINK),
+        ("offer_hardship_plan", Action.HARDSHIP_REVIEW),
+        ("send_letter", None),  # we don't send letters
         ("CALL_EVENING", Action.CALL),
         (None, None),
         ("", None),
@@ -28,6 +31,10 @@ def test_legacy_to_action(code: str | None, action: Action | None) -> None:
     [
         ("payment_link", "sms", Action.SMS_PAYMENT_LINK),  # dictionary example treatment_code
         ("outbound_call", "call", Action.CALL),  # dictionary example current_treatment
+        ("email_reminder", "email", Action.EMAIL),
+        ("push", "push", Action.PUSH),
+        ("letter", "letter", None),
+        ("payment_link", "email", None),  # treatment and channel must agree
         (None, "call", None),
         ("mystery", "sms", None),
     ],

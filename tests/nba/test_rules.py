@@ -115,7 +115,8 @@ def test_seven_day_cap(make_ctx: Ctx, n: int, allowed: bool) -> None:
     ],
 )
 def test_local_calling_hours(make_ctx: Ctx, utc: datetime, tz: str, allowed: bool) -> None:
-    r = permission_gate(make_ctx(now=utc, time_zone=tz), Action.CALL)
+    # Sunday allowed so only the hour is tested: DST fall-back is always a Sunday
+    r = permission_gate(make_ctx(now=utc, time_zone=tz, sunday_contact_permitted=True), Action.CALL)
     hours = next(c for c in r.checks if c.check is CheckName.CALLING_HOURS)
     assert hours.passed is allowed
 

@@ -22,4 +22,15 @@ def assign_tier(
     AMBER: calls, promises, plans, hardship review; any close call between top two.
     GREEN: template reminders (email, push) and SMS links.
     WAIT needs no release: return GREEN unless a stronger rule applies."""
-    raise NotImplementedError("Track D")
+    if hard_stopped:
+        return ReleaseTier.BLOCKED
+    if (
+        hardship_status is not HardshipStatus.NONE
+        or is_payment_reduction
+        or is_settlement
+        or llm_agent_disagreement
+    ):
+        return ReleaseTier.RED
+    if close_call or (action not in GREEN_ACTIONS and action is not Action.WAIT):
+        return ReleaseTier.AMBER
+    return ReleaseTier.GREEN

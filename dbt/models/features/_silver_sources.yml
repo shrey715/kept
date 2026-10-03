@@ -1,0 +1,10 @@
+# Silver tables the feature models read (Track A builds them; names = data dictionary, K2).
+# Declared as sources so features build before silver models exist; switch to ref() at G1.
+version: 2
+sources:
+  - name: silver
+    schema: silver
+    tables:
+      - name: collections_cases
+      - name: promises_to_pay
+      - name: contact_history

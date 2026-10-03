@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -25,17 +25,47 @@ COMMANDS = {
 }
 
 
-def _land(raw_dir: Path, extracted_at: datetime) -> int:
+def serve(args: argparse.Namespace) -> int:
+    """Track D. Until the real services are wired (G4), only --demo runs."""
+    import uvicorn
+
+    if not args.demo:
+        print("kept serve: the real services are wired at G4; use `kept serve --demo` until then.")
+        return 2
+    if args.reload:  # restarts on any change under src/ (demo state resets with it)
+        src = Path(__file__).resolve().parents[1]
+        uvicorn.run(
+            "kept.app.demo:demo_app",
+            factory=True,
+            reload=True,
+            reload_dirs=[str(src)],
+            host=args.host,
+            port=args.port,
+        )
+        return 0
+    from kept.app.demo import demo_app
+
+    uvicorn.run(demo_app(), host=args.host, port=args.port)
+    return 0
+
+
+def land(args: argparse.Namespace) -> int:
+    """Track A: land data/raw into bronze."""
     from kept.common.db import connect
     from kept.data.ingest import land_directory
 
     conn = connect()
     try:
-        for t in land_directory(conn, raw_dir, extracted_at=extracted_at):
+        extracted_at = args.extracted_at or datetime.now(UTC)
+        for t in land_directory(conn, args.raw_dir, extracted_at=extracted_at):
             print(f"{t.table:<40} {t.row_count:>12,}")
     finally:
         conn.close()
     return 0
+
+
+# Each track adds its own handler here when its step works (plan K9).
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve, "land": land}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -43,6 +73,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
+        if name == "serve":
+            p.add_argument("--demo", action="store_true", help="three in-memory cases, no warehouse needed")
+            p.add_argument("--host", default="127.0.0.1")
+            p.add_argument("--port", type=int, default=8000)
+            p.add_argument("--reload", action="store_true", help="restart when code under src/ changes")
         if name == "land":
             p.add_argument("--raw-dir", type=Path, default=RAW_DIR)
             p.add_argument(
@@ -52,9 +87,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="source extract time, ISO 8601 with offset (default: now, UTC)",
             )
     args = parser.parse_args(argv)
-    if args.command == "land":
-        return _land(args.raw_dir, args.extracted_at or datetime.now(UTC))
-    raise NotImplementedError(f"kept {args.command}: {COMMANDS[args.command]}")
+    handler = HANDLERS.get(args.command)
+    if handler is None:
+        raise NotImplementedError(f"kept {args.command}: {COMMANDS[args.command]}")
+    return handler(args)
 
 
 if __name__ == "__main__":

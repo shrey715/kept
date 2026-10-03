@@ -16,6 +16,7 @@ from kept.contracts import (
     CaseContext,
     Channel,
     ContactPermissions,
+    HardshipStatus,
     HardStop,
     Proposal,
     ProposalStatus,
@@ -258,3 +259,94 @@ def test_payment_or_cease_cancels_pending() -> None:
         and proposals["P-3"].status is ProposalStatus.PENDING
     )
     assert [e.kind for e in log.read()] == [AuditKind.PROPOSAL_CANCELLED]
+
+
+# ----------------------------------------------------------------- edits, alternatives, reject
+def _sized(amount: str = "140.00") -> Proposal:
+    from datetime import date
+    from decimal import Decimal
+
+    from kept.contracts.nba import PromiseSizing
+
+    sizing = PromiseSizing(
+        amount=Decimal(amount),
+        due_date=date(2026, 10, 3),
+        installments=3,
+        spare_cash_estimate=Decimal("160.00"),
+        payday=date(2026, 10, 2),
+        rationale="r",
+    )
+    return _proposal(action=Action.PAYMENT_PLAN, sizing=sizing)
+
+
+def test_edit_must_stay_within_spare_cash(world) -> None:  # type: ignore[no-untyped-def]
+    from decimal import Decimal
+
+    rel, proposals, _, _ = world(_sized())
+    assert not rel.release(
+        _decide(decision=ReviewDecision.EDIT, edited_amount=Decimal("200.00")), LATER
+    ).released
+    ok = rel.release(_decide(decision=ReviewDecision.EDIT, edited_amount=Decimal("150.00")), LATER)
+    assert ok.released and proposals["P-1"].sizing.amount == Decimal("150.00")
+
+
+def test_hardship_since_the_proposal_raises_the_tier(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, _, _ = world(hardship_status=HardshipStatus.POSSIBLE)
+    r = rel.release(_decide(), LATER)  # Amber call, but hardship now applies: Red, agent can't
+    assert not r.released and proposals["P-1"].status is ProposalStatus.PENDING
+
+
+def test_alternative_is_rechecked_and_released(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, _, _ = world()
+    r = rel.release(
+        _decide(decision=ReviewDecision.ALTERNATIVE, alternative_action=Action.SMS_PAYMENT_LINK), LATER
+    )
+    assert (
+        r.released
+        and proposals["P-1"].action is Action.SMS_PAYMENT_LINK
+        and proposals["P-1"].channel is Channel.SMS
+    )
+
+
+def test_reject(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, log, _ = world()
+    r = rel.release(_decide(decision=ReviewDecision.REJECT), LATER)
+    assert not r.released and proposals["P-1"].status is ProposalStatus.REJECTED and len(log.read()) == 1
+
+
+# ----------------------------------------------------------------- Red in two steps
+def test_red_two_step_handoff(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, log, _ = world(red)
+    first = rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    assert not first.released and proposals["P-1"].status is ProposalStatus.APPROVED
+    assert rel.first_approver("P-1") == ("hs-1", Role.HARDSHIP_SPECIALIST)
+    same = rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    assert not same.released and "different person" in same.reason
+    agent = rel.release(_decide(reviewer_id="agent-9", reviewer_role=Role.AGENT), LATER)
+    assert not agent.released and proposals["P-1"].status is ProposalStatus.APPROVED
+    done = rel.release(_decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD), LATER)
+    assert done.released and proposals["P-1"].status is ProposalStatus.RELEASED
+    assert rel.first_approver("P-1") is None
+    assert len(log.read(subject_id="P-1")) == 4
+
+
+def test_red_second_step_rechecks_fresh_data(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, _, builder = world(red)
+    rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    ctx = builder.contexts["C-118204"]
+    builder.contexts["C-118204"] = ctx.model_copy(update={"hard_stop_flags": frozenset({HardStop.CEASE})})
+    r = rel.release(_decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD), LATER)
+    assert not r.released and "cease" in r.reason.lower()
+    assert proposals["P-1"].status is ProposalStatus.APPROVED
+
+
+def test_red_second_step_can_reject(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, _, _ = world(red)
+    rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    rel.release(
+        _decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD, decision=ReviewDecision.REJECT), LATER
+    )
+    assert proposals["P-1"].status is ProposalStatus.REJECTED

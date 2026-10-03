@@ -91,6 +91,13 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+def test_naive_now_rejected(client: TestClient) -> None:
+    r = client.get(
+        "/cases/C-118204/nba", params={"user_id": "agent-7", "role": "agent", "now": "2026-10-02T22:00:00"}
+    )
+    assert r.status_code == 422
+
+
 def test_assigned_agent_gets_card(client: TestClient) -> None:
     r = client.get(
         "/cases/C-118204/nba", params={"user_id": "agent-7", "role": "agent", "now": NOW.isoformat()}
