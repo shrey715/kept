@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pandas as pd
 
-from kept.config import STEWARD_REVIEW_THRESHOLD
+from kept.config import DATA_DIR, STEWARD_REVIEW_THRESHOLD
 
 MATCH_COLUMNS = ("name_key", "dob", "phone_e164", "postal_code")
 # optional extra: the full first name where the system holds one (twins share surname and initial)
@@ -88,13 +89,18 @@ def _comparison(spec: dict[str, object]) -> Any:
     return cl.ExactMatch(column)
 
 
-def score_pairs(records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = None) -> pd.DataFrame:
+def score_pairs(
+    records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = None, train_sample_mod: int | None = None
+) -> pd.DataFrame:
     """Splink match probabilities for candidate pairs.
 
     Input: one row per source key with source_system, source_key and MATCH_COLUMNS.
     Output columns: left_system, left_key, right_system, right_key, rule ("splink"),
     score in [0, 1]. Pairs already in exclude_pairs (exact links) are not rescored.
     Only pairs at or above the steward-review threshold are returned: below it a pair is not a link.
+    train_sample_mod=N trains (EM) on the records whose DOB hashes to 0 mod N, then scores every
+    record with those weights: EM over all ~3.5M records takes hours, a 1/N sample learns the same
+    m/u probabilities.
     """
     from splink import DuckDBAPI, Linker, SettingsCreator, block_on
 
@@ -126,8 +132,20 @@ def score_pairs(records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = N
         blocking_rules_to_generate_predictions=list(spec["blocking_rules"]),  # type: ignore[call-overload]
         additional_columns_to_retain=["source_system", "source_key"],
     )
-    db = DuckDBAPI()
-    linker = Linker(db.register(people), settings)
+    import duckdb
+
+    # In-memory DuckDB has no spill directory and may take ~80% of RAM: the full run (~3.5M records)
+    # was OOM-killed on a 30 GB machine. Cap it and let it spill to disk instead.
+    con = duckdb.connect()
+    con.execute(f"set memory_limit = '{os.environ.get('KEPT_SPLINK_MEMORY', '12GB')}'")
+    con.execute(f"set temp_directory = '{DATA_DIR / 'warehouse' / 'splink_tmp'}'")
+    con.execute("set preserve_insertion_order = false")
+    db = DuckDBAPI(connection=con)
+    train = people
+    if train_sample_mod:  # by DOB, so both sides of a true match land in the sample together
+        dob_hash = pd.util.hash_pandas_object(people["dob"].astype("string"), index=False)
+        train = people[people["dob"].notna() & (dob_hash % int(train_sample_mod) == 0)]
+    linker = Linker(db.register(train), settings)
     linker.training.estimate_probability_two_random_records_match(
         [block_on(*spec["deterministic_rule"])],  # type: ignore[misc]
         recall=float(spec["recall_of_deterministic_rule"]),  # type: ignore[arg-type]
@@ -135,6 +153,8 @@ def score_pairs(records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = N
     linker.training.estimate_u_using_random_sampling(max_pairs=2_000_000, seed=1)
     for block in spec["training_blocks"]:  # type: ignore[attr-defined]
         linker.training.estimate_parameters_using_expectation_maximisation(block_on(*block))
+    if train_sample_mod:
+        linker = Linker(db.register(people), linker.misc.save_model_to_json())
     scored = linker.inference.predict(
         threshold_match_probability=STEWARD_REVIEW_THRESHOLD
     ).as_pandas_dataframe()  # type: ignore[no-untyped-call]

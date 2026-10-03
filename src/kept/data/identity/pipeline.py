@@ -54,6 +54,7 @@ def run_matching(
     conn: duckdb.DuckDBPyConnection,
     *,
     sample_mod: int | None = None,
+    train_sample_mod: int | None = None,
     previous: pd.DataFrame | None = None,
     at: datetime | None = None,
 ) -> MatchRun:
@@ -83,7 +84,7 @@ def run_matching(
             )
         ]
     ]
-    splink = score_pairs(records, exclude_pairs=exact)
+    splink = score_pairs(records, exclude_pairs=exact, train_sample_mod=train_sample_mod)
     pairs = pd.concat([exact, splink], ignore_index=True)
 
     links = _candidates(pairs)
