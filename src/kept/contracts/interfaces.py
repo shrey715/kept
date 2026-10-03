@@ -127,6 +127,21 @@ class LLMGateway(Protocol):
 
 
 @runtime_checkable
+class ExtractionStore(Protocol):
+    """text.extractions (Track C): one row per source_id (note_id or call_id)."""
+
+    def get(self, source_id: str) -> TextExtraction | None: ...
+
+    def for_case(self, case_id: str) -> Sequence[TextExtraction]:
+        """Every extraction for the case, newest first (the case card's confirm panel)."""
+        ...
+
+    def put(self, extraction: TextExtraction) -> None:
+        """Insert, or replace the row with the same source_id (re-extraction, agent confirm)."""
+        ...
+
+
+@runtime_checkable
 class AuditLog(Protocol):
     def append(self, event: AuditEvent) -> None:
         """Append only. Raise ValueError on a duplicate event_id."""
@@ -149,6 +164,7 @@ __all__ = [
     "AuditLog",
     "C360Reader",
     "CaseContextBuilder",
+    "ExtractionStore",
     "FeatureProvider",
     "LLMGateway",
     "LLMResponse",

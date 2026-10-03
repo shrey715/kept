@@ -17,6 +17,7 @@ from kept.contracts.enums import (
     DpdBucket,
     HardshipSource,
     HardshipStatus,
+    HardStop,
     MatchReviewStatus,
     MatchRoute,
     PayrollFrequency,
@@ -80,6 +81,9 @@ class GoldenCustomer(_Frozen):
     sunday_contact_permitted: bool = False
     do_not_contact: bool  # any source do-not-call or cease (never national_dncl_flag)
     collections_hold: bool  # any insolvency, bankruptcy or deceased flag
+    hard_stop_flags: frozenset[HardStop] = (
+        frozenset()
+    )  # which hard stops fired (kept.data.gold.hard_stop_flags)
 
     hardship_status: HardshipStatus
     hardship_source: HardshipSource | None = None
