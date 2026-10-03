@@ -9,6 +9,24 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "accelerate"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "psutil" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f5/b5/1d3ed029ac71d3f2961346829a268da923698e9fd63f218f78841f216bfd/accelerate-1.15.0.tar.gz", hash = "sha256:5654f8c5eaa0d4fa68b33e287a97765da6849bf6d51dcac874e73fbbddfb6134", size = 422615, upload-time = "2026-09-09T13:04:49.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/4c/34f0450479d01195027260da68d8a3880683f1640c3ca5adf64acb3185f1/accelerate-1.15.0-py3-none-any.whl", hash = "sha256:97eacca0b73e45cb867dbf8c5d5d4dc32219544300e0c8992c7334dc2ef33cec", size = 394295, upload-time = "2026-09-09T13:04:47.331Z" },
+]
+
+[[package]]
 name = "agate"
 version = "1.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -578,12 +596,13 @@ wheels = [
 
 [[package]]
 name = "datasets"
-version = "2.14.4"
+version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohttp" },
     { name = "dill" },
+    { name = "filelock" },
     { name = "fsspec", extra = ["http"] },
+    { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "multiprocess" },
     { name = "numpy" },
@@ -595,9 +614,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1d/69/8cc725b5d38968fd118e4ce56a483b16e75b7793854c1a392ec4a34eeb31/datasets-2.14.4.tar.gz", hash = "sha256:ef29c2b5841de488cd343cfc26ab979bff77efa4d2285af51f1ad7db5c46a83b", size = 2178719, upload-time = "2023-08-08T15:45:43.015Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/5b/836516269d4f618efe621661cfb6f9acc57e6f95265db3efaee48a5ffe04/datasets-5.0.1.tar.gz", hash = "sha256:ce22bb851efd7494f08aad33b940803784434f6e77763d00679a0dc45fcf686a", size = 641498, upload-time = "2026-07-28T11:09:12.016Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/f8/38298237d18d4b6a8ee5dfe390e97bed5adb8e01ec6f9680c0ddf3066728/datasets-2.14.4-py3-none-any.whl", hash = "sha256:29336bd316a7d827ccd4da2236596279b20ca2ac78f64c04c9483da7cbc2459b", size = 519335, upload-time = "2023-08-08T15:45:38.837Z" },
+    { url = "https://files.pythonhosted.org/packages/44/0b/98fc6eb83333508ca5f44c52b3e287ea8137a0ad582714e2cbc67a02154b/datasets-5.0.1-py3-none-any.whl", hash = "sha256:9fbf73688f8c18f7529b4fe592abd04015f81d1e58001e4bac73ffb2b39d7cc4", size = 559079, upload-time = "2026-07-28T11:09:10.266Z" },
 ]
 
 [[package]]
@@ -1009,11 +1028,11 @@ wheels = [
 
 [[package]]
 name = "fsspec"
-version = "2026.9.0"
+version = "2026.6.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/77/cd/9be253869fc42e764de7f3dedd6969af7d44ff9c3375214a3442a6f3fc08/fsspec-2026.9.0.tar.gz", hash = "sha256:0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe", size = 333545, upload-time = "2026-09-18T17:50:42.825Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/10/a1/ae4e3e5003468d6391d2c77b6fa1cd73bd5d13511d81c642d7b28ac90ed4/fsspec-2026.6.0.tar.gz", hash = "sha256:f5bac145310fe30e16e1471bd6840b2d990d609e872251d7e674241822abf01a", size = 313646, upload-time = "2026-06-16T01:57:28.105Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/c0/a98505f18594f1bce828bb159cec0fcf9860562f1a2c85913409fc8f3d9e/fsspec-2026.9.0-py3-none-any.whl", hash = "sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f", size = 221738, upload-time = "2026-09-18T17:50:41.341Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/22/4222d7ddf3da30f363edaa98e329c2bce6c65497c9cb2810931c8b2c0fbc/fsspec-2026.6.0-py3-none-any.whl", hash = "sha256:02e0b71817df9b2169dc30a16832045764def1191b43dcff5bb85bdee212d2a1", size = 203949, upload-time = "2026-06-16T01:57:26.358Z" },
 ]
 
 [package.optional-dependencies]
@@ -1581,7 +1600,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", marker = "extra == 'model'", specifier = ">=1.5" },
     { name = "scikit-learn", marker = "extra == 'text'", specifier = ">=1.5" },
-    { name = "setfit", marker = "extra == 'text'", specifier = ">=1.0" },
+    { name = "setfit", marker = "extra == 'text'", specifier = ">=1.1" },
     { name = "shap", marker = "extra == 'model'", specifier = ">=0.45" },
     { name = "soda-core-duckdb", marker = "extra == 'data'", specifier = ">=3.3" },
     { name = "splink", marker = "extra == 'data'", specifier = ">=4.0" },
@@ -3192,9 +3211,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/c8/f63d99e354532f5b83e735dd1e001bda92495fbfde934f65d924abf2b071/sentence_transformers-5.7.0-py3-none-any.whl", hash = "sha256:b78141da3d8137e70d965866e2ca43190b9266f3d4d8752e250ded75e7136730", size = 611333, upload-time = "2026-08-06T12:12:31.881Z" },
 ]
 
+[package.optional-dependencies]
+train = [
+    { name = "accelerate" },
+    { name = "datasets" },
+]
+
 [[package]]
 name = "setfit"
-version = "1.0.3"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "datasets" },
@@ -3202,11 +3227,12 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "packaging" },
     { name = "scikit-learn" },
-    { name = "sentence-transformers" },
+    { name = "sentence-transformers", extra = ["train"] },
+    { name = "transformers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/17/08/9708ff91bcba68ff6830d00e166823a64d03b298001334b2786a3c068f04/setfit-1.0.3.tar.gz", hash = "sha256:e2dd4f0a06ff32dd178862e35b56e8b22c84f4e949117d6fd2edfe2512748ce2", size = 69931, upload-time = "2024-01-16T17:06:53.708Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/b7/9f22b2b9d54da2de429c350be6a0c9c7d6615e3c7e5f74ff86535abd68b0/setfit-1.2.0.tar.gz", hash = "sha256:ed87e37cb7a35b04dac398c55e2dc9642a4b098d64cdf4b91a91d55dbae1de43", size = 86769, upload-time = "2026-09-04T14:35:10.135Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/f4/24958ec08ccc83387f432df43c738b06c7219b199667fc3e596b3cb3efe4/setfit-1.0.3-py3-none-any.whl", hash = "sha256:4eb7f19786c58392334e1435255ed312253cac90c73eb7684673781a5f84c6ed", size = 75940, upload-time = "2024-01-16T17:06:51.617Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/82/32260de73fd4ad41c3f25cbd55911d393e5d0df9a22d9fa8616470861f91/setfit-1.2.0-py3-none-any.whl", hash = "sha256:dcf9292f073f47252c3fea73b141c4f43dc1d01789e0c8e2de017337e0428e34", size = 77131, upload-time = "2026-09-04T14:35:08.736Z" },
 ]
 
 [[package]]
