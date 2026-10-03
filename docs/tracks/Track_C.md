@@ -3,11 +3,12 @@
 Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 3 done → G2 hand-over
-- Working on: hand-over of the backfill to A (gold hardship_status) and D (text features)
-- Waiting on: G2 integration (A's PR #24, D's features on real gold + Feast)
+- Phase: G2 integrated on C's machine (all four G2 PRs merged, rebuild on real data done)
+- Working on: D's follow-ups (decisions pending with Akshat)
+- Waiting on: G2 sign-off; D's account/deposit features (0% filled online)
 
 ## Done
+- **G2 integration (3 Oct, C's machine):** merged #25 (6fac669) → #24 (9791576) → #28 (e6389db) → #27 (4220553); #26 left for G3. #25 went before #24 because #24 refs our `cashflow_observations`. No conflicts (cli.py auto-merged with every handler; `text:` keeps D's UTC pre-hook). Rebuild: gold 1,052,300 rows (40/40), `kept gate` PASS incl. hardship-text (11,464 golden IDs rest on text), `scripts/g2_hardship_check.py` 3/3 PASS, `text_signals.written_at` = `note_ts_utc` for all 760,594 notes (0 mismatches in UTC), features 96,000 cases in Feast, training rows 323,560, `kept train` Qini call 0.077 / sms 0.051 / email 0.051 / push 0.018 (all > 0 vs WAIT). Feast: real case → FeatureVector, unknown id → KeyError. Tests: 1,109 passed, 10 failed = A's parity (7) and steward (3) stubs.
 - **Backfill (Phase 3, G2 input):** SetFit (`setfit-v1`, bge-small) trained on 1,604 LLM labels (601 none / 893 possible / 110 clear; 2 power cuts stopped labelling at 1,619 of 1,999). **Hardship gate on held-out public labels passed here: notes F1 0.869 / recall 0.977, transcripts F1 0.988 / recall 0.988.** `text.extractions`: 785,594 rows (760,594 notes + 25,000 calls), 154,007 with hardship, 0 duplicate ids, the 50 LLM rows kept; `text.text_signals` rebuilt. Hand-over file: `data/exports/extractions/extractions_880b98c_20261003.parquet` (9.4 MB). Model: `data/models/setfit/setfit-v1_880b98c/`.
 - Phase 4: `/extractions/{source_id}/confirm` (#20), `kept extract` (#22), `eligible_programs`; demo frontend installed and smoke-tested on this machine (pnpm 11.23.0, `kept serve --demo` + `pnpm dev`).
 - Deliverables drafted: `docs/architecture.{dot,png,pdf}`, `docs/deck_outline.md`.
@@ -29,6 +30,8 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - `make test-contract` green, `make lint` clean, track_c: 25 passed, rest stubbed for later phases.
 
 ## Decisions and changes from the plan
+- `text_signals` writes NULL ("unknown"), not false, for every field except hardship on SetFit backfill rows (Akshat, 3 Oct): `promise_intent` is an uplift input, and "false" for all history vs "yes" from live LLM notes would be train/serve skew. Verified: 785,594 rows, hardship filled, the rest NULL; D's features build 7/7; G2 hardship check 3/3.
+- Backfilled extractions all carry `extracted_at` = the backfill run time (3 Oct), not the note's time; point-in-time readers must use `text_signals.written_at` (the note's own time).
 - Cash-flow hardship enters gold at **G2** (Akshat, 3 Oct): `hardship.cashflow_observations` (C, PR #25) is one more branch of A's `int_hardship_observations` (PR #24). Merge order at G2: #25 first, then #24.
 - Promised amounts are scored within $1: notes write whole dollars ("$21") while labels hold the promise record's cents (21.03). Gold dates for "next payday" come from payroll data, not the text, so they stay misses.
 - The LLM returns dates as written (`MM-DD`, `day:N`, `weekday:x`, ISO); code resolves them against the note's local date. A month-day value whose quote names no month is read as a day of month.
@@ -44,12 +47,16 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Proposed local extraction model for G0: `ollama/gemma3:12b-it-qat` (already on the machine, ~10.6 GB VRAM).
 
 ## Open questions
+- (D, decided) Hardship load: a SetFit threshold doesn't help (probabilities saturate: notes flagged 36.9% at t=0.5 vs 35.6% at 0.95; held-out precision 0.78→0.81, recall 0.977 either way). Open cases with a text hardship note in 90 days: 41% (39,398); ≥1 in 30 d **and** ≥2 in 90 d: 19% (18,301). Gold status of open cases is 32% CONFIRMED (agent-coded source data), 19% POSSIBLE, so most Red reviews come from confirmed hardship, not text. **Decided (Akshat): text-only POSSIBLE needs ≥1 flagged note in the last 30 days and ≥2 in 90 days** (D implements in the context builder / text features). Confirmed hardship and agent-confirmed notes are unchanged.
+- (D) Online features: account/deposit features (max_dpd, days_in_bucket, balance_at_risk, payroll, spare cash, trends) are 0% filled for 500 random open cases; promise_* 0%.
 - Extraction confirm panel: D builds it in `web/`, C builds the route (`docs/NEXT_STEPS.md` §4).
 - A: 4,636 agent notes have mojibake (`appel�`, `F�VR.`), mostly French. Data quality report item; worth fixing in silver before redaction/extraction.
 - Team: shared handover folder (§1a) for Parquet outputs; needs a Drive folder link.
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 22:30 Decisions 1-3 done; extractions file to Satvik (sha256 670ce9f1…).
+- 21:45 G2 integration done on C's machine: 4 PRs merged, rebuild green, report to Akshat.
 - 20:55 Cash-flow observations built (20,380 golden customers, matches the Python rule); moved into G2 with A's #24.
 - 20:30 Backfill done and verified; gate passed on this machine. Two power cuts (19:1x, 20:0x): labels file intact both times; git objects repaired after the first.
 - 17:50 Crosswalk v1 done (attempt 4). Phase 3 code PR #15.
