@@ -138,6 +138,8 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
             "build",
             "--select",  # the feature models over the fixture silver, not A's silver models
             "path:models/features",
+            "--exclude",  # needs the payment tables; checked on real silver
+            "training_rows",
             "--project-dir",
             str(DBT),
             "--profiles-dir",

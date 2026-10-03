@@ -3,9 +3,9 @@
 Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G1 work done (dbt features on real silver); ready to integrate
-- Working on: nothing until G1 passes
-- Waiting on: G1 sign-off, then G2 (real gold + crosswalk) for account/deposit/text features, labels and training
+- Phase: G2 work done on real gold (features, Feast, training rows, `kept train`); ready to integrate
+- Working on: nothing until G2 passes
+- Waiting on: G2 sign-off; C's text backfill (text columns are null until `text.extractions` has rows); A's account/deposit history for the null account features
 
 ## Done
 - `DuckDBAuditLog` + `new_event_id` (early provider, Q2): `tests/common/test_audit.py` 7/7. Branch `track-d`.
@@ -24,6 +24,9 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - Product flows: persona sign-in (deep link `/signin?as=agent-7&next=/queue`), ranked queue, case card with what-if sizing and interactive probabilities, approvals inbox (Red two-step, Green batch), audit trail, guided demo (§7 script), scroll-driven 3D landing (light and dark). API routes `/queue`, `/approvals`, `/audit`, `/cases/{id}/customer`, `/demo/cases/{id}/notes`; `tests/app/test_demo_flows.py` 9/9.
 
 - **G1 (3 Oct, this laptop, real data):** `kept land` (31 bronze tables, counts = release README); `dbt build --select bronze silver` **38/38 pass** (4m11s, DuckDB capped at 2.5 GB: see below); `dbt build --select path:models/features identity_crosswalk` **13/13 pass** (5 s) on real silver + stub gold. `features.case_features`: 96,000 rows = every case open at 2026-09-28 06:00 in silver, no duplicates, columns = feature registry. **Parity on 200 random real cases: 200/200 match the Python reference definitions.** Built features: broken_promises_90d (mean 0.34), kept_promise_ratio (45% non-null), answer_rate (58%), answer_rate_after_18h (40%), payment_link_usage (75%), contacts_last_7d (max 8: real cap breaches), cohort_recovery_rate (0.965–0.999: little variance), cohort_kept_rate (0.45–0.64).
+
+- **G2 (3 Oct, this laptop, real gold):** gold from Satvik's crosswalk (`identity_crosswalk_4ac9c37-20261003-full-train5`): 38/38 pass, **matches his gold export** (1,052,300 golden IDs, same set; 11 key columns identical except `expected_next_payroll_date` on 3 rows). Features on real gold: 96,000 cases, **every case has a golden ID**, parity 200/200. **Feast:** `kept features` = dbt + export + apply + materialize (31 s, 1.8 GB); online read of real cases returns a full `FeatureVector`, unknown case -> KeyError (G2 exit check). **Training:** `features.training_rows` (323,560 decisions on randomly assigned cases, 230,545 with a trusted label, paid rate 0.38 call .. 0.49 email, WAIT 0.40); `kept features --training` builds features one second before each decision into `features_train` (304,944 rows, 0 leaks, parity 200/200); `kept train` fits the T-learner (fit before 15 Aug, test after: 162k / 68k rows), Qini vs WAIT positive for every action (call 0.077, sms 0.051, email 0.051, push 0.018), logs to MLflow, model in `data/exports/models/uplift.pkl`. Tests: `tests/nba/test_train.py`, `tests/features/test_dbt_features.py` 5/5.
+- Context builder reads `ExtractionStore.for_case`: a fresh note raises hardship via `hardship.combine`, a confirmed text cease is a hard stop, gold `hard_stop_flags` used (`test_context.py` 18/18). Text features (`text_features.sql`) joined into `case_features` from C's `text_signals`, point in time.
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -58,6 +61,14 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Features read silver through `ref()`** (was `source('silver', ...)` until A's silver existed), so dbt orders them after A's models. The fixture parity test now selects only the feature models.
 - **Memory on 14 GB laptops:** `kept land` and `dbt build --select silver` were OOM-killed at default DuckDB settings (≈4.7 GB). With `memory_limit = 2.5–3GB`, `threads = 1`, `preserve_insertion_order = false` both pass (peak 3.7 GB). I used a local profile copy in `data/warehouse/local/` (not committed); **for A:** worth adding `settings: {memory_limit: ...}` to `dbt/profiles.yml` and the same `SET`s in `connect()` for the demo laptop.
 
+- **Features join the crosswalk on `source_system = 'collections'`** (was `crm`): `coll_customer_ref` is a collections key, as in A's `int_open_case`. As a crm key it missed 2,872 cases (3%) and gave the wrong customer for 586.
+- **Cohort features use running totals + ASOF joins** (same values on all 96,000 real rows): the old range join grew with every distinct as_of and couldn't take the training spine.
+- **Training spine:** `--vars '{training_spine: true}'` builds every feature model one second before each decision, into schema `features_train`, so serving tables are never overwritten.
+- **paid_14d as agreed with Satvik (PR #13):** the five sources; a "no" is trusted only for loan accounts or accounts in the transactions sample (`paid_14d_known`). Card rows are about half known, overdraft a quarter.
+- **`collections_cases.account_ids`** is a JSON list except 18,314 cases holding one bare ID; `training_rows` reads both. **For A:** worth normalising in silver.
+- **No text extractions in the warehouse yet:** I created the empty `text.extractions` with C's `DuckDBExtractionStore` so `text_signals` builds; text columns are null until C's backfill runs.
+- Uplift models convert inputs themselves (fixed `pay_frequency` levels, bools/None to float), so a serving `FeatureVector` scores the same as a warehouse row.
+
 ## Open questions
 - **paid_14d source (§9, D + A, by G2). Proposal for Satvik, from counts on the raw data (3 Oct):**
   `paid_14d` = any dated payment in (decision, decision + 14 days], from the union of:
@@ -72,6 +83,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
+- 3 Oct: G2 on real gold: gold from Satvik's crosswalk (matches his export), features + Feast on real gold, training rows + features, `kept features` and `kept train` handlers, first real training run.
 - 3 Oct: G1: bronze + silver built on real data here; dbt features 13/13 on real silver, 96,000 open cases, parity 200/200. Stop message posted.
 - 3 Oct: after the Phase 1 merge (NEXT_STEPS §4): README run steps; paid_14d proposal for A; G0 PR #10 reviewed (dbt pre-hook bug blocking, ExtractionStore needs for_case); extraction confirm/edit panel and programme chips on the case card (demo-backed until G0 merges).
 - 3 Oct: Radix redesign, product flows, two-step Red release, 3D landing; all pushed to track-d / PR #2.

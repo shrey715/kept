@@ -17,6 +17,7 @@ data/**
 
 # Model artefacts and experiment tracking
 mlruns/
+mlflow.db
 mlartifacts/
 *.lgb
 *.pkl
