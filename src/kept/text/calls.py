@@ -9,6 +9,7 @@ hardship plan review."). The template reproduces all 500 public gold summaries e
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -21,7 +22,7 @@ from kept.config import WAREHOUSE_PATH
 from kept.contracts.interfaces import LLMGateway
 from kept.text.redact import stored_redacted
 
-PROMPT_VERSION = "call-summary-v2"
+PROMPT_VERSION = "call-summary-v4"
 
 REASONS = {  # hardship reason -> the gold wording
     "reduced_income": "reduced hours / income",
@@ -48,7 +49,9 @@ SYSTEM_PROMPT = """You read one collections call transcript (personal details al
 say it. Never guess.
 
 hardship: "clear" if the customer states a specific cause listed under hardship_reason; "possible" if they
-only say money is tight / they can't afford it, with no cause from that list; "none" otherwise.
+only say money is tight / they can't afford it, with no cause from that list; "none" otherwise. Paying
+after their next payday, a late paycheque, forgetting or a bank-transfer problem is timing, not hardship:
+"none".
 hardship_reason (only when hardship is "clear"):
   reduced_income = fewer hours, days or shifts, or a pay cut ("only getting 3 days a week now")
   job_loss = laid off, lost the job; separation = divorce or separated; illness = sick, off work ill;
@@ -60,12 +63,16 @@ but it is not showing), fraud (they did not make the transactions). A problem on
 bank transfer failed, they forgot) is NOT a dispute: null.
 promise_amount / promise_month / promise_day: the payment the customer commits to (the amount and date the
 agent confirms back). null if no payment was promised.
-complaint: the customer wants to make a complaint. cease_request: the customer asks the bank to stop
-contacting them. insolvency_mention: the customer mentions a consumer proposal or bankruptcy.
+complaint: the customer says they want to make or file a complaint. cease_request: the customer calmly
+asks the bank to stop contacting them ("Please stop calling me."). An angry outburst like "Stop calling me
+every day!" (with or without "This is harassment", even cut off) is NOT a cease request or a complaint.
+cease_quote: the customer's exact words asking to stop contact, copied verbatim, or null.
+insolvency_mention: the customer mentions a consumer proposal or bankruptcy.
 hardship_referral: the agent refers the account to the hardship team / a hardship plan review and the
 customer agrees.
-next_step: what the agent does next if none of the above applies: escalate_supervisor (the customer
-refuses and asks for a manager), send_payment_link (a payment was promised) or call_back (nothing agreed)."""
+next_step: what the agent does next if none of the above applies: escalate_supervisor (the customer is
+hostile or refuses, or the agent transfers the call), send_payment_link (a payment was promised) or
+call_back (nothing agreed)."""
 
 JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -78,6 +85,7 @@ JSON_SCHEMA: dict[str, Any] = {
         "promise_day": {"type": ["integer", "null"], "minimum": 1, "maximum": 31},
         "complaint": {"type": "boolean"},
         "cease_request": {"type": "boolean"},
+        "cease_quote": {"type": ["string", "null"]},
         "insolvency_mention": {"type": "boolean"},
         "hardship_referral": {"type": "boolean"},
         "next_step": {"enum": list(NEXT_STEPS)},
@@ -91,6 +99,7 @@ JSON_SCHEMA: dict[str, Any] = {
         "promise_day",
         "complaint",
         "cease_request",
+        "cease_quote",
         "insolvency_mention",
         "hardship_referral",
         "next_step",
@@ -116,7 +125,8 @@ def format_summary(f: dict[str, Any]) -> str:
     if f.get("dispute_type"):
         parts.append("disputes " + f["dispute_type"].replace("_", " "))
     if f.get("promise_amount") is not None and f.get("promise_month") and f.get("promise_day"):
-        when = date(2000, f["promise_month"], f["promise_day"])  # leap year: 29 Feb is a valid promise date
+        month = f["promise_month"]  # 2000 is a leap year: 29 Feb is a valid promise date; "31 Sep" -> 30 Sep
+        when = date(2000, month, min(f["promise_day"], calendar.monthrange(2000, month)[1]))
         parts.append(f"promised ${round(f['promise_amount']):,} on {when.day} {when:%b}")
     if f.get("complaint"):
         parts.append("wants to complain")
@@ -128,6 +138,20 @@ def format_summary(f: dict[str, Any]) -> str:
         parts.append("No commitment made")
     parts.append("next step: " + f["next_step"].replace("_", " "))
     return "; ".join(parts) + "."
+
+
+def is_cease(f: dict[str, Any], transcript: str) -> bool:
+    """A cease request needs the customer's own words, and an angry "Stop calling me every day!" isn't one
+    (the labels never count it). ponytail: phrase check fits the release's templated calls; real calls would
+    need the extractor's evidence gate."""
+    quote = (f.get("cease_quote") or "").strip().lower()
+    asks_to_stop = any(w in quote for w in ("stop", "call", "contact", "arrêt", "appel"))  # not "I'm done"
+    return (
+        bool(f.get("cease_request"))
+        and asks_to_stop
+        and quote in transcript.lower()
+        and "every day" not in quote
+    )
 
 
 def next_step(f: dict[str, Any]) -> str:
@@ -191,5 +215,6 @@ def summarise_call(
             if temperature:
                 raise
     assert reply.parsed is not None  # the gateway validates against JSON_SCHEMA
-    fields = reply.parsed | {"next_step": next_step(reply.parsed)}
+    fields = reply.parsed | {"cease_request": is_cease(reply.parsed, text)}
+    fields["next_step"] = next_step(fields)
     return CallSummary(case_id, transcript_id, call_start, format_summary(fields))

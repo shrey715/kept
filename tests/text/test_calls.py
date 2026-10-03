@@ -5,7 +5,7 @@ import duckdb
 import pytest
 
 from kept.common.llm import Purpose
-from kept.text.calls import JSON_SCHEMA, CallSummary, format_summary, next_step, summarise_call
+from kept.text.calls import JSON_SCHEMA, CallSummary, format_summary, is_cease, next_step, summarise_call
 from tests.fakes import ScriptedLLM
 
 LABELS = Path("data/labels/call_transcripts_labels_public_500.csv")
@@ -19,6 +19,7 @@ BQ_016 = {  # gold: "Customer reports illness; promised $95 on 14 Oct; next step
     "promise_day": 14,
     "complaint": False,
     "cease_request": False,
+    "cease_quote": None,
     "insolvency_mention": False,
     "hardship_referral": True,
     "next_step": "send_payment_link",  # the agent also sends a link: the referral wins (gold)
@@ -115,3 +116,16 @@ def test_next_step_follows_the_label_priority() -> None:
     assert next_step(BQ_016 | {"dispute_type": "fraud"}) == "dispute_investigation"
     assert next_step(BQ_016 | {"hardship_referral": False}) == "send_payment_link"
     assert next_step({"next_step": "hardship_plan_review"}) == "call_back"  # a step no rule backs: fall back
+
+
+def test_cease_needs_a_real_quote_and_not_the_outburst() -> None:
+    calm = "customer: Please stop calling me.\ncustomer: Stop calling me every day! This is"
+    assert is_cease({"cease_request": True, "cease_quote": "Please stop calling me."}, calm)
+    assert not is_cease({"cease_request": True, "cease_quote": "Stop calling me every day!"}, calm)
+    assert not is_cease({"cease_request": True, "cease_quote": "stop all contact"}, calm)  # not in the call
+    assert not is_cease({"cease_request": True, "cease_quote": None}, calm)
+    assert not is_cease({"cease_request": True, "cease_quote": "I'm done"}, "customer: I'm done")
+
+
+def test_impossible_promise_date_is_clamped() -> None:
+    assert "promised $95 on 30 Sep" in format_summary(BQ_016 | {"promise_month": 9, "promise_day": 31})
