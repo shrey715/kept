@@ -228,10 +228,18 @@ def test_window_starts_on_a_half_hour(engine) -> None:  # type: ignore[no-untype
 
 def _with_programs(make_ctx, programs):  # type: ignore[no-untyped-def]
     ctx = make_ctx(hardship_status=HardshipStatus.POSSIBLE)
-    fv = FeatureVector(case_id=ctx.case_id, golden_customer_id=ctx.golden_customer_id, as_of=ctx.features_as_of, feature_set_version="fs-0")
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+    )
     return KeptEngine(
-        context=FixedContextBuilder({ctx.case_id: ctx}), features=StaticFeatureProvider({ctx.case_id: fv}),
-        scorer=ConstantScorer(PROBS), audit_log=InMemoryAuditLog(), programs=programs,
+        context=FixedContextBuilder({ctx.case_id: ctx}),
+        features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(PROBS),
+        audit_log=InMemoryAuditLog(),
+        programs=programs,
     ).recommend(ctx.case_id, NOW)
 
 
