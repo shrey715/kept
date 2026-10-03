@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from kept.config import EXPORT_DIR, RAW_DIR, WAREHOUSE_PATH
@@ -27,12 +27,19 @@ COMMANDS = {
 
 
 def serve(args: argparse.Namespace) -> int:
-    """Track D. Until the real services are wired (G4), only --demo runs."""
+    """Track D. --demo: twelve in-memory cases. Otherwise the real services (kept.app.real) over
+    the built warehouse, Feast and the trained model."""
     import uvicorn
 
     if not args.demo:
-        print("kept serve: the real services are wired at G4; use `kept serve --demo` until then.")
-        return 2
+        from dotenv import load_dotenv
+
+        from kept.app.api import create_app
+        from kept.app.real import real_services
+
+        load_dotenv()
+        uvicorn.run(create_app(real_services()), host=args.host, port=args.port)
+        return 0
     if args.reload:  # restarts on any change under src/ (demo state resets with it)
         src = Path(__file__).resolve().parents[1]
         uvicorn.run(
@@ -239,13 +246,19 @@ def extract(args: argparse.Namespace) -> int:
     return 1 if errors and not ok else 0
 
 
+def _last_nightly() -> datetime:
+    """The latest 06:00 UTC at or before now, naive UTC (the features' as_of convention)."""
+    now = datetime.now(UTC).replace(tzinfo=None)
+    run = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    return run if run <= now else run - timedelta(days=1)
+
+
 def features(args: argparse.Namespace) -> int:
     """Track D: dbt feature models, then the Feast export + apply + materialize.
     --training builds the per-decision spine into features_train instead (for `kept train`)."""
     import json
     import subprocess
     import sys
-    from datetime import timedelta
 
     import duckdb
     from dbt.cli.main import dbtRunner
@@ -298,6 +311,30 @@ def train(args: argparse.Namespace) -> int:
     return 0
 
 
+def parity(args: argparse.Namespace) -> int:
+    """Track A: offline features (warehouse) against the online store (Feast). Exit 1 if parity fails."""
+    from kept.common.db import connect
+    from kept.config import PARITY_MAX_MISMATCH_RATE
+    from kept.features.parity import run_parity
+    from kept.features.store import FeastFeatureProvider
+
+    repo = Path(__file__).resolve().parents[2] / "feature_repo"
+    conn = connect(read_only=True)
+    try:
+        report = run_parity(
+            conn, FeastFeatureProvider(repo), sample=None if args.all else args.sample, seed=args.seed
+        )
+    finally:
+        conn.close()
+    worst = ", ".join(f"{f}: {n}" for f, n in report.worst_features[:5]) or "none"
+    print(
+        f"parity {'PASS' if report.passed else 'FAIL'}: {report.n_mismatched:,} of {report.n_cells:,} cells "
+        f"differ ({report.mismatch_rate:.4%}, limit {PARITY_MAX_MISMATCH_RATE:.1%}); worst: {worst}; "
+        f"missing online: {len(report.missing_entities)}"
+    )
+    return 0 if report.passed else 1
+
+
 # Each track adds its own handler here when its step works (plan K9).
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
@@ -309,6 +346,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "extract": extract,
     "train": train,
     "features": features,
+    "parity": parity,
 }
 
 
@@ -358,8 +396,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--as-of",
                 type=datetime.fromisoformat,
-                default=datetime(2026, 9, 28, 6),
-                help="serving as_of, naive UTC (06:00 UTC = the nightly run)",
+                default=_last_nightly(),
+                help="serving as_of, naive UTC (default: the latest 06:00 UTC, the nightly run)",
             )
             p.add_argument("--training", action="store_true", help="per-decision spine for kept train")
         if name == "train":
@@ -371,6 +409,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
             p.add_argument("--seed", type=int, default=0)
+        if name == "parity":
+            p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
+            p.add_argument("--all", action="store_true", help="every case in features.case_features")
+            p.add_argument("--seed", type=int, default=7)
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "extract":

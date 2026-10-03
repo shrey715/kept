@@ -66,11 +66,12 @@ export const api = {
     ),
   decide: (d: ReleaseDecision) =>
     call<ReleaseResult>(`/proposals/${encodeURIComponent(d.proposal_id)}/decision`, post(d)),
+  /** Add a note: live extraction (C), then the re-checked card. */
   note: (caseId: string, text: string, w: Who) =>
-    call<NBACard>(`/demo/cases/${encodeURIComponent(caseId)}/notes`, post({ text, user_id: w.userId, role: w.role })),
-  /** A case's notes and their extractions. Demo now; C's store via a case-level read after G0. */
-  extractions: (caseId: string, w: Who) =>
-    call<NoteExtraction[]>(`/demo/cases/${encodeURIComponent(caseId)}/extractions?${q(w)}`),
+    call<NBACard>(`/cases/${encodeURIComponent(caseId)}/notes`, post({ text, user_id: w.userId, role: w.role })),
+  /** A case's notes and their extractions, newest first: the demo world, or C's store. */
+  extractions: (caseId: string, w: Who, demo: boolean) =>
+    call<NoteExtraction[]>(`${demo ? "/demo" : ""}/cases/${encodeURIComponent(caseId)}/extractions?${q(w)}`),
   /** Confirm or edit at wrap-up. Demo route in demo mode, C's /extractions route otherwise. */
   confirmExtraction: (sourceId: string, agentId: string, edits: Record<string, unknown>, demo: boolean) =>
     call<TextExtraction>(

@@ -123,7 +123,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/demo/cases/{case_id}/notes": {
+    "/cases/{case_id}/notes": {
         parameters: {
             query?: never;
             header?: never;
@@ -133,7 +133,24 @@ export interface paths {
         get?: never;
         put?: never;
         /** Add Note */
-        post: operations["add_note_demo_cases__case_id__notes_post"];
+        post: operations["add_note_cases__case_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/extractions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case Extractions */
+        get: operations["case_extractions_cases__case_id__extractions_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -498,6 +515,11 @@ export interface components {
             do_not_contact: boolean;
             /** Collections Hold */
             collections_hold: boolean;
+            /**
+             * Hard Stop Flags
+             * @default []
+             */
+            hard_stop_flags: components["schemas"]["HardStop"][];
             hardship_status: components["schemas"]["HardshipStatus"];
             hardship_source?: components["schemas"]["HardshipSource"] | null;
             /**
@@ -672,6 +694,12 @@ export interface components {
             hard_stop?: components["schemas"]["HardStopResult"] | null;
             /** No Action Reason */
             no_action_reason?: string | null;
+        };
+        /** NoteExtraction */
+        NoteExtraction: {
+            /** Note */
+            note: string;
+            extraction: components["schemas"]["TextExtraction"];
         };
         /** NoteIn */
         NoteIn: {
@@ -1181,7 +1209,7 @@ export interface operations {
             };
         };
     };
-    add_note_demo_cases__case_id__notes_post: {
+    add_note_cases__case_id__notes_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1203,6 +1231,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NBACard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_extractions_cases__case_id__extractions_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteExtraction"][];
                 };
             };
             /** @description Validation Error */

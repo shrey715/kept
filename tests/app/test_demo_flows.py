@@ -108,7 +108,7 @@ def test_demo_ask_refuses_protected_attributes(client: TestClient) -> None:
     assert r["kind"] == "refusal" and r["reason"] == "protected_attribute"
 
 
-def test_notes_only_in_demo(make_customer) -> None:  # type: ignore[no-untyped-def]
+def test_notes_need_live_extraction(make_customer) -> None:  # type: ignore[no-untyped-def]
     from kept.app.api import Services
     from tests.app.test_api import FakeAsk, FakeEngine, FakeGate
     from tests.fakes import DictC360Reader, InMemoryAuditLog
@@ -123,9 +123,9 @@ def test_notes_only_in_demo(make_customer) -> None:  # type: ignore[no-untyped-d
         )
     )
     r = TestClient(app).post(
-        "/demo/cases/C-118204/notes", json={"text": "x", "user_id": "agent-7", "role": "agent"}
+        "/cases/C-118204/notes", json={"text": "x", "user_id": "agent-7", "role": "agent"}
     )
-    assert r.status_code == 404
+    assert r.status_code == 503  # no live extraction configured
 
 
 # ----------------------------------------------------------------- notes -> extraction panel
@@ -175,3 +175,50 @@ def test_note_extraction_carries_evidence_and_confirm_moves_hardship() -> None:
     bad = client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"nope": 1}})
     assert bad.status_code == 422
     assert client.get(f"/demo/cases/{CASE}/extractions", params=who("agent-8", "agent")).status_code == 403
+
+
+def test_real_notes_and_extractions_routes(make_customer) -> None:  # type: ignore[no-untyped-def]
+    """Outside the demo: an added note goes through live extraction (here a stand-in), the case's
+    extractions come from C's store with their note text, newest first; a failed extraction is a
+    502 and stores nothing; other agents can't read the case's notes."""
+    from kept.app.api import Services
+    from kept.app.demo import demo_extract
+    from tests.app.test_api import FakeAsk, FakeEngine, FakeGate
+    from tests.fakes import DictC360Reader, InMemoryAuditLog, InMemoryExtractionStore
+
+    case = make_customer().open_case_id
+    store, texts = InMemoryExtractionStore(), {}
+
+    def add_note(case_id: str, text: str, user_id: str, now: datetime) -> None:
+        if "boom" in text:
+            raise RuntimeError("extraction failed: timeout")
+        sid = f"N-LIVE-{len(texts)}"
+        store.put(demo_extract(sid, case_id, text, now))
+        texts[sid] = text
+
+    app = create_app(
+        Services(
+            FakeEngine(),
+            FakeGate(),
+            FakeAsk(),
+            DictC360Reader({"G-004817": make_customer()}),
+            InMemoryAuditLog(),
+            add_note=add_note,
+            extractions=store,
+            note_text=texts.get,
+        )
+    )
+    c = TestClient(app)
+    for text in ("left a voicemail", "says shifts were cut at the plant, please stop calling me"):
+        assert (
+            c.post(f"/cases/{case}/notes", json={"text": text, **who("agent-7", "agent")}).status_code == 200
+        )
+    assert c.post(f"/cases/{case}/notes", json={"text": "boom", **who("agent-7", "agent")}).status_code == 502
+    rows = c.get(f"/cases/{case}/extractions", params=who("agent-7", "agent")).json()
+    assert [r["note"] for r in rows] == [
+        "says shifts were cut at the plant, please stop calling me",
+        "left a voicemail",
+    ]
+    assert rows[0]["extraction"]["hardship_signal"]["value"] != "none"
+    assert c.get(f"/cases/{case}/extractions", params=who("agent-8", "agent")).status_code == 403
+    assert c.get("/health").json()["demo"] is False
