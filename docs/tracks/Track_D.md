@@ -3,9 +3,9 @@
 Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G2 work done on real gold (features, Feast, training rows, `kept train`); ready to integrate
-- Working on: nothing until G2 passes
-- Waiting on: nothing; next: real `/queue` from `nba.cards`, `kept nightly` (G4), C's `eligible_programs` on the banner
+- Phase: 5 (G4). G1-G3 passed and merged.
+- Working on: nothing open. `kept nightly`, real `kept serve` (queue, steward, programmes) are in.
+- Waiting on: team calls: one `KEPT_HOLDOUT_SALT`; whether ~32% Red (agent-coded hardship in the data) needs a rule for customers already on a hardship plan.
 
 ## Done
 - `DuckDBAuditLog` + `new_event_id` (early provider, Q2): `tests/common/test_audit.py` 7/7. Branch `track-d`.
@@ -35,6 +35,8 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 - **`kept score` (G3 exit check):** a card for every open case: **96,000 cards -> `nba.cards` in 152 s** (2.4 GB): red 31,140 (almost all hardship reviews), green 38,789, amber 3,731, no action 22,340 (wait best 10,707, insolvency/bankruptcy 6,378, cease 2,707, hold-out 2,340). One RECOMMENDATION audit event per card, written in one go. `tests/nba/test_score.py`.
 - G3 follow-ups: a protected case is offered a hardship review instead of "no action" (CS-2026-820205); `.env.example` MLflow URI -> `sqlite:///mlflow.db` (MLflow 3 refuses `file:./mlruns`), and `kept train` loads `.env`.
+
+- **G4, Track D (4 Oct):** `kept nightly` runs every track's step in order (A's land -> silver -> match -> gold -> gate, then C's extract, then features -> parity -> score), each as its own process, stopping at the first failure; `--from` / `--skip`. Real run here from features (land and match need more RAM than this laptop): features 44 s, **parity PASS 0 of 56,000 cells**, score 96,000 cards 154 s. `kept features` now rebuilds `text_signals` so tonight's extractions reach the features. Real `kept serve`: `/queue` from `nba.cards` (an agent's own cases in 10 ms, others the top 500, names masked), A's steward queue (`load_steward_queue`), C's `eligible_programs` on the hardship banner. `tests/test_nightly.py`.
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -92,6 +94,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Not yet:** real `/queue` (needs `kept score`, G3); hardship programmes on the real banner (C's `eligible_programs` needs a `ProgramCase` per case).
 - **`kept score` design:** the same `KeptContextBuilder` and `KeptEngine` as the live API, fed by in-memory readers loaded in bulk (gold, the feature table Feast serves, case rows, confirmed or live extractions: 8 s); the uplift model answers from one vectorised batch (1 s) looked up per card, falling back to the model for a row it hasn't seen (identical cards on 400/400 checked); the proposal store keeps nothing (the engine's cancel scan was O(n) per card, O(n^2) over a run: 58 min -> 2.5 min overall).
 - **Protected cases are offered a hardship review** when the uplift ranking says wait (design §6.3: the override sits outside the model). Before, a $59 balance with flat probabilities ended "No action today" after a hardship note. Still no review under a hard stop or without call consent.
+- **Red share explained (4 Oct):** of 31,140 Red cards, ~23,000 come from gold `hardship_status = confirmed` with source agent: the open case's own `hardship_flag` with `hardship_source = agent_coded` (18,806 with no plan end, 10,515 with a plan still running, 900 ended). Vulnerability adds ~3,700, customer forms ~1,300, text-only hardship (30/90) ~1,500. So Red is the data plus policy (confirmed hardship -> specialist), not the model. Options for the team: no new hardship review for a customer already on a running plan (~10,500 fewer); gold expiring hardship whose plan ended (A, 900).
 - **For A + C:** 45% of scored open cases carry a hardship banner, mostly from gold's `hardship_status` (my local gold predates #24); with the 30/90 rule in features only, 31,140 cards (32%) go to specialists. Gold's text rule should match the 30/90 rule.
 - **`KEPT_HOLDOUT_SALT`:** mine is still the `.env.example` placeholder. Every machine must use one value (it decides who is in the hold-out); pick one before the demo, set it everywhere, then rerun `kept score`.
 - Uplift models convert inputs themselves (fixed `pay_frequency` levels, bools/None to float), so a serving `FeatureVector` scores the same as a warehouse row.
@@ -115,6 +118,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Batch scoring needs one shared read-only connection:** each reader opens the warehouse per call (K5), about 60 ms each, so a card takes about 0.3 s; `kept score` (G3) should read the case rows, gold and extractions in bulk.
 
 ## Log
+- 4 Oct: `kept nightly`; real queue, steward queue and programmes in `kept serve`; Red share explained; track file brought up to date.
 - 4 Oct: `kept score` 96,000 cards in 152 s; hardship review for protected cases; MLflow sqlite.
 - 3 Oct: C's G3 asks done: real services and `kept serve`, live add-note, extractions route + cease confirm, 30/90 rule, Qini vs legacy in `kept train`.
 - 3 Oct: 11 account/payroll/cash-flow features wired and checked on real data; WAIT arm rebuilt (hold-out delays contact); honest Qini: calls only; regularised uplift params; margin 0.02.

@@ -115,3 +115,19 @@ def test_phone_number_is_not_a_card(redactor: PresidioRedactor) -> None:
 def test_dashed_numbers_without_dob_word_kept(redactor: PresidioRedactor) -> None:
     note = "PTP 10-12 the 5th, ref 2024-118"
     assert redactor.redact(note).text == note
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Summarise the most recent call on case CS-2026-614370",
+        "note N-0003433 for G-004817, agent AG-2247, crm MIR-2540, loan L-7213820",
+    ],
+)
+def test_bank_ids_are_not_redacted(redactor: PresidioRedactor, text: str) -> None:
+    assert redactor.redact(text).text == text
+
+
+def test_phone_next_to_a_case_id_still_redacted(redactor: PresidioRedactor) -> None:
+    out = redactor.redact("case CS-2026-614370, call back at 416-555-0123").text
+    assert "CS-2026-614370" in out and "416-555-0123" not in out

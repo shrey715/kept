@@ -96,3 +96,15 @@ class DuckDBExtractionStore:
                 "select * from text.extractions where case_id = ? order by extracted_at desc", [case_id]
             ).fetchall()
         return [from_row(r) for r in rows]
+
+
+def load_redacted_notes(parquet: Path | str, path: Path | str = WAREHOUSE_PATH) -> int:
+    """Load the redaction run's Parquet (scripts/redact_all.py: notes + call transcripts, Presidio output)
+    into text.redacted_notes, replacing it. Transcripts are source_type = 'transcript': the Ask can cite
+    them without touching raw PII. Returns the row count."""
+    with connect(path) as c:
+        c.execute(
+            "create or replace table text.redacted_notes as select * from read_parquet(?)", [str(parquet)]
+        )
+        row = c.execute("select count(*) from text.redacted_notes").fetchone()
+    return int(row[0]) if row else 0
