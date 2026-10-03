@@ -10,14 +10,14 @@ import { spring } from "@/components/motion";
 import { NbaCard } from "@/components/nba-card";
 import { api, decision, type AskResponse, type AuditEvent, type Customer, type NBACard, type ReleaseResult } from "@/lib/api";
 import { nowIso, useServerClock } from "@/lib/clock";
-import { PERSONAS } from "@/lib/session";
+import { PERSONAS, REAL_USER_IDS } from "@/lib/session";
 
 const as = (id: string) => PERSONAS.find((p) => p.userId === id)!;
 const AGENT_PERSONA = as("agent-7"), SPECIALIST = as("hs-1"), LEAD = as("tl-1"), COMPLIANCE = as("c-1"), ANALYST = as("an-1");
 // `kept serve --demo` has a made-up case; real data only shows a case to its assigned agent, so the guide
 // uses a real open case and its agent there (the "new note flips hardship" case checked at G3).
 const DEMO_CASE = { caseId: "CS-2026-118204", agent: AGENT_PERSONA };
-const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId: "AG-8365" } };
+const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId: REAL_USER_IDS["agent-7"] } };
 
 const STEPS = [
   { title: "One customer, one ID", who: COMPLIANCE, says: "Five systems each keep their own customer key. Kept resolves them to one golden ID, with the weakest match shown." },

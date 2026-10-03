@@ -2,7 +2,8 @@
 
 // Who is using the screen. ponytail: a persona picked on /signin and kept in localStorage;
 // real sign-in (SSO) replaces it, and the API trusts it only because this is a demo.
-import type { Role } from "./api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Role } from "./api";
 import { useStored } from "./stored";
 
 export type Persona = { userId: string; role: Role; name: string; title: string; blurb: string; home: string };
@@ -24,8 +25,31 @@ export const PERSONAS: Persona[] = [
 
 const NONE: Persona | null = null;
 
+// The demo cases belong to "agent-7"; the real release has no such agent. On the real server Aisha works a
+// real agent's queue (the one the guided demo uses), so her queue and cases aren't empty.
+export const REAL_USER_IDS: Record<string, string> = { "agent-7": "AG-8365" };
+
+let realServer: Promise<boolean> | null = null; // one /health call per page load
+
+function useRealServer(): boolean {
+  const [real, setReal] = useState(false);
+  useEffect(() => {
+    let live = true;
+    (realServer ??= api.health().then((h) => h.demo === false, () => false)).then((r) => live && setReal(r));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return real;
+}
+
 export function useSession() {
-  const [me, setMe] = useStored<Persona | null>("kept.persona", NONE);
+  const [stored, setMe] = useStored<Persona | null>("kept.persona", NONE);
+  const real = useRealServer();
+  const me = useMemo(
+    () => (stored && real && REAL_USER_IDS[stored.userId] ? { ...stored, userId: REAL_USER_IDS[stored.userId] } : stored),
+    [stored, real],
+  );
   return { me, signIn: (p: Persona) => setMe(p), signOut: () => setMe(null) };
 }
 

@@ -105,7 +105,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   {PERSONAS.map((p) => (
                     <DropdownMenu.Item
                       key={p.userId}
-                      disabled={p.userId === me.userId}
+                      disabled={p.name === me.name}
                       onSelect={() => {
                         signIn(p);
                         router.push(p.home);
