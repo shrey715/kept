@@ -28,7 +28,7 @@ llm = ["litellm>=1.50"]
 data = [
     "kept[llm]",
     "dbt-core>=1.8",
-    "dbt-duckdb>=1.8",
+    "dbt-duckdb>=1.8,<1.10",
     "splink>=4.0",
     "soda-core-duckdb>=3.3",
     "phonenumbers>=8.13",
