@@ -168,3 +168,43 @@ def test_all_zero_rates() -> None:
 def test_length_mismatch() -> None:
     with pytest.raises(ValueError):
         recommendation_rates([True], ["a", "b"])
+
+
+# ----------------------------------------------------------------- the report on scored cards
+def _frames():  # type: ignore[no-untyped-def]
+    import pandas as pd
+
+    ids = [f"G-{i}" for i in range(200)]
+    # group a: 100 customers, 60 get a call; group b: 100 customers, 30 get a call, 20 wait; 5 have no match
+    actions = ["call"] * 60 + ["email"] * 40 + ["call"] * 30 + ["wait"] * 20 + [None] * 50
+    cards = pd.DataFrame({"golden_customer_id": ids, "action": actions})
+    restricted = pd.DataFrame(
+        {
+            "golden_customer_id": ids[:195],
+            "gender_code": ["a"] * 100 + ["b"] * 95,
+            "household_size": range(195),
+        }
+    )
+    return cards, restricted
+
+
+def test_fairness_report_flags_a_gap_and_names_the_group() -> None:
+    from kept.governance.fairness import fairness_report
+
+    cards, restricted = _frames()
+    text = fairness_report(
+        cards, restricted, ["gender_code", "household_size", "not_a_column"], min_group_size=10
+    )
+    assert "### gender_code" in text and "FLAG" in text  # b gets a call 30% of the time, a 60%: ratio ~0.5
+    assert "| a | 100 | 100.0% | 60.0% |" in text  # any contact action, call, then hardship review
+    assert "unknown" in text  # the 5 cases with no protected attributes
+    assert "household_size" not in text.split("## Rates by group")[1]  # 195 distinct values: skipped
+    assert "not_a_column" not in text
+
+
+def test_fairness_report_does_not_compare_tiny_groups() -> None:
+    from kept.governance.fairness import fairness_report
+
+    cards, restricted = _frames()
+    text = fairness_report(cards, restricted, ["gender_code"], min_group_size=96)
+    assert "n/a (too few)" in text  # the 5-case "unknown" group and group b (95) are under 96

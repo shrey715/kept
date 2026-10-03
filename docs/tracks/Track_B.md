@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G3 ready (code, scorecard, quota plan). Phases 1 to 5 parallel tasks done.
+- Phase: G3 side done; Phase 5 code done (benchmark, lineage, fairness report script)
 - Working on: nothing
-- Waiting on: D's `kept score` output for the fairness run on real recommendations; 4 Oct 19:00 IST for the extra questions (`kept benchmark`, commit before 21:00)
+- Waiting on: two Parquet exports for the fairness run: D's `nba.cards` and A's `gold.c360_restricted` (not written by `kept build`); then the 4 Oct 19:00 benchmark run
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -52,12 +52,12 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Open questions
 - **For C:** the real redactor turns a case id into a phone number: `CS-2026-614370` becomes `CS-<PHONE_NUMBER>`, so any question that names a case (BQ-016, 021, 022) loses its id before the Ask sees it. Local setup note: Hugging Face's spaCy wheels are the 3.7.x models (en 3.7.1, fr 3.7.0) run on spaCy 3.8 here (GitHub's 3.8.0 models downloaded at ~100 KB/s); the redaction output may differ slightly from C's machine.
-- **Gold vs correct (team call).** Three dev gold answers differ from what the data supports: BQ-017 (the reference SQL drops the MM/DD date format), BQ-035 (gold counts use the raw `current_bucket` label; the dev note says ~4% are wrong and a strong answer recomputes from `current_dpd`, which gives 35,000 / 25,000 / ...), and BQ-003 (the gold folds 3 or more prior broken promises into one row). We compute from clean data. Matching the gold would mean copying its omissions. Not decided.
+- **Gold vs correct: DECIDED 3 Oct (match the reference), done.** BQ-017 now reads `month_end_date` the way the reference does (using A's `month_end_date_raw`, PR #36), BQ-035 groups by the stored `current_bucket`, BQ-003 groups 3 or more together. All three match the reference answers. Not waiting on anyone.
 - **Transcript questions (BQ-016, 021, 022).** "Summarise the most recent recorded call" needs call transcripts, which are not an Ask table (PII). They are refused today (3 of 35 questions). Option: a redacted-transcript lookup fed by C's `text.transcripts`.
 - **Quota.** 2.8 LLM calls per question on average (lookups cost more): a full 35-question run is about 100 calls, the extra 4 Oct questions about the same. Free-tier rate limits slow it (up to ~30 s on a throttled question) but did not fail it.
 - **Gold SQL drops a date format (matters for scoring).** The raw `account_monthly_snapshot.month_end_date` has 4 formats (ISO 90%, DD/MM 3.3%, MM/DD 3.3%, YYYYMMDD 3.3%). The reference SQL parses 3 and silently drops MM/DD rows, so its BQ-017 counts are ~6% lower than silver's (card 2,699 vs 2,870). Our roll rate on all rows: card 4.9 (gold 4.9), student_loc 25.0 (25.0), chequing 4.7 (5.0), mortgage 3.4 (3.6), auto 8.0 (7.4), personal 5.5 (4.9), unsecured 5.3 (5.9). The tolerance is ±0.5 pts, so some products would fail against the gold. We use all the data (correct); matching the gold means copying its omission. Team call.
 - **For A (silver):** `dpd_bucket` / `current_bucket` are still the raw source values: 3.7% of rows in `account_monthly_snapshot`, `card_accounts` and `loan_accounts` disagree with `dpd` (461,396 snapshot rows), `dpd` is NULL on 8% (1.0M snapshot rows), and 1% of `collections_cases.current_bucket`. Ask computes buckets from `dpd`, but a clean derived column in silver would help everyone.
-- Agents are only checked for case ids named in the question. A lookup like "average DPD by queue" is not filtered to `own_case_ids`, so an agent sees aggregates over every case. Decide at G1 whether agent lookups get a row filter (needs `assigned_agent_id` in the allowed columns) or are limited to metrics.
+- **Agent row filter (open, a team call).** An agent is only blocked when the question *names* someone else's case id. A question like "average DPD by queue" is answered over every case, not just the agent's own. Options: treat agents like analysts (small groups under 10 hidden) except for their own named cases; limit agents to certified metrics and policy; or leave it. Recommended: the first.
 - Which silver tables does the Ask table list (G0) include? Certified SQL reads collections_cases, promises_to_pay, agents, contact_history, account_monthly_snapshot, card_accounts, loan_accounts, deposit_accounts.
 - Refusal labels: only dev answers say "Refuse: …" (BQ-018, BQ-024, BQ-031). The scorecard needs a rule for the hidden ones. The docs say nothing (release README: "deciding which is part of the challenge").
 - `parse_tolerance` raises on "direction of effect" and "exact count, ±1 CAD" (test questions). Decide how the scorer treats them.
