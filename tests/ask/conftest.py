@@ -35,9 +35,36 @@ BLOCKED = frozenset(
 REFRESHED = datetime(2026, 9, 28, 10, 0, tzinfo=UTC)
 
 
+TABLE_COLUMNS = {
+    "gold.c360_customer": frozenset(
+        {
+            "golden_customer_id",
+            "display_name",
+            "primary_phone_e164",
+            "email",
+            "total_overdue",
+            "assigned_agent_id",
+        }
+    ),
+    "silver.collections_cases": frozenset(
+        {
+            "case_id",
+            "primary_product",
+            "entry_dpd",
+            "dpd_at_day_30",
+            "insolvency_hold_flag",
+            "assigned_agent_id",
+        }
+    ),
+    "silver.promises_to_pay": frozenset({"ptp_id", "case_id", "ptp_status", "ptp_amount"}),
+}
+
+
 @pytest.fixture
 def policy() -> SqlPolicy:
-    return SqlPolicy(allowed_tables=ALLOWED, blocked_columns=BLOCKED, max_rows=100)
+    return SqlPolicy(
+        allowed_tables=ALLOWED, blocked_columns=BLOCKED, table_columns=TABLE_COLUMNS, max_rows=100
+    )
 
 
 @pytest.fixture

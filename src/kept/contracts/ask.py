@@ -63,6 +63,9 @@ class Intent(_Frozen):
 class SqlPolicy(_Frozen):
     allowed_tables: frozenset[str]  # schema-qualified, lower case, e.g. "gold.c360_customer"
     blocked_columns: frozenset[str]  # protected + direct PII, lower case
+    # columns of each allowed table, lower case. SELECT * / t.* is refused over a table that has a
+    # blocked column or whose columns are not listed here (fail closed).
+    table_columns: dict[str, frozenset[str]] = Field(default_factory=dict)
     max_rows: int = Field(default=ASK_DEFAULT_ROW_LIMIT, gt=0)
     timeout_s: float = Field(default=ASK_SQL_TIMEOUT_S, gt=0)
     dialect: str = "duckdb"

@@ -9,8 +9,10 @@ import time
 import duckdb
 import pytest
 
-from kept.ask.sql_guard import execute_guarded, guard_sql
 from kept.contracts import GuardResult, SqlPolicy
+
+pytest.importorskip("sqlglot")  # Track B's `ask` extra; CI installs core only
+from kept.ask.sql_guard import execute_guarded, guard_sql
 
 
 def _limit(sql: str) -> int | None:
@@ -23,7 +25,7 @@ def _limit(sql: str) -> int | None:
     "sql",
     [
         "SELECT case_id, entry_dpd FROM silver.collections_cases",
-        "select count(*) as n from GOLD.COLLECTIONS_CASES",
+        "select count(*) as n from SILVER.COLLECTIONS_CASES",
         "SELECT primary_product, avg(dpd_at_day_30) FROM silver.collections_cases GROUP BY primary_product",
         "WITH x AS (SELECT case_id FROM silver.collections_cases) SELECT count(*) FROM x",
         "SELECT c.primary_product, count(*) FROM silver.collections_cases c JOIN silver.promises_to_pay p ON c.case_id = p.case_id GROUP BY 1",
@@ -175,3 +177,28 @@ def test_execute_times_out(ask_db: duckdb.DuckDBPyConnection) -> None:
     with pytest.raises(TimeoutError):
         execute_guarded(ask_db, g, timeout_s=0.2)
     assert time.monotonic() - start < 5
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT c FROM gold.c360_customer c",  # whole-row struct includes display_name
+        "SELECT to_json(c) FROM gold.c360_customer c",
+        "SELECT COLUMNS('.*name') FROM gold.c360_customer",  # regex column picker
+        "SELECT p.ptp_id FROM silver.promises_to_pay p JOIN gold.c360_customer c USING (display_name)",
+        "SELECT * EXCLUDE (ptp_id) FROM silver.customers_unlisted",
+        "SELECT getenv('HOME')",
+        "SELECT * FROM silver.promises_to_pay p, read_csv('x.csv')",
+        "SELECT * INTO t FROM silver.promises_to_pay",
+    ],
+)
+def test_extra_bypasses_refused(policy: SqlPolicy, sql: str) -> None:
+    assert not guard_sql(sql, policy).allowed
+
+
+def test_star_needs_listed_columns(policy: SqlPolicy) -> None:
+    """A table whose columns the policy does not list can't be starred, fail closed."""
+    bare = SqlPolicy(allowed_tables=policy.allowed_tables, blocked_columns=policy.blocked_columns)
+    assert not guard_sql("SELECT * FROM silver.promises_to_pay", bare).allowed
+    assert guard_sql("SELECT ptp_id FROM silver.promises_to_pay", bare).allowed
+    assert guard_sql("SELECT count(*) FROM silver.promises_to_pay", bare).allowed  # count(*) is not a star
