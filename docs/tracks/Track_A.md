@@ -3,9 +3,9 @@
 Person: Satvik Rao · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 2 (done, stopped at G1)
-- Working on: nothing; not starting Phase 3 (gold, quality gate, `DuckDBC360Reader`) before G1
-- Waiting on: G1: B (guard on 10 real questions), C (extraction on 50 real notes; full Splink run with my settings), D (dbt features on real silver)
+- Phase: 3 (parallel tasks done, stopped at G2)
+- Working on: nothing; not starting Phase 4 (steward queue, routes, `draft_mapping`) before G2
+- Waiting on: G2: C (extractions into gold `hardship_status`), D (dbt features on real gold, Feast), B (Ask on 10 real questions)
 
 ## Done
 <!-- One line per finished task: what, which tests pass, PR/commit. -->
@@ -22,12 +22,18 @@ Person: Satvik Rao · Tasks: `docs/TEAM_PLAN.md` §5
 - Splink quality: it re-finds 99.9% of the exact links; about 60 pairs eyeballed (25 auto, 25 review, 10 odd clusters): no false auto-link found. Review band items were twins and relatives. Residual name conflicts inside clusters (nicknames, typos, loan names whose tokens are both common given names) are real matches linked on DOB + phone + postal code. `tests/data/test_match_pipeline.py` covers link, hold and stable IDs.
 - `kept match` (K9) and `kept/data/identity/pipeline.py` added; `GoldenIdRegistry.seed` keeps golden IDs between runs (`--previous <crosswalk.parquet>`).
 
-## Hand-over to C: the full Splink run
+## Hand-over to C: the full Splink run (done: crosswalk v1, PR #14)
 On C's machine, with silver built (`kept land`, then `uv run dbt build --select silver --threads 1 --profiles-dir dbt --project-dir dbt` with `KEPT_WAREHOUSE_PATH` set; about 3.5 min):
 `uv run kept match` (about 3.5M records; the sample took 1 min, so expect minutes, not hours; use `--previous` on reruns).
 Settings: `kept.data.identity.probabilistic.build_settings()` (also in `run_summary_*.json`); Splink trains itself on the data (EM), no JSON to copy. Hand back `identity_crosswalk_*`, `review_pairs_*`, `run_summary_*` in the shared folder. I sign off on the cluster counts: expect about 1.0M golden IDs, held clusters about 0.3% of clusters, largest cluster at most 12.
 
+- Phase 3, parallel tasks: `gold.py` (consent, contact flags, hard stops, `build_gold`, `export_parquet`), the three gold models + 9 `silver.int_*` models, `quality.py` (Q1-Q5, report, gate), `gate.py` + `kept build` / `kept gate`, `soda/checks/c360_customer.yml` (generated), `DuckDBC360Reader`. `tests/data` + `tests/contracts` 330+ passed, `make test-contract` green, `ruff` clean.
+- Gold on the real data and C's crosswalk v1: `dbt build --select gold` 38/38 (12 models, 26 tests); 1,052,300 `c360_customer` rows (988k auto, 64k unlinked), 3,840,513 crosswalk rows, 997k `c360_restricted`. 100,000 sampled gold rows validate against the `GoldenCustomer` model with 0 violations; `DuckDBC360Reader.customer_for_case` resolved every sampled open case (about 130 ms each).
+- `kept gate` on real gold: Q1 unique IDs, Q2 linkage (98.66% of account keys, every open case resolves), Q3 match safety and Q4 contact safety all PASS; Q5 row count PASS. **Q5 freshness BLOCKs** on this static dataset: the source extract is stamped 28 Sep and gold was built days later. A nightly run lands fresh (`kept land` stamps now), so `kept nightly` will pass; to see a pass today, re-land with `--extracted-at <now>`.
+
 ## Decisions and changes from the plan
+- Real-data finding in gold: `customers.province_code` has spellings the contract rejects (`Ont.`, `B.C.`, `Alta.`, `Quebec`, `PQ`: 1% of rows). New cleaning rule `normalize_province`, silver column `province_code_clean`, gold uses it; none is left unreadable.
+- Match at full scale: the pipeline clusters on integer arrays (building a pydantic object per pair needed more than 16 GB), trains Splink on a DOB-hash sample and scores everyone, and saves the trained model JSON. Merged with C's PR #14 (disk spill, `--train-sample-mod`, SQL-side pair ordering); a full run is about 100 s and peaks at about 9 GB.
 - New exact rule `exact:core_banking_cif`: `external.bank_subject_ref` is the same CIF as `deposit_accounts.src_customer_ref` (release README "Customer keys"; 495,420 keys in both, name/DOB/postal agree 99.7-100%). The plan (exact.py docstring) said bureau has no exact key and goes to Splink. Added to `EXACT_RULES`; the original design text is unchanged.
 - DOB parsing: CRM `dob_raw` slash dates mix DD/MM and MM/DD (day-first would be wrong for 16%), so CRM stays strict and falls back to the clean `date_of_birth`. Cards are consistently DD-MM-YYYY (second part never > 12), so cards use `day_first=True`.
 - Silver types: money and ratios use DECIMAL(18, s), not the dictionary's narrower width (`deposit_accounts.income_to_debt_service_ratio_est` has values above 9999.9999). Date columns fall back to `parse_date` (`account_monthly_snapshot.month_end_date` arrives as ISO, DD/MM/YYYY and YYYYMMDD: 1.25M values were lost with a plain cast).
@@ -54,6 +60,8 @@ None blocking Phase 3. The earlier open items are decided below, on the data and
 
 ## Log
 <!-- Newest first: time, what happened. -->
+- 2026-10-03: Phase 3 parallel tasks done; gold built on crosswalk v1; stop message for G2.
+- 2026-10-03: G1 integrated; merged main (C's PR #14, #15) into track-a.
 - 2026-10-03: Phase 2 done; `dbt build --select silver` 38/38 on real data; stop message for G1 posted. G0 PR #10 merged with my pre-hook fix.
 - 2026-10-03: Phase 2 parallel tasks done; silver built on real data; Splink tuning on a 10% sample running.
 - 2026-10-03: Reviewed G0 PR #10 (found the `+pre-hook` moved from `features:` to `text:`).

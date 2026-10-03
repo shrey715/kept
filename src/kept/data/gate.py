@@ -85,7 +85,9 @@ def gather_results(
         events.assign(on=True)
         .pivot_table(index="golden_customer_id", columns="flag", values="on", aggfunc="any")
         .reindex(columns=flag_names)
+        .astype("boolean")
         .fillna(False)
+        .astype(bool)
         .reset_index()
     )
 

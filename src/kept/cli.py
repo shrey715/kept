@@ -141,6 +141,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "land": land,
     "match": match,
     "build": build,
+    "gate": gate,
 }
 
 

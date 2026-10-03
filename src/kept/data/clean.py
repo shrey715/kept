@@ -27,6 +27,26 @@ _DOB = (
     (re.compile(r"([A-Za-z]{3}) (\d{1,2}),? (\d{4})"), "mon_dy"),  # May 04 1948 (customers.dob_raw)
     (re.compile(r"(\d{1,2})[/-](\d{1,2})[/-](\d{4})"), "num"),  # customers 25/07/1986, cards 14-03-1988
 )
+# every spelling seen in customers.province_code and the usual ones, keyed by letters only
+_PROVINCES = {
+    code: aliases.split()
+    for code, aliases in {
+        "AB": "ab alta alberta",
+        "BC": "bc britishcolumbia colombiebritannique",
+        "MB": "mb man manitoba",
+        "NB": "nb newbrunswick nouveaubrunswick",
+        "NL": "nl nf nfld newfoundland newfoundlandandlabrador terreneuve terreneuveetlabrador",
+        "NS": "ns novascotia nouvelleecosse",
+        "NT": "nt nwt northwestterritories territoiresdunordouest",
+        "NU": "nu nunavut",
+        "ON": "on ont ontario",
+        "PE": "pe pei princeedwardisland ileduprinceedouard",
+        "QC": "qc pq que quebec",
+        "SK": "sk sask saskatchewan",
+        "YT": "yt yk yuk yukon",
+    }.items()
+}
+_PROVINCE_BY_ALIAS = {alias: code for code, aliases in _PROVINCES.items() for alias in aliases}
 _POSTAL = re.compile(r"[ABCEGHJKLMNPRSTVXY]\d[ABCEGHJ-NPRSTV-Z]\d[ABCEGHJ-NPRSTV-Z]\d")
 _EXTENSION = re.compile(r"\s*(?:ext\.?|x|#)\s*\d+\s*$", re.IGNORECASE)
 
@@ -217,6 +237,12 @@ def normalize_phone_e164(raw: str | None, *, default_region: str = "CA") -> str 
     return (
         f"+1{digits}" if len(digits) == 10 and digits[0] in "23456789" and digits[3] in "23456789" else None
     )
+
+
+def normalize_province(raw: str | None) -> str | None:
+    """Two-letter province or territory code ("Ont." / "Ontario" / "on" -> "ON", "PQ" -> "QC").
+    Unknown -> None (quarantine)."""
+    return _PROVINCE_BY_ALIAS.get(_letters(raw)) if raw else None
 
 
 def normalize_postal_code(raw: str | None) -> str | None:
