@@ -30,6 +30,7 @@ models:
     text:
       +schema: text
       +materialized: table
+      +pre-hook: "set TimeZone = 'UTC'"  # naive UTC note times must not shift by the build machine's zone
 
 vars:
   # Track D features: as_of is naive UTC. Nightly = one as_of; training adds features_start.
