@@ -3,11 +3,15 @@
 Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 2
-- Working on: prompt tuning on the public labels (extract-v3), then the full redaction run
-- Waiting on: A's Splink settings (full match run)
+- Phase: 2 parallel tasks done (PR #11 merged) → G1 integration
+- Working on: full Splink run (A's hand-over), prompt tuning (transcripts split), holdout gate check
+- Waiting on: shared handover folder link (to hand over redacted notes and the crosswalk)
 
 ## Done
+- G1 (C): extraction on 50 real non-label notes through `PresidioRedactor` + `LiteLLMGateway` (local gemma3:12b) into `text.extractions`: 50/50 stored, ~4 s/note; audit log has 50 LLM events with metadata only, no raw note text.
+- Heavy run: all notes + transcripts redacted (redactor v5): 785,594 rows = 760,594 notes + 25,000 transcripts, 411 s on 4 processes; leak scan over every row finds 0 cards, phones, emails, SINs, postal codes, DOBs. `data/exports/redacted_notes/redacted_notes_eb00686_20261003.parquet`.
+- Prompt v4 on the notes tuning split: 6/7 features pass (hardship 0.86 r 1.00, promise 0.90, date 0.84, amount 0.96, dispute 0.80, third party 1.00); cease 0.60 (3 positives).
+- Warehouse on this machine: `kept land` (31 bronze tables, 2 min), silver (`dbt build --select silver`, 38 pass, 4 min).
 - G0 contract PR #10 merged (text schema, `ExtractionStore` + `for_case`, `Services` fields, `hard_stop_flags`, free LLM settings, §9 statuses).
 - Phase 2: `extract.py` (`resolve_day_of_month`, `locate_quote`, `LLMExtractor`, `confirm`, `transcript_text`): all extract/eval tests pass. `DuckDBExtractionStore` (`kept/text/store.py`) round-trips (`tests/text/test_store.py`).
 - Eval harness `scripts/eval_extraction.py`; batch redaction `scripts/redact_all.py` (256K distinct notes, ~255 notes/s/process).
@@ -40,6 +44,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 17:30 PR #11 merged. G1: 50-note real extraction OK, redaction run clean, silver built here, full Splink running.
 - 16:30 G0 merged. Phase 2: extractor, store, eval harness, prompt v2/v3, redactor v3.
 - 15:30 Merged all PRs (#2–#6) into main: fixed B's CI (sqlglot importorskip), resolved D's `cli.py` conflict, pinned dbt-duckdb<1.10. Wrote `docs/NEXT_STEPS.md` for all tracks.
 - 14:55 Phase 1 parallel tasks done; checks green. Waiting for G0.
