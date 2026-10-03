@@ -12,21 +12,25 @@ import { api, decision, type AskResponse, type AuditEvent, type Customer, type N
 import { nowIso, useServerClock } from "@/lib/clock";
 import { PERSONAS } from "@/lib/session";
 
-const CASE = "CS-2026-118204";
 const as = (id: string) => PERSONAS.find((p) => p.userId === id)!;
-const AGENT = as("agent-7"), SPECIALIST = as("hs-1"), LEAD = as("tl-1"), COMPLIANCE = as("c-1"), ANALYST = as("an-1");
+const AGENT_PERSONA = as("agent-7"), SPECIALIST = as("hs-1"), LEAD = as("tl-1"), COMPLIANCE = as("c-1"), ANALYST = as("an-1");
+// `kept serve --demo` has a made-up case; real data only shows a case to its assigned agent, so the guide
+// uses a real open case and its agent there (the "new note flips hardship" case checked at G3).
+const DEMO_CASE = { caseId: "CS-2026-118204", agent: AGENT_PERSONA };
+const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId: "AG-8365" } };
 
 const STEPS = [
   { title: "One customer, one ID", who: COMPLIANCE, says: "Five systems each keep their own customer key. Kept resolves them to one golden ID, with the weakest match shown." },
   { title: "Ask in plain English", who: ANALYST, says: "A certified metric answered with its SQL, and a question about a protected attribute refused with a safer suggestion." },
-  { title: "The next best action", who: AGENT, says: "Rules first, then the model: a call in the customer's own calling hours, with the three reasons that drove it." },
-  { title: "A new note changes everything", who: AGENT, says: "The agent logs that shifts were cut. Hardship turns possible, aggressive actions drop out, and the case goes Red." },
+  { title: "The next best action", who: AGENT_PERSONA, says: "Rules first, then the model: a call in the customer's own calling hours, with the three reasons that drove it." },
+  { title: "A new note changes everything", who: AGENT_PERSONA, says: "The agent logs that shifts were cut. Hardship turns possible, aggressive actions drop out, and the case goes Red." },
   { title: "Two people release it", who: SPECIALIST, says: "A hardship specialist approves first, a team lead second. Every safety rule is rechecked at release." },
   { title: "Every step on the record", who: COMPLIANCE, says: "The audit trail shows each recommendation, the hardship change, and both approvals." },
 ];
 
 export default function DemoPage() {
-  const { now } = useServerClock();
+  const { now, health } = useServerClock();
+  const { caseId: CASE, agent: AGENT } = health?.demo === false ? REAL_CASE : DEMO_CASE;
   const [step, setStep] = useState(0);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [answers, setAnswers] = useState<AskResponse[]>([]);
@@ -51,6 +55,7 @@ export default function DemoPage() {
 
   // load what each step shows when it opens (state is set only when a request resolves)
   useEffect(() => {
+    if (!health) return; // wait for the server's mode: it picks the case
     let live = true;
     const job =
       step === 0 && !customer
@@ -69,7 +74,7 @@ export default function DemoPage() {
     return () => {
       live = false;
     };
-  }, [step, customer, answers.length, card]);
+  }, [step, customer, answers.length, card, health, CASE, AGENT]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,7 +115,7 @@ export default function DemoPage() {
             </button>
           ))}
         </Flex>
-        <Text as="p" size="1" color="gray" mt="4"><Kbd>←</Kbd> <Kbd>→</Kbd> to move between steps</Text>
+        <Text as="p" size="1" color="gray" mt="4"><Kbd><ArrowLeftIcon aria-label="left arrow" /></Kbd> <Kbd><ArrowRightIcon aria-label="right arrow" /></Kbd> to move between steps</Text>
       </Box>
 
       <Box>
