@@ -313,8 +313,8 @@ _EMPTY: dict[str, Any] = {
 }
 
 
-def _ev(note_id: str, text: str, m: re.Match[str]) -> dict[str, Any]:
-    a, b = m.start(), m.end()
+def _ev(note_id: str, text: str, m: re.Match[str], group: int = 0) -> dict[str, Any]:
+    a, b = m.span(group)
     return {"quote": text[a:b], "source_id": note_id, "char_start": a, "char_end": b}
 
 
@@ -341,7 +341,7 @@ def demo_extract(note_id: str, case_id: str, text: str, at: datetime) -> TextExt
     if amount:
         vals["promised_amount"] = {
             "value": Decimal(amount.group(1)).quantize(Decimal("0.01")),
-            "evidence": _ev(note_id, text, amount),
+            "evidence": _ev(note_id, text, amount, 1),  # the number itself, not "pay 140"
             "confidence": 0.85,
         }
     day = re.search(r"on the (\d{1,2})(?:st|nd|rd|th)\b", text, re.IGNORECASE)

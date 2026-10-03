@@ -140,6 +140,7 @@ def test_note_extraction_carries_evidence_and_confirm_moves_hardship() -> None:
     ev = ex["hardship_signal"]["evidence"]
     assert note[ev["char_start"] : ev["char_end"]] == ev["quote"] == "shifts were cut"
     assert ex["promise_intent"]["value"] is True and ex["promised_amount"]["value"] == "140.00"
+    assert ex["promised_amount"]["evidence"]["quote"] == "140"
     assert ex["third_party_present"]["value"] is True and ex["stated_reason"]["value"] == "reduced_income"
 
     card = client.get(f"/cases/{CASE}/nba", params=who("agent-7", "agent")).json()
