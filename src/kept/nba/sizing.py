@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
-from datetime import date
-from decimal import Decimal
+from datetime import date, timedelta
+from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 
+from kept.config import CENT, PROMISE_DAYS_AFTER_PAYDAY
 from kept.contracts.enums import PayrollFrequency
 from kept.contracts.nba import PromiseSizing
+
+PERIODS_PER_YEAR = {
+    PayrollFrequency.WEEKLY: 52,
+    PayrollFrequency.BIWEEKLY: 26,
+    PayrollFrequency.SEMI_MONTHLY: 24,
+    PayrollFrequency.MONTHLY: 12,
+}  # IRREGULAR and UNKNOWN: monthly
 
 
 def promise_due_date(expected_payday: date, *, today: date, offset_days: int = 1) -> date | None:
     """expected_payday + offset_days (offset in {1, 2}, else ValueError). If that is
     before today + 1, roll forward to the next payday is NOT our job: return None
     (no payday-dated promise possible; caller falls back)."""
-    raise NotImplementedError("Track D")
+    if offset_days not in PROMISE_DAYS_AFTER_PAYDAY:
+        raise ValueError(f"offset_days must be one of {PROMISE_DAYS_AFTER_PAYDAY}")
+    due = expected_payday + timedelta(days=offset_days)
+    return due if due >= today + timedelta(days=1) else None
 
 
 def size_promise(
@@ -33,10 +44,42 @@ def size_promise(
     Installments fall one per pay period; the first is due promise_due_date(payday).
     Returns None (no promise; consider hardship review) when spare cash or payday is
     unknown, spare cash <= 0, or even max_installments doesn't fit."""
-    raise NotImplementedError("Track D")
+    if spare_cash_monthly is None or expected_payday is None or spare_cash_monthly <= 0 or balance_due <= 0:
+        return None
+    periods = PERIODS_PER_YEAR.get(payroll_frequency, 12)
+    per_period = (spare_cash_monthly * 12 / periods).quantize(CENT, rounding=ROUND_DOWN)
+    due = promise_due_date(expected_payday, today=today)
+    if per_period <= 0 or due is None:
+        return None
+    for n in range(1, max_installments + 1):
+        amount = (balance_due / n).quantize(CENT, rounding=ROUND_CEILING)
+        if amount <= per_period:
+            s = PromiseSizing(
+                amount=amount,
+                due_date=due,
+                installments=n,
+                spare_cash_estimate=per_period,
+                payday=expected_payday,
+                rationale="",
+            )
+            return s.model_copy(update={"rationale": sizing_text(s)})
+    return None
 
 
 def sizing_text(s: PromiseSizing) -> str:
     """'$140 fits inside estimated spare cash of ~$160 a month after rent; due one day after
     the expected payroll date.' Amounts formatted with $ and no trailing .00."""
-    raise NotImplementedError("Track D")
+    days = {1: "one day", 2: "two days"}.get(
+        (s.due_date - s.payday).days, f"{(s.due_date - s.payday).days} days"
+    )
+    plan = _money(s.amount) + (
+        f" a pay period for {s.installments} pay periods" if s.installments > 1 else ""
+    )
+    return (
+        f"{plan} fits inside estimated spare cash of ~{_money(s.spare_cash_estimate)} per pay period "
+        f"after rent, essentials and other lenders; due {days} after the expected payroll date."
+    )
+
+
+def _money(d: Decimal) -> str:
+    return f"${d:,.2f}".removesuffix(".00")
