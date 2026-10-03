@@ -173,8 +173,12 @@ cd web && pnpm lint && npx tsc --noEmit
 - **Where the reference answers take a shortcut, we follow them (B):** the roll rate reads
   `month_end_date` the way the reference does (it skips the MM/DD/YYYY spelling, 3.3% of rows), and two
   other dev questions group the way the reference does. Everywhere else the Ask computes from cleaned data.
-- **Not answered (B):** questions about a recorded call (3 of the 35 released) are refused: call
-  transcripts hold personal data and are not a table the Ask may read.
+- **Call summaries, incidents and unit costs (B, with C):** "summarise the most recent call on case X" is
+  answered from that call's redacted transcript by Track C's `summarise_call`, before the scope check
+  (which saw "personal data" in it); a case with no recorded call gets "there is no recorded call", not a
+  refusal. "Why did X change on that day" is answered from the incident reports and the operations-events
+  table (indexed with the policies). "Cost per contact by channel" reads the channel's unit cost
+  (`channel_capacity.unit_cost_cad`), not an average of the contact rows, which gives a different number for calls.
 - **Fairness report on the real cards (B):** `docs/fairness_report.md` compares recommendations across the
   protected attributes in `gold.c360_restricted` (compliance only); a blank attribute is reported, not
   treated as a group.
