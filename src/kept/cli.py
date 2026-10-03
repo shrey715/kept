@@ -230,6 +230,19 @@ def extract(args: argparse.Namespace) -> int:
     from kept.text.live import extract_into, read_sources, typed_note, warehouse_path
 
     path = warehouse_path()
+    if args.load_redacted is not None:
+        from kept.text.store import load_redacted_notes
+
+        files = (
+            [args.load_redacted]
+            if args.load_redacted
+            else sorted((EXPORT_DIR / "redacted_notes").glob("*.parquet"))
+        )
+        if not files:
+            print(f"kept extract: no redacted_notes parquet in {EXPORT_DIR / 'redacted_notes'}")
+            return 2
+        print(f"text.redacted_notes: {load_redacted_notes(files[-1], path):,} rows from {files[-1]}")
+        return 0
     if args.text is not None:
         if not args.case_id:
             print("kept extract: --text needs --case-id")
@@ -494,6 +507,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--text", default=None, help="a new note typed in now (not in silver)")
             p.add_argument("--case-id", default=None, help="with --text: the note's case")
             p.add_argument("--source-id", default=None, help="with --text: its id (default N-LIVE-<random>)")
+            p.add_argument(
+                "--load-redacted",
+                nargs="?",
+                const="",
+                default=None,
+                help="load the newest exports/redacted_notes/*.parquet into text.redacted_notes",
+            )
         if name == "match":
             p.add_argument(
                 "--sample-mod", type=int, default=None, help="tune on 1/N of the records (hash of DOB)"

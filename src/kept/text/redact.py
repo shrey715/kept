@@ -38,7 +38,7 @@ class PresidioRedactor:
     Money amounts and ordinary dates (e.g. "3 Oct", "$140") are kept: extraction needs them.
     """
 
-    version: str = "presidio-v5"
+    version: str = "presidio-v6"
 
     def __init__(self, *, models: dict[str, str] | None = None) -> None:
         from presidio_analyzer import AnalyzerEngine
@@ -70,6 +70,7 @@ class PresidioRedactor:
         )
         # Never touch a placeholder from an earlier pass: keeps redact() idempotent.
         kept_spans = [m.span() for m in _PLACEHOLDER.finditer(text)]
+        kept_spans += [m.span() for m in _BANK_ID.finditer(text)]  # our own IDs are not PII
         results = [
             r
             for r in results
@@ -216,6 +217,9 @@ def _looks_like_name(span: str) -> bool:
 
 
 _PLACEHOLDER = re.compile(r"<[A-Z_]+>")
+# The bank's own record IDs (CS-2026-614370, N-0003433, G-004817, AG-2247, MIR-2540): Presidio's phone
+# recognizer read the 10 digits of a case ID as a phone number, so Ask questions naming a case lost it.
+_BANK_ID = re.compile(r"\b[A-Z]{1,4}-\d{3,}(?:-\d{3,})?\b")
 # Weak patterns (bank accounts, DOBs) score 0.05 and only pass with a context word nearby (+0.35).
 _MIN_SCORE = 0.35
 
