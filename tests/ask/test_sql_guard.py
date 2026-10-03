@@ -23,7 +23,7 @@ def _limit(sql: str) -> int | None:
     "sql",
     [
         "SELECT case_id, entry_dpd FROM silver.collections_cases",
-        "select count(*) as n from GOLD.COLLECTIONS_CASES",
+        "select count(*) as n from SILVER.COLLECTIONS_CASES",
         "SELECT primary_product, avg(dpd_at_day_30) FROM silver.collections_cases GROUP BY primary_product",
         "WITH x AS (SELECT case_id FROM silver.collections_cases) SELECT count(*) FROM x",
         "SELECT c.primary_product, count(*) FROM silver.collections_cases c JOIN silver.promises_to_pay p ON c.case_id = p.case_id GROUP BY 1",
