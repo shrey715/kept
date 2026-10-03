@@ -1,7 +1,7 @@
 -- Uplift training rows (Track D): one row per treatment decision on a randomly assigned case, with
 -- the action taken and the paid_14d label. Agreed with A (TEAM_PLAN §9, PR #13).
---   decisions: outbound contacts (action = kept.nba.legacy.treatment_to_action) and, for the random
---              no-contact hold-out, WAIT the day after case open
+--   decisions: outbound contacts (action = kept.nba.legacy.treatment_to_action) and WAIT: weekly
+--              check-in days with no outbound contact that day (see `waits`)
 --   paid_14d:  any payment in [decision_at, decision_at + 14 days] from: contact payment flags (a
 --              payment taken during/after the contact counts, hence the inclusive start), kept or
 --              partially kept promises, loan instalments, card/loan payments in transactions (sample),
@@ -39,15 +39,29 @@ contacts as (
     join cases c using (case_id)
     where h.direction = 'outbound'
 ),
-holdout as (
-    select 'HOLD-' || case_id as decision_id, case_id,
-           cast(case_open_date as timestamp) + interval 1 day as decision_at, 'wait' as action
-    from cases
-    where test_cell = 'no_contact_holdout'
+waits as (  -- "wait today": a weekly check-in day (1, 8, ..., 120 days after open) with no outbound
+    -- contact that day, on any randomly assigned case while it is open. Not only the
+    -- no_contact_holdout cell: its contact is delayed, not withheld (median first contact day 12
+    -- vs 6), and the WAIT arm must cover the same stretch of case life as the contacts.
+    select 'WAIT-' || c.case_id || '-' || n as decision_id, c.case_id,
+           cast(c.case_open_date as timestamp) + to_days(cast(n as integer)) as decision_at, 'wait' as action
+    from cases c
+    join {{ ref('collections_cases') }} cc using (case_id)
+    cross join (select unnest(range(1, 121, 7)) as n) days
+    where cc.outcome_date is null or cc.outcome_date > c.case_open_date + cast(n as integer)
+),
+quiet as (
+    select w.*
+    from waits w
+    where not exists (
+        select 1 from {{ ref('contact_history') }} h
+        where h.case_id = w.case_id and h.direction = 'outbound'
+          and h.contact_ts_utc >= w.decision_at and h.contact_ts_utc < w.decision_at + interval 1 day
+    )
 ),
 decisions as (
     select d.*, c.crm_customer_id, c.primary_product, c.entry_dpd, c.accounts
-    from (select * from contacts where action is not null union all select * from holdout) d
+    from (select * from contacts where action is not null union all select * from quiet) d
     join cases c using (case_id)
     where d.decision_at >= cast('{{ start }}' as timestamp)
       and d.decision_at + interval 14 day <= cast('{{ snapshot }}' as timestamp)
