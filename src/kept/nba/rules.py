@@ -66,7 +66,9 @@ def _calling_hours(ctx: CaseContext) -> CheckResult:
     try:
         local = ctx.now.astimezone(ZoneInfo(ctx.time_zone))
     except (ZoneInfoNotFoundError, ValueError):
-        return CheckResult(check=CheckName.CALLING_HOURS, passed=False, detail=f"unknown time zone {ctx.time_zone!r}")
+        return CheckResult(
+            check=CheckName.CALLING_HOURS, passed=False, detail=f"unknown time zone {ctx.time_zone!r}"
+        )
     start, end = ctx.permitted_call_start_local, ctx.permitted_call_end_local
     window = f"{local:%a %H:%M} local, window {start:%H:%M}-{end:%H:%M}"
     if local.weekday() == 6 and not ctx.sunday_contact_permitted:
