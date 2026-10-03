@@ -15,7 +15,7 @@ from kept.contracts.enums import HardshipSignal
 from kept.contracts.features import Evidence, ExtractedValue, RedactedText, StatedReason, TextExtraction
 from kept.contracts.interfaces import LLMGateway
 
-PROMPT_VERSION = "extract-v2"
+PROMPT_VERSION = "extract-v3"
 
 SYSTEM_PROMPT = """You read one collections agent note or call transcript (English or French; personal \
 details are already replaced by placeholders like <PERSON>) and extract eight fields.
@@ -35,12 +35,17 @@ Fields:
 - promise_intent: true when the customer commits to pay (a promise to pay, PTP), else false.
 - promised_date: when the promised payment will be made, written exactly as the text gives it. Never
   add a year, month or day the text doesn't state; the system resolves relative dates itself.
-  "Oct 3", "3 oct", "SEP 29" -> "10-03" / "09-29" (MM-DD); "the 2nd", "le 15" -> "day:2" / "day:15";
+  "Jan 3", "3 janv", "SEP 29" -> "01-03" / "09-29" (MM-DD); "the 2nd", "le 15", "23RD" -> "day:2" /
+  "day:15" / "day:23" (no month written, so no month in the value);
   "Friday", "vendredi" -> "weekday:friday"; a full date with a year -> "YYYY-MM-DD";
   "next payday", "after payday", no date -> null.
 - promised_amount: the promised amount as a plain number string like "140.00", else null.
-- dispute: true when the customer disputes the debt, a charge, a fee or the amount owed.
-- cease_request: true when the customer asks the bank to stop calling or contacting them.
+- dispute: true only when the customer says they don't owe the debt, a charge or fee is wrong, the amount
+  is wrong, or the account or transaction isn't theirs (fraud). NOT a dispute: complaints about service or
+  the number of calls, wanting to file a complaint, refusing to pay, a bank or transfer problem.
+- cease_request: true only when the customer asks the bank to stop calling or contacting them ("stop
+  calling", "cease contact", "ne plus appeler"). Being unhappy about the number of calls is not a
+  cease request.
 - third_party_present: true when someone other than the customer takes part (spouse, family member,
   representative, "3rd party on line"), else false.
 
@@ -118,15 +123,23 @@ class LLMExtractor:
         self, text: RedactedText, *, source_id: str, case_id: str, written_at: datetime | None = None
     ) -> TextExtraction:
         """written_at (note_ts / call_start_ts) anchors relative dates via resolve_day_of_month."""
-        reply = self.llm.complete(
-            system=SYSTEM_PROMPT,
-            user=text,
-            purpose=Purpose.TEXT_EXTRACT,
-            actor_id=self.actor_id,
-            json_schema=JSON_SCHEMA,
-        )
-        raw = reply.parsed
-        if not isinstance(raw, dict) or not all(isinstance(raw.get(f), dict) for f in FIELDS):
+        raw: dict[str, Any] | None = None
+        for temperature in (0.0, 0.3):  # one retry: small local models sometimes break the schema
+            try:
+                reply = self.llm.complete(
+                    system=SYSTEM_PROMPT,
+                    user=text,
+                    purpose=Purpose.TEXT_EXTRACT,
+                    actor_id=self.actor_id,
+                    json_schema=JSON_SCHEMA,
+                    temperature=temperature,
+                )
+            except ValueError:
+                continue
+            if isinstance(reply.parsed, dict) and all(isinstance(reply.parsed.get(f), dict) for f in FIELDS):
+                raw = reply.parsed
+                break
+        if raw is None:
             raise ValueError(f"extraction reply for {source_id} doesn't match the schema")
 
         def field(name: str, parse: Any, nothing: Any) -> ExtractedValue[Any]:
@@ -156,7 +169,9 @@ class LLMExtractor:
             ),
             stated_reason=field("stated_reason", StatedReason, StatedReason.NONE),
             promise_intent=field("promise_intent", _bool, False),
-            promised_date=field("promised_date", lambda v: _date(v, anchor), None),
+            promised_date=field(
+                "promised_date", lambda v: _date(v, anchor, raw["promised_date"].get("quote")), None
+            ),
             promised_amount=field("promised_amount", _amount, None),
             dispute=field("dispute", _bool, False),
             cease_request=field("cease_request", _bool, False),
@@ -181,11 +196,21 @@ def _amount(v: Any) -> Decimal | None:
         raise ValueError(f"bad amount {v!r}") from e
 
 
-def _date(v: Any, anchor: date | None) -> date | None:
-    """ISO date, or a relative form resolved against the note's date (None without one)."""
+_MONTHS = re.compile(
+    r"\b(jan|feb|f[ée]v|mar|apr|avr|may|mai|jun|juin|jul|juil|aug|ao[uû]|sep|oct|nov|dec|d[ée]c)|\d{1,2}[/-]\d",
+    re.IGNORECASE,
+)
+
+
+def _date(v: Any, anchor: date | None, quote: str | None = None) -> date | None:
+    """ISO date, or a relative form resolved against the note's date (None without one).
+    A month-day value whose quote names no month ("the 10th") is read as a day of month:
+    models fill in a month the text never gave."""
     if v is None or v == "":
         return None
     s = str(v).strip().lower()
+    if quote and not _MONTHS.search(quote) and (m := re.fullmatch(r"(?:\d{4}-)?\d{2}-(\d{2})", s)):
+        s = f"day:{int(m.group(1))}"
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
         return date.fromisoformat(s)
     if anchor is None:
