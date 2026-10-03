@@ -39,12 +39,14 @@ class CaseRow:
     deceased_hold_flag: bool = False
 
 
-def duckdb_case_reader(path: Path | str) -> Callable[[str], CaseRow]:
-    """Reads one case from silver.collections_cases, opening the warehouse per call (K5).
-    Unknown case -> KeyError."""
+def duckdb_case_reader(
+    path: Path | str, *, conn: duckdb.DuckDBPyConnection | None = None
+) -> Callable[[str], CaseRow]:
+    """Reads one case from silver.collections_cases, opening the warehouse per call (K5), or
+    through a cursor on `conn` (the API's one connection, see kept.app.real). Unknown case -> KeyError."""
 
     def read(case_id: str) -> CaseRow:
-        with duckdb.connect(str(path), read_only=True) as c:
+        with conn.cursor() if conn is not None else duckdb.connect(str(path), read_only=True) as c:
             row = c.execute(
                 "select case_id, total_overdue, contact_cap_7d, nba_recommendation_last, cease_contact_flag,"
                 " insolvency_hold_flag, deceased_hold_flag from silver.collections_cases where case_id = ?",
@@ -95,12 +97,19 @@ class KeptContextBuilder:
         customer = self._c360.customer_for_case(case_id)
         fv = self._features.get_online(case_id)
 
-        # Fresh notes, point in time. A store that can't be read raises: a missed hardship
-        # note must not turn into an aggressive action (the release gate refuses on errors too).
+        # Notes from the extraction store, point in time. A store that can't be read raises: a
+        # missed hardship note must not turn into an aggressive action (the release gate refuses
+        # on errors too). History reaches the card through the features (text_features applies the
+        # 30/90 rule), so an unconfirmed note counts here only if it is new since the features were
+        # built and not from the SetFit backfill. A person's confirmation counts whenever it was made.
         notes = [
             x
             for x in (self._extractions.for_case(case_id) if self._extractions else [])
             if x.extracted_at <= now
+            and (
+                x.confirmed_by_agent_id
+                or (x.extracted_at > fv.as_of and not x.extractor.startswith("setfit:"))
+            )
         ]
 
         stops: set[HardStop] = set(customer.hard_stop_flags)
