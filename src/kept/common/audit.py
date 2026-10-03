@@ -63,21 +63,27 @@ class DuckDBAuditLog:
 
     def append(self, event: AuditEvent) -> None:
         """Persist the event. Raise ValueError if event_id was already appended."""
+        self.append_many([event])
+
+    def append_many(self, events: Sequence[AuditEvent]) -> None:
+        """Persist events in order, in one connection (a batch job's thousands of events).
+        All or none: a duplicate event_id raises ValueError and nothing is written."""
+        rows = [[e.event_id, _micros(e.at), e.kind.value, e.subject_id, e.model_dump_json()] for e in events]
         try:
             with self._conn() as c:
-                c.execute(
-                    "insert into audit_events (event_id, at_us, kind, subject_id, body)"
-                    " values (?, ?, ?, ?, ?)",
-                    [
-                        event.event_id,
-                        _micros(event.at),
-                        event.kind.value,
-                        event.subject_id,
-                        event.model_dump_json(),
-                    ],
-                )
+                c.execute("begin")
+                try:
+                    c.executemany(
+                        "insert into audit_events (event_id, at_us, kind, subject_id, body)"
+                        " values (?, ?, ?, ?, ?)",
+                        rows,
+                    )
+                except Exception:
+                    c.execute("rollback")
+                    raise
+                c.execute("commit")
         except duckdb.ConstraintException as e:
-            raise ValueError(f"duplicate event_id {event.event_id}") from e
+            raise ValueError(f"duplicate event_id in {len(rows)} events") from e
 
     def read(
         self,

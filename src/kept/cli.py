@@ -293,12 +293,39 @@ def features(args: argparse.Namespace) -> int:
     return 0
 
 
+def score(args: argparse.Namespace) -> int:
+    """Track D: a card for every open case (G3) -> nba.cards; audit events in one write."""
+    import time
+
+    from dotenv import load_dotenv
+
+    from kept.common.audit import DuckDBAuditLog
+    from kept.nba.score import score as score_all
+
+    load_dotenv()  # KEPT_HOLDOUT_SALT, KEPT_AUDIT_LOG_PATH
+    t0 = time.perf_counter()
+    audit = DuckDBAuditLog(os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb")))
+    cards = score_all(
+        WAREHOUSE_PATH,
+        model=args.model,
+        holdout_salt=os.environ["KEPT_HOLDOUT_SALT"],
+        now=args.now or datetime.now(UTC),
+        audit_log=audit,
+    )
+    took = time.perf_counter() - t0
+    print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
+    print(cards.groupby(cards.tier.fillna("no action"), dropna=False).size().to_string())
+    return 0
+
+
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
     import duckdb
+    from dotenv import load_dotenv
 
     from kept.nba.train import run
 
+    load_dotenv()  # MLFLOW_TRACKING_URI
     conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
     try:
@@ -359,6 +386,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "train": train,
     "features": features,
     "parity": parity,
+    "score": score,
 }
 
 
@@ -412,6 +440,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="serving as_of, naive UTC (default: the latest 06:00 UTC, the nightly run)",
             )
             p.add_argument("--training", action="store_true", help="per-decision spine for kept train")
+        if name == "score":
+            p.add_argument("--model", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
+            p.add_argument(
+                "--now", type=datetime.fromisoformat, default=None, help="with a UTC offset (default: now)"
+            )
         if name == "train":
             p.add_argument(
                 "--cutoff",
