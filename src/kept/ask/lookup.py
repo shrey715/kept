@@ -32,26 +32,33 @@ def _sql_only(text: str) -> str:
     return re.sub(r"^\s*```(?:sql)?\s*|\s*```\s*$", "", text).strip().rstrip(";").strip()
 
 
+def lookup_system(intent: Intent, schema_doc: str) -> str:
+    """The system prompt for a lookup draft: the rules, the schema and the router's hints."""
+    hints = intent.model_dump_json(exclude={"kind", "confidence"}, exclude_defaults=True)
+    return _SYSTEM.format(schema_doc=schema_doc, hints=hints)
+
+
+def draft_sql(llm: LLMGateway, system: str, user: RedactedText, actor_id: str) -> str | None:
+    """One SQL draft, or None when the call fails or comes back empty."""
+    try:
+        # a little temperature so the drafts can differ: the vote is the check
+        reply = llm.complete(
+            system=system, user=user, purpose=Purpose.ASK_SQL, actor_id=actor_id, temperature=0.3
+        )
+    except Exception:
+        return None
+    return _sql_only(reply.text) or None
+
+
 def generate_candidates(
     intent: Intent, schema_doc: str, llm: LLMGateway, *, n: int, actor_id: str, question: RedactedText
 ) -> list[str]:
     """n candidate SQL strings: n separate calls with purpose Purpose.ASK_SQL.
     A failed call yields no candidate (the list may be shorter than n).
     `question` is added to the spec: the intent alone doesn't carry what the user asked."""
-    hints = intent.model_dump_json(exclude={"kind", "confidence"}, exclude_defaults=True)
-    system = _SYSTEM.format(schema_doc=schema_doc, hints=hints)
-    out: list[str] = []
-    for _ in range(n):
-        try:
-            # a little temperature so the n drafts can differ: the vote is the check
-            reply = llm.complete(
-                system=system, user=question, purpose=Purpose.ASK_SQL, actor_id=actor_id, temperature=0.3
-            )
-        except Exception:
-            continue
-        if sql := _sql_only(reply.text):
-            out.append(sql)
-    return out
+    system = lookup_system(intent, schema_doc)
+    drafts = (draft_sql(llm, system, question, actor_id) for _ in range(n))
+    return [d for d in drafts if d]
 
 
 def _canon(v: Any) -> Any:
