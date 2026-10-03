@@ -70,6 +70,7 @@ says. Nothing under `data/` is ever committed. Then put the team's hand-over fil
 | File | Where | Why |
 |---|---|---|
 | `extractions_880b98c_20261003.parquet` | `data/exports/extractions/` | the SetFit backfill of all 785,594 notes and calls. **Without it the first nightly would send every note through the live model** |
+| `redacted_notes_eb00686_20261003.parquet` | `data/exports/redacted_notes/` | every note and call transcript after redaction. The Ask's call summaries ("summarise the most recent call on case X") read the transcripts from it |
 | `identity_crosswalk_<run>.parquet` (+ `review_pairs_<run>.parquet`) | `data/exports/identity_crosswalk/` | optional: `kept match` keeps these golden IDs stable; without it the first run assigns new ones. The review pairs fill the steward queue |
 
 **First run on a fresh machine** (each step is its own process; about 20 minutes in all):
@@ -79,7 +80,8 @@ uv run kept nightly --skip score   # land -> silver -> match -> gold -> gate -> 
 uv run kept features --training    # features one second before every past decision (features_train)
 uv run kept train                  # uplift model -> data/exports/models/uplift.pkl, metrics in MLflow
 uv run kept score                  # a card for every open case -> nba.cards (96,000 in ~2.5 min)
-uv run python scripts/build_policy_index.py   # the Ask's policy search (data/policy -> LanceDB), once
+uv run python scripts/build_policy_index.py   # the Ask's policy search (data/policy + ops events -> LanceDB), once
+uv run kept extract --load-redacted           # redacted notes and transcripts -> text.redacted_notes, once
 ```
 
 **Every night after that:** `uv run kept nightly`. It stops at the first failing step, so a blocked
@@ -98,6 +100,25 @@ latest 06:00 UTC run, so cards are never stale.
 | features | `kept features` | D | dbt features (point in time) -> Parquet -> Feast online store |
 | parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
 | score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
+
+**Start it for a demo** (after the first run; each time the machine starts). Stop `kept serve` before any
+batch step (`kept nightly`, `kept gate` ...): the API holds the warehouse while it runs.
+
+```bash
+git checkout main && git pull --ff-only && uv sync --all-extras --inexact
+ollama serve &                                                                    # if Ollama isn't already running
+curl -s localhost:11434/api/generate -d '{"model":"gemma3:12b-it-qat","keep_alive":-1}'   # keep gemma3 loaded: a live note takes ~5 s
+uv run kept serve                                                                 # terminal 1: API on :8000, real data
+cd web && pnpm install && pnpm dev                                                # terminal 2: app on http://localhost:3000
+curl -s localhost:8000/health                                                     # "demo": false means real data
+```
+
+Open <http://localhost:3000> (use `localhost`, not `127.0.0.1`), then **Guided demo**, or sign in as a persona:
+`/signin?as=agent-7&next=/queue` (agent, works agent AG-8365's queue on real data),
+`/signin?as=hs-1&next=/approvals` (hardship specialist), `/signin?as=tl-1&next=/approvals` (team lead),
+`/signin?as=c-1&next=/audit` (compliance), `/signin?as=an-1&next=/ask` (analyst),
+`/signin?as=ds-1&next=/steward` (data steward). The Ask needs `GEMINI_API_KEY` in `.env`; restart
+`kept serve` after setting it.
 
 **Serve it** (the API owns the warehouse while it runs: no batch jobs against it at the same time):
 
