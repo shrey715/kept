@@ -10,7 +10,6 @@ import pytest
 
 from kept.ask.grounding import is_grounded
 from kept.ask.metrics import CertifiedQuery, MetricDefinition
-from kept.ask.service import CollectionsAsk
 from kept.common.llm import Purpose
 from kept.contracts import (
     AskAnswer,
@@ -25,6 +24,9 @@ from kept.contracts import (
 from kept.contracts.data_contract import DataContract
 
 from ..fakes import InMemoryAuditLog, PassThroughRedactor, PurposeLLM
+
+pytest.importorskip("sqlglot")  # Track B's `ask` extra; CI installs core only
+from kept.ask.service import CollectionsAsk
 
 LOOKUP_INTENT = {"kind": "lookup", "confidence": 0.9}
 METRIC_INTENT = {

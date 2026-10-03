@@ -9,7 +9,6 @@ import pytest
 
 from kept.ask.certified import CERTIFIED_QUERIES
 from kept.ask.metrics import MetricDefinition, compile_metric
-from kept.ask.sql_guard import guard_sql
 from kept.contracts import Intent, IntentKind, SqlPolicy
 
 pytestmark = pytest.mark.track_b
@@ -59,7 +58,9 @@ _ASK_TABLES = frozenset(
 @pytest.mark.parametrize("metric_id", sorted(CERTIFIED_QUERIES))
 def test_certified_sql_passes_the_guard_on_the_ask_table_list(metric_id: str) -> None:
     """The service sends compiled metric SQL through guard_sql too: it must be allowed."""
-    pytest.importorskip("sqlglot")
+    pytest.importorskip("sqlglot")  # Track B's `ask` extra; CI installs core only
+    from kept.ask.sql_guard import guard_sql
+
     policy = SqlPolicy(
         allowed_tables=_ASK_TABLES, blocked_columns=frozenset({"gender_code", "age", "postal_code"})
     )
