@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 3 (parallel tasks against fakes, approved in docs/NEXT_STEPS.md)
-- Working on: nothing, Phase 3 parallel tasks are done except the G0 PR lines (free Ask model)
-- Waiting on: user's pick of the free Ask model; then G1 (A's real silver) for the guard on 10 real questions
+- Phase: 3 done (parallel tasks, against fakes). Stopped as NEXT_STEPS says.
+- Working on: nothing
+- Waiting on: G0 PR #10 (apply my `.env.example` lines), then G1 (A's real silver) for the guard on 10 real questions
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -17,6 +17,8 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 2: `rule_check`, `check_scope`, `refusal_for`, `make_classifier` (S5) in `kept/ask/scope.py`; `route` in `kept/ask/router.py`; `guard_sql`, `execute_guarded` in `kept/ask/sql_guard.py`; `suppress_small_groups` in `kept/ask/privacy.py`. 153 Track B tests pass; CI command (`pytest --allow-stubs -m "not integration and not perf"`) 249 passed; ruff and mypy clean on Track B files.
 
 - Phase 3: `kept/ask/lookup.py` (`generate_candidates`, `normalize_result`, `majority_result`), `kept/ask/grounding.py`, `kept/ask/service.py` (`CollectionsAsk.ask`). 198 Ask tests pass; metric SQL also passes the guard on the 8-table Ask list. `/ask` route and its test were already on main (D). PR: https://github.com/shrey715/kept/pull/9
+
+- G0 lines: reviewed PR #10; the 16 Ask tables cover B's SQL; picked Gemini Flash-Lite (`gemini/gemini-3.5-flash-lite`, `GEMINI_API_KEY`, Groq 8B as the spare) and posted the `.env.example` lines as a comment on #10.
 
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
@@ -39,6 +41,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 16:05: G0 review comment posted on PR #10 (Ask model, table list); Phase 3 done, stopped.
 - 2026-10-03 15:47: Phase 3 parallel tasks done (PR #9); free Ask model research done, waiting on the pick.
 - 2026-10-03 ~15:15: pulled main (all Phase 1 PRs merged), started Phase 3 per docs/NEXT_STEPS.md.
 - 2026-10-03 14:56: Phase 2 parallel tasks done; CI command green (249 passed).
