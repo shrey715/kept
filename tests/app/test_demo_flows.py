@@ -146,14 +146,26 @@ def test_note_extraction_carries_evidence_and_confirm_moves_hardship() -> None:
     assert "Possible hardship" in card["hardship_banner"] and "Eligible programmes" in card["hardship_banner"]
 
     sid = ex["source_id"]
-    confirmed = client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {}}).json()
+    confirmed = client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {}}
+    ).json()
     assert confirmed["confirmed_by_agent_id"] == "agent-7"
-    assert client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"] == "confirmed"
+    assert (
+        client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"]
+        == "confirmed"
+    )
 
-    client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"hardship_signal": "none"}})
-    assert client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"] == "none"
+    client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"hardship_signal": "none"}}
+    )
+    assert (
+        client.get(f"/cases/{CASE}/customer", params=who("agent-7", "agent")).json()["hardship_status"]
+        == "none"
+    )
 
-    client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"cease_request": True}})
+    client.post(
+        f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"cease_request": True}}
+    )
     assert client.get(f"/cases/{CASE}/nba", params=who("agent-7", "agent")).json()["hard_stop"]["blocked"]
 
     bad = client.post(f"/demo/extractions/{sid}/confirm", json={"agent_id": "agent-7", "edits": {"nope": 1}})
