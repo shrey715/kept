@@ -315,3 +315,30 @@ def test_protected_case_is_offered_a_hardship_review_even_when_waiting_scores_be
     assert protected.proposal.tier is ReleaseTier.RED
     # still no review when a hard stop blocks contact
     assert card(hardship_status=hardship, hard_stop_flags=frozenset({HardStop.CEASE})).proposal is None
+
+
+def test_similar_cases_line(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    from kept.contracts.enums import Action
+    from kept.nba.engine import similar_cases
+
+    ctx = make_ctx()
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+        cohort_kept_rate=0.52,
+        cohort_recovery_rate=0.64,
+    )
+    call = similar_cases(fv, Action.CALL)
+    assert (
+        call
+        == "Similar past cases (same product and stage): 52% of their promises were kept and 64% recovered. (Descriptive, not causal.)"
+    )
+    plan = similar_cases(fv, Action.PAYMENT_PLAN)
+    assert plan and "0-2 days after payday were kept 54%" in plan
+    empty = fv.model_copy(update={"cohort_kept_rate": None, "cohort_recovery_rate": None})
+    assert similar_cases(empty, Action.CALL) is None
+    assert similar_cases(empty, Action.PROMISE_REQUEST) and "payday" in similar_cases(
+        empty, Action.PROMISE_REQUEST
+    )  # type: ignore[operator]

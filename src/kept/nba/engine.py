@@ -229,6 +229,7 @@ class KeptEngine:
             probabilities=probs,
             reasons=tuple(reasons),
             sizing_text=proposal.sizing.rationale if proposal.sizing else None,
+            similar_cases_text=similar_cases(fv, best.action),
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
@@ -388,6 +389,28 @@ def _banner(ctx: CaseContext) -> str | None:
     if ctx.vulnerable:
         return "Vulnerable customer: only protective actions; a hardship specialist reviews first."
     return None
+
+
+# Resolved promises by days since the customer's last salary credit (scripts/payday_timing.py, release data):
+# due 0-2 days after payday 54.3% kept (8,359), 8+ days after 46.3% (16,045). Descriptive, not causal.
+PAYDAY_KEPT_PCT, LATE_KEPT_PCT = 54, 46
+
+
+def similar_cases(fv: FeatureVector, action: Action) -> str | None:
+    """The card's "similar cases" line (design §6.7): what happened to past cases of the same product and
+    delinquency stage, plus the payday finding for a promise or plan. Descriptive, never causal."""
+    parts = []
+    if fv.cohort_kept_rate is not None:
+        parts.append(f"{fv.cohort_kept_rate:.0%} of their promises were kept")
+    if fv.cohort_recovery_rate is not None:
+        parts.append(f"{fv.cohort_recovery_rate:.0%} recovered")
+    line = f"Similar past cases (same product and stage): {' and '.join(parts)}." if parts else ""
+    if action in _SIZED:
+        line += (
+            f" Past promises due 0-2 days after payday were kept {PAYDAY_KEPT_PCT}% of the time, against"
+            f" {LATE_KEPT_PCT}% when due 8+ days after."
+        )
+    return f"{line.strip()} (Descriptive, not causal.)" if line else None
 
 
 def _headline(action: Action, slot: tuple[datetime, datetime] | None, ctx: CaseContext) -> str:
