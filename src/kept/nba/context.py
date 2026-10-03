@@ -18,9 +18,10 @@ from pathlib import Path
 import duckdb
 
 from kept.config import CENT, CONTACT_CAP_7D, HOLDOUT_SHARE
-from kept.contracts.enums import HardshipSignal, HardshipStatus, HardStop
-from kept.contracts.interfaces import C360Reader, FeatureProvider
+from kept.contracts.enums import HardshipSignal, HardshipSource, HardshipStatus, HardStop
+from kept.contracts.interfaces import C360Reader, ExtractionStore, FeatureProvider
 from kept.contracts.nba import CaseContext
+from kept.hardship.combine import HardshipObservation, combine
 from kept.nba.legacy import legacy_to_action
 from kept.nba.release import in_holdout
 
@@ -65,6 +66,9 @@ def duckdb_case_reader(path: Path | str) -> Callable[[str], CaseRow]:
     return read
 
 
+_RANK = [HardshipStatus.NONE, HardshipStatus.POSSIBLE, HardshipStatus.CONFIRMED]
+
+
 class KeptContextBuilder:
     """Implements kept.contracts.interfaces.CaseContextBuilder."""
 
@@ -75,11 +79,15 @@ class KeptContextBuilder:
         features: FeatureProvider,
         cases: Callable[[str], CaseRow],
         holdout_salt: str,
+        extractions: ExtractionStore | None = None,
     ) -> None:
+        """extractions: C's text.extractions store. Notes written since the nightly build
+        reach the card through it (the "new note flips hardship" moment)."""
         self._c360 = c360
         self._features = features
         self._cases = cases
         self._salt = holdout_salt
+        self._extractions = extractions
 
     def build(self, case_id: str, now: datetime) -> CaseContext:
         """Unknown case -> KeyError (from the case reader or C360)."""
@@ -87,8 +95,21 @@ class KeptContextBuilder:
         customer = self._c360.customer_for_case(case_id)
         fv = self._features.get_online(case_id)
 
-        stops: set[HardStop] = set()
-        if case.cease_contact_flag or fv.cease_request_flag:
+        # Fresh notes, point in time. A store that can't be read raises: a missed hardship
+        # note must not turn into an aggressive action (the release gate refuses on errors too).
+        notes = [
+            x
+            for x in (self._extractions.for_case(case_id) if self._extractions else [])
+            if x.extracted_at <= now
+        ]
+
+        stops: set[HardStop] = set(customer.hard_stop_flags)
+        # text cease counts only once an agent confirmed it (it failed the F1 gate on precision)
+        if (
+            case.cease_contact_flag
+            or fv.cease_request_flag
+            or any(x.cease_request.value and x.confirmed_by_agent_id for x in notes)
+        ):
             stops.add(HardStop.CEASE)
         if case.insolvency_hold_flag:
             stops.add(HardStop.INSOLVENCY)
@@ -99,8 +120,7 @@ class KeptContextBuilder:
             HardStop.BANKRUPTCY,
             HardStop.DECEASED,
         }:
-            # ponytail: gold only says "some hold", so name it INSOLVENCY until
-            # GoldenCustomer carries hard_stop_flags (proposed for G0)
+            # a hold with no named stop (records built before hard_stop_flags existed)
             stops.add(HardStop.INSOLVENCY)
 
         hardship = customer.hardship_status
@@ -109,6 +129,16 @@ class KeptContextBuilder:
             HardshipSignal.CLEAR,
         ):
             hardship = HardshipStatus.POSSIBLE  # a fresh note protects before the nightly gold rebuild
+        text_status, _ = combine(
+            HardshipObservation(
+                source=HardshipSource.LLM,
+                signal=x.hardship_signal.value,
+                observed_at=x.extracted_at,
+                confirmed_by=x.confirmed_by_agent_id,
+            )
+            for x in notes
+        )
+        hardship = max(hardship, text_status, key=_RANK.index)  # text raises gold, never lowers it
 
         cap = case.contact_cap_7d if case.contact_cap_7d is not None else CONTACT_CAP_7D
         window = {}
