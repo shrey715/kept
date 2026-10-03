@@ -1,10 +1,11 @@
-# Feast repo (Track D). Offline: DuckDB/Parquet written by dbt features models.
+# Feast repo (Track D). Offline: the Parquet export of features.case_features (file store:
+# the duckdb offline store needs ibis, which we don't install).
 # Online: SQLite locally; Redis in production (design §8).
 project: kept
 provider: local
 registry: registry.db
 offline_store:
-  type: duckdb
+  type: file
 online_store:
   type: sqlite
   path: online_store.db
