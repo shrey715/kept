@@ -315,7 +315,8 @@ def parity(args: argparse.Namespace) -> int:
     """Track A: offline features (warehouse) against the online store (Feast). Exit 1 if parity fails."""
     from kept.common.db import connect
     from kept.config import PARITY_MAX_MISMATCH_RATE
-    from kept.features.parity import run_parity
+    from kept.features.parity import _COLUMNS as FEATURES_COLUMNS
+    from kept.features.parity import parity_markdown, run_parity
     from kept.features.store import FeastFeatureProvider
 
     repo = Path(__file__).resolve().parents[2] / "feature_repo"
@@ -326,6 +327,17 @@ def parity(args: argparse.Namespace) -> int:
         )
     finally:
         conn.close()
+    out = EXPORT_DIR / "quality" / "parity_report.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cases = report.n_cells // (len(FEATURES_COLUMNS) - 1)  # the key is not a cell if report.n_cells else 0
+    out.write_text(
+        parity_markdown(
+            report,
+            cases=cases,
+            as_of=str(args.as_of),
+            generated=datetime.now(UTC).isoformat(timespec="minutes"),
+        )
+    )
     worst = ", ".join(f"{f}: {n}" for f, n in report.worst_features[:5]) or "none"
     print(
         f"parity {'PASS' if report.passed else 'FAIL'}: {report.n_mismatched:,} of {report.n_cells:,} cells "
@@ -413,6 +425,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")
             p.add_argument("--seed", type=int, default=7)
+            p.add_argument("--as-of", default="2026-09-28 06:00 UTC", help="shown in the report")
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "extract":
