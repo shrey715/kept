@@ -152,3 +152,40 @@ def test_card_latency_budget(engine) -> None:  # type: ignore[no-untyped-def]
     for _ in range(20):
         eng.recommend("C-118204", NOW)
     assert (time.perf_counter() - start) / 20 < 0.300
+
+
+def test_early_morning_batch_proposes_the_first_slot_of_the_day(engine) -> None:  # type: ignore[no-untyped-def]
+    from zoneinfo import ZoneInfo
+
+    early = datetime(2026, 10, 2, 9, 0, tzinfo=UTC)  # 05:00 Toronto: outside hours right now
+    eng, _ = engine(now=early, features_as_of=early - timedelta(hours=3))
+    p = eng.recommend("C-118204", early).proposal
+    assert p is not None and p.action is Action.CALL  # checked at the slot, not at 05:00
+    assert p.window_start and p.window_start.astimezone(ZoneInfo("America/Toronto")).hour == 7
+
+
+def test_vulnerable_customer_goes_red_and_protective(engine) -> None:  # type: ignore[no-untyped-def]
+    eng, _ = engine(vulnerable=True)
+    card = eng.recommend("C-118204", NOW)
+    assert card.proposal is not None and card.proposal.tier is ReleaseTier.RED
+    assert card.proposal.action in HARDSHIP_ALLOWED_ACTIONS and card.hardship_banner
+
+
+def test_proposals_are_stored_for_the_release_gate(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    ctx = make_ctx()
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+    )
+    store: dict[str, Any] = {}
+    eng = KeptEngine(
+        context=FixedContextBuilder({ctx.case_id: ctx}),
+        features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(PROBS),
+        audit_log=InMemoryAuditLog(),
+        proposals=store,
+    )
+    p = eng.recommend(ctx.case_id, NOW).proposal
+    assert p is not None and store == {p.proposal_id: p}
