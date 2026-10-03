@@ -160,36 +160,83 @@ def test_gate_remembers_the_row_count_between_runs() -> None:
 
 
 # ----------------------------------------------------------------- loading Track C's extractions
-def _extractions_parquet(path: Path, rows: list[tuple[str, str, str]]) -> Path:
-    from kept.text.store import COLUMNS
-
+def _extractions_parquet(
+    path: Path,
+    rows: list[tuple[str, str, str]],
+    *,
+    at: str = "2026-09-25 12:00:00+00",
+    confirmed: str = "null",
+) -> Path:
     conn = duckdb.connect()
     values = ", ".join(f"('{sid}', 'CS-1', '{signal}', 'llm:{tag}')" for sid, signal, tag in rows)
     conn.execute(
-        f"copy (select source_id, case_id, hardship_signal_value, extractor, timestamptz '2026-09-25 12:00:00+00' "
-        f"as extracted_at from (values {values}) t(source_id, case_id, hardship_signal_value, extractor)) "
-        f"to '{path}' (format parquet)"
+        f"copy (select source_id, case_id, hardship_signal_value, extractor, timestamptz '{at}' as extracted_at, "
+        f"{confirmed}::varchar as confirmed_by_agent_id from (values {values}) "
+        f"t(source_id, case_id, hardship_signal_value, extractor)) to '{path}' (format parquet)"
     )
-    assert "extracted_at" in COLUMNS
     return path
 
 
-def test_load_extractions_keeps_the_primary_key_and_newer_files_replace_older(tmp_path: Path) -> None:
+def _row(conn: duckdb.DuckDBPyConnection, source_id: str) -> tuple[object, ...]:
+    return conn.execute(
+        "select hardship_signal_value, extractor, confirmed_by_agent_id from text.extractions where source_id = ?",
+        [source_id],
+    ).fetchone()  # type: ignore[return-value]
+
+
+def test_load_extractions_keeps_the_primary_key_and_a_newer_file_replaces_an_older_row(
+    tmp_path: Path,
+) -> None:
     old = _extractions_parquet(
-        tmp_path / "backfill.parquet", [("N-1", "none", "setfit-old"), ("N-2", "possible", "x")]
+        tmp_path / "backfill.parquet", [("N-1", "none", "setfit"), ("N-2", "possible", "x")]
     )
-    new = _extractions_parquet(tmp_path / "live.parquet", [("N-1", "possible", "llm-new")])
+    new = _extractions_parquet(
+        tmp_path / "live.parquet", [("N-1", "possible", "llm")], at="2026-09-26 12:00:00+00"
+    )
     conn = duckdb.connect()
     assert gold.load_extractions(conn, [old, new]) == 2
-    assert conn.execute(
-        "select hardship_signal_value, extractor from text.extractions where source_id = 'N-1'"
-    ).fetchone() == (
-        "possible",
-        "llm:llm-new",
+    assert _row(conn, "N-1") == ("possible", "llm:llm", None)
+    conn.execute(  # C's live upsert still works: it needs the primary key
+        "insert or replace into text.extractions (source_id, case_id, extractor, extracted_at) "
+        "values ('N-3', 'CS-1', 'llm:x', now())"
     )
-    conn.execute(
-        "insert or replace into text.extractions (source_id, case_id, extractor, extracted_at) values ('N-3', 'CS-1', 'llm:x', now())"
-    )  # C's live upsert still works
+
+
+def test_reloading_the_backfill_cannot_undo_a_live_extraction(tmp_path: Path) -> None:
+    conn = duckdb.connect()
+    live = _extractions_parquet(
+        tmp_path / "live.parquet", [("N-1", "possible", "live")], at="2026-10-03 21:00:00+00"
+    )
+    gold.load_extractions(conn, [live])
+    backfill = _extractions_parquet(
+        tmp_path / "backfill.parquet", [("N-1", "none", "setfit")], at="2026-10-03 20:32:00+00"
+    )
+    gold.load_extractions(conn, [backfill])  # a nightly rebuild loads the same backfill file again
+    assert _row(conn, "N-1") == ("possible", "llm:live", None)
+
+
+def test_an_agent_confirmation_is_not_overwritten_by_an_unconfirmed_row(tmp_path: Path) -> None:
+    conn = duckdb.connect()
+    confirmed = _extractions_parquet(
+        tmp_path / "confirmed.parquet",
+        [("N-1", "possible", "live")],
+        at="2026-10-03 21:00:00+00",
+        confirmed="'AG-7'",
+    )
+    gold.load_extractions(conn, [confirmed])
+    later_unconfirmed = _extractions_parquet(
+        tmp_path / "later.parquet", [("N-1", "none", "setfit")], at="2026-10-04 08:00:00+00"
+    )
+    gold.load_extractions(conn, [later_unconfirmed])
+    assert _row(conn, "N-1") == ("possible", "llm:live", "AG-7")  # newer, but it would drop the confirmation
+    later_confirmed = _extractions_parquet(
+        tmp_path / "later_confirmed.parquet",
+        [("N-1", "none", "edited")],
+        at="2026-10-04 09:00:00+00",
+        confirmed="'AG-8'",
+    )
+    gold.load_extractions(conn, [later_confirmed])  # a newer confirmation does replace it
+    assert _row(conn, "N-1") == ("none", "llm:edited", "AG-8")
 
 
 def test_find_extractions_lists_both_folder_names_oldest_first(tmp_path: Path) -> None:

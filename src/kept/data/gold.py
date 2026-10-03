@@ -140,16 +140,26 @@ def find_extractions(directory: Path) -> list[Path]:
 
 
 def load_extractions(conn: duckdb.DuckDBPyConnection, files: Iterable[Path]) -> int:
-    """Load extraction parquet files into text.extractions, oldest first, so a re-extraction of the same
-    source_id replaces the older row. The table keeps C's DDL (primary key on source_id): the live
-    extractor upserts into it. Returns the row count."""
-    from kept.text.store import DDL
+    """Load extraction parquet files into text.extractions, oldest file first. The table keeps C's DDL
+    (primary key on source_id): the live extractor upserts into it. Rows already there are never
+    overwritten by something older: an incoming row replaces an existing one only if it is newer
+    (`extracted_at`) and does not drop an agent's confirmation. So a rebuild that reloads the backfill
+    cannot undo a live extraction or an agent confirm. Returns the row count."""
+    from kept.text.store import COLUMNS, DDL
 
     conn.execute("create schema if not exists text")
     conn.execute(DDL)
     for path in files:
+        present = {
+            r[0] for r in conn.execute("describe select * from read_parquet(?)", [str(path)]).fetchall()
+        }
+        updates = ", ".join(f"{c} = excluded.{c}" for c in COLUMNS if c != "source_id" and c in present)
         conn.execute(
-            "insert or replace into text.extractions by name select * from read_parquet(?)", [str(path)]
+            "insert into text.extractions by name select * from read_parquet(?) "
+            f"on conflict (source_id) do update set {updates} "
+            "where excluded.extracted_at > extractions.extracted_at "
+            "and (extractions.confirmed_by_agent_id is null or excluded.confirmed_by_agent_id is not null)",
+            [str(path)],
         )
     row = conn.execute("select count(*) from text.extractions").fetchone()
     assert row is not None
