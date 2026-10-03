@@ -67,6 +67,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
+- 3 Oct: after the Phase 1 merge (NEXT_STEPS §4): README run steps; paid_14d proposal for A; G0 PR #10 reviewed (dbt pre-hook bug blocking, ExtractionStore needs for_case); extraction confirm/edit panel and programme chips on the case card (demo-backed until G0 merges).
 - 3 Oct: Radix redesign, product flows, two-step Red release, 3D landing; all pushed to track-d / PR #2.
 - 3 Oct: Phases 3-5 parallel tasks done against fakes; Next.js frontend; demo server.
 - 3 Oct: dataset downloaded and laid out under data/; Phase 2 parallel tasks done; continuing into later phases against fakes.
