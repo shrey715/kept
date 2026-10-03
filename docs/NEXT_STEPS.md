@@ -32,7 +32,9 @@ no protected group treated materially differently (fairness ratios 0.93–1.00 o
 - **Every change gets its own short branch off `main`, named by purpose:** `docs/demo-script`,
   `docs/deck`, `fix/<thing>`, `bench/answers`. PR to `main`, CI green, **merge commit** (no squash or
   rebase), the owner merges. Pull `main` before you branch.
-- **Code freeze.** Only demo blockers, docs and deliverables. No new features, no refactors.
+- **Keep building, keep `main` demo-ready.** New features and visual work (data viz, a better card) are welcome
+  until the deadline. Each is a small PR with tests and lint green; nothing may break `kept nightly`, `kept serve`
+  or the demo script.
 - **After 19:00 nothing touches the Ask** (`kept/ask/**`, its prompts, the allow-list): the extra
   questions are answered by the system as it is (TEAM_PLAN Q13). Don't edit answers by hand.
 - **Nothing is pushed after 21:00.**
