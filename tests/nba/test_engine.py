@@ -254,3 +254,31 @@ def test_programmes_lookup_failure_keeps_the_card(make_ctx) -> None:  # type: ig
 
     card = _with_programs(make_ctx, boom)
     assert card.proposal is not None and card.hardship_banner and "Eligible" not in card.hardship_banner
+
+
+@pytest.mark.parametrize(
+    ("hardship", "want"),
+    [(HardshipStatus.NONE, Action.CALL), (HardshipStatus.POSSIBLE, Action.HARDSHIP_REVIEW)],
+)
+def test_model_without_promise_plan_or_review_arms(make_ctx, hardship, want) -> None:  # type: ignore[no-untyped-def]
+    """The real model only has the randomised arms: promise, plan and hardship review are calls and
+    take the call's P(paid); hardship review only when hardship protects the case."""
+    ctx = make_ctx(hardship_status=hardship)
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+    )
+    randomised = {a: PROBS[a] for a in ("wait", "email", "push", "sms_payment_link", "call")}
+    eng = KeptEngine(
+        context=FixedContextBuilder({ctx.case_id: ctx}),
+        features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(randomised),
+        audit_log=InMemoryAuditLog(),
+    )
+    card = eng.recommend(ctx.case_id, NOW)
+    assert card.no_action_reason is None and card.proposal is not None
+    assert card.proposal.action is want
+    shown = {p.action for p in card.probabilities}
+    assert (Action.HARDSHIP_REVIEW in shown) is (hardship is not HardshipStatus.NONE)

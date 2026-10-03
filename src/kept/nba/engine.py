@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -185,7 +185,8 @@ class KeptEngine:
         fv = self._features.get_online(ctx.case_id)
         X = _model_frame(fv)
         proba = self._scorer.predict_proba(X).iloc[0]  # stage 4
-        p_paid = {a: float(proba[a.value]) for a in allowed}
+        model_of = _scored_as(proba.index, protective=_protective_status(ctx) is not HardshipStatus.NONE)
+        p_paid = {a: float(proba[model_of[a].value]) for a in allowed if a in model_of}
 
         sizing = _sizing(ctx)  # stage 5
         if sizing is None:
@@ -205,7 +206,7 @@ class KeptEngine:
         explain = getattr(self._scorer, "contributions", None)
         if explain is not None:
             values = fv.model_dump()
-            reasons = top_reasons(explain(X, best.action), values)
+            reasons = top_reasons(explain(X, model_of[best.action]), values)
         tier = assign_tier(
             action=best.action,
             hard_stopped=False,
@@ -326,6 +327,26 @@ class KeptEngine:
 
 
 # ------------------------------------------------------------------ helpers
+_CALL_CONVERSATIONS = (Action.PROMISE_REQUEST, Action.PAYMENT_PLAN, Action.HARDSHIP_REVIEW)
+
+
+def _scored_as(fitted: Iterable[str], *, protective: bool) -> dict[Action, Action]:
+    """Which model scores each action. The random test cells never assigned promise, plan or
+    hardship-review conversations, so the trained model has no arm for them; they are calls,
+    so they take the call model's P(paid). Hardship review only when hardship or vulnerability
+    protects the case: with the call's P(paid) and a lower burden it would otherwise beat every call.
+    Actions with no model drop out of the ranking.
+    ponytail: borrowed call probability; a P(kept | promise) model (ranking's p_kept_given_promise)
+    is the upgrade for promise and plan."""
+    names = set(fitted)
+    out = {a: a for a in Action if a.value in names}
+    if Action.CALL in out:
+        for a in _CALL_CONVERSATIONS:
+            if a not in out and (protective or a is not Action.HARDSHIP_REVIEW):
+                out[a] = Action.CALL
+    return out
+
+
 def _model_frame(fv: FeatureVector) -> pd.DataFrame:
     row = fv.model_dump()
     return pd.DataFrame([{n: row.get(n) for n in model_inputs()}])

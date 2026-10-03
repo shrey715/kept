@@ -96,11 +96,36 @@ cd web && pnpm lint && npx tsc --noEmit
 - **Feast offline store is `file` (D):** the DuckDB offline store needs `ibis`; the file store reads
   the same Parquet export.
 
+- **Text extraction runs on a local model (C):** `gemma3:12b` through Ollama on the team's GPU,
+  not a hosted API: no rate limits, no cost, and note text never leaves the machine. Every value
+  needs a verbatim quote from the note, or it is dropped.
+- **Cease from text needs an agent's confirmation (C):** cease failed the F1 gate on precision
+  (held-out 0.50 notes, 0.20 calls; 1–2 true cases each), so an extracted cease is shown as
+  "possible cease: confirm" and only becomes a hard stop once an agent confirms it
+  (`/extractions/{id}/confirm`). The other six text features passed the gate.
+- **SetFit backfills hardship only (C):** the 785,594 historical notes and calls get a hardship
+  signal from SetFit trained on 1,604 LLM labels (held-out recall 0.98 notes, 0.99 calls);
+  promises, disputes and cease come from structured tables for history, and from the LLM for new notes.
+- **French-aware redaction (C):** 14% of notes are French, so Presidio runs a French spaCy model on
+  them; card numbers and DOBs are caught even when the synthetic data mangles them. A scan of all
+  785,594 redacted texts finds no leftover cards, phones, emails, SINs, postal codes or DOBs.
+- **Splink trained on a 20% sample (A, run by C):** EM over all 3.84M keys didn't finish or fit in
+  RAM; training on a 1-in-5 DOB-hash sample and scoring every key gives 1,052,300 golden IDs.
+- **Cash-flow hardship from deposit data (C):** late payroll, a 20% pay drop or new EI deposits
+  add a possible-hardship observation to gold (`hardship.cashflow_observations`).
+
 ## AI tools we used, and for what
 
 - **Claude Code (D):** pair-programming the Track D code and tests, the web app, and the
   dataset checks behind the legacy-code and random-assignment answers. Every change went through
   the tests and a person's review before merging.
+
+- **Claude Code (C):** pair-programming the Track C code, tests and scripts (redaction,
+  extraction, backfill, cash-flow rule), running and monitoring the heavy jobs on the GPU machine,
+  and keeping the team plan, gates and PRs in step. Every change went through tests and a person's review.
+- **gemma3 12B (local, Ollama) (C):** extracts the text features from redacted notes, and labelled
+  1,604 notes to train SetFit. Tuned and gated on the release's public labels (30% held out).
+- **SetFit (`BAAI/bge-small-en-v1.5`) (C):** the fast classifier that backfills hardship for all history.
 
 ## Layout
 

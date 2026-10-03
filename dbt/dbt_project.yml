@@ -23,12 +23,14 @@ models:
       +contract:
         enforced: true   # gold models are real: dbt fails a build whose columns or types drift from schema.yml
     features:
-      +schema: features
+      # --vars '{training_spine: true}': one as_of per decision, written to features_train (serving untouched)
+      +schema: "{{ 'features_train' if var('training_spine', false) else 'features' }}"
       +materialized: table
       +pre-hook: "set TimeZone = 'UTC'"  # source timestamps are naive UTC (K7)
     text:
       +schema: text
       +materialized: table
+      +pre-hook: "set TimeZone = 'UTC'"  # naive UTC note times must not shift by the build machine's zone
 
 vars:
   # Track D features: as_of is naive UTC. Nightly = one as_of; training adds features_start.

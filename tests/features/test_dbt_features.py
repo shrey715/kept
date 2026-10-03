@@ -83,10 +83,28 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "link_payment_flag": rng.random() < 0.3 if channel == "sms" else None,
             }
         )
+    notes = []
+    for i in range(1500):  # C's text_signals: one row per note
+        t = ts()
+        notes.append(
+            {
+                "source_id": f"N-{i}",
+                "case_id": f"CS-{rng.randrange(600)}",
+                "written_at": t,
+                "hardship_signal": rng.choice(["none", "none", "possible", "clear"]),
+                "promise_intent": rng.random() < 0.3,
+                "promised_date": (t + timedelta(days=rng.randrange(1, 20))).date(),
+                "promised_amount": round(rng.uniform(20, 500), 2),
+                "dispute_flag": rng.random() < 0.1,
+                "cease_request_flag": rng.random() < 0.05,
+                "third_party_present_flag": rng.random() < 0.2,
+            }
+        )
     return {
         "collections_cases": pd.DataFrame(cases),
         "promises_to_pay": pd.DataFrame(promises),
         "contact_history": pd.DataFrame(contacts),
+        "text_signals": pd.DataFrame(notes),
     }
 
 
@@ -100,9 +118,11 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
     silver = _fixture()
     with duckdb.connect(str(db)) as c:
         c.execute("create schema silver")
+        c.execute("create schema text")
         for name, df in silver.items():
             c.register("df", df)
-            c.execute(f"create table silver.{name} as select * from df")
+            schema = "text" if name == "text_signals" else "silver"  # C's model lives in text
+            c.execute(f"create table {schema}.{name} as select * from df")
             c.unregister("df")
         # A's real crosswalk needs the match step's output; the features only join these columns
         c.execute("create schema gold")
@@ -118,6 +138,8 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
             "build",
             "--select",  # the feature models over the fixture silver, not A's silver models
             "path:models/features",
+            "--exclude",  # needs the payment tables; checked on real silver
+            "training_rows",
             "--project-dir",
             str(DBT),
             "--profiles-dir",
@@ -203,3 +225,34 @@ def _same(a: object, b: float | None) -> bool:
     if b is None:
         return a is None or pd.isna(a)  # type: ignore[arg-type]
     return a is not None and abs(float(a) - b) < 1e-9  # type: ignore[arg-type]
+
+
+def test_text_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.DataFrame]]) -> None:
+    """Strongest hardship in 90 days, latest promise in 30 days, any dispute in 90 days,
+    any confirmed cease ever, latest note's third party; no notes -> missing."""
+    out, silver = built
+    notes = silver["text_signals"]
+    rank = {"none": 0, "possible": 1, "clear": 2}
+    checked = 0
+    for row in out.itertuples():
+        as_of = pd.Timestamp(row.as_of)
+        n = notes[(notes.case_id == row.case_id) & (notes.written_at <= as_of)].sort_values(
+            ["written_at", "source_id"]
+        )
+        if n.empty:
+            assert pd.isna(row.hardship_signal) and pd.isna(row.third_party_present_flag)
+            continue
+        recent = n[n.written_at > as_of - timedelta(days=90)]
+        want = max((rank[x] for x in recent.hardship_signal), default=None)
+        got = None if pd.isna(row.hardship_signal) else rank[row.hardship_signal]
+        assert got == want, row.case_id
+        assert bool(row.dispute_flag) == bool(recent.dispute_flag.any())
+        assert bool(row.cease_request_flag) == bool(n.cease_request_flag.any())
+        assert bool(row.third_party_present_flag) == bool(n.iloc[-1].third_party_present_flag)
+        p = n[n.promise_intent & (n.written_at > as_of - timedelta(days=30))]
+        if p.empty:
+            assert pd.isna(row.promised_amount)
+        else:
+            assert float(row.promised_amount) == pytest.approx(p.iloc[-1].promised_amount)
+        checked += 1
+    assert checked > 30
