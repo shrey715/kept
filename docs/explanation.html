@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kept, explained</title>
+<meta name="description" content="How Kept works, from the person using it to the final action: every layer, how it is built, what it does and why it helps.">
+<style>
+:root {
+  --bg: #fbfaf7; --panel: #ffffff; --ink: #1d1d1f; --muted: #5f6368; --line: #e4e1da; --soft: #f3f1ec;
+  --accent: #c8102e; --accent-soft: #fde8eb; --green: #1a7f4b; --green-soft: #e3f4ea; --amber: #a86400;
+  --amber-soft: #fdf1dc; --red: #b3261e; --red-soft: #fce8e6; --blue: #1f5fa8; --blue-soft: #e5eefa;
+  --grey-soft: #eceae5; --code: #f1efe9; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --panel: #1c1c1f; --ink: #ececec; --muted: #a5a7ab; --line: #303035; --soft: #232327;
+    --accent: #ff5a6e; --accent-soft: #3a1d22; --green: #5fd39a; --green-soft: #183026; --amber: #f2b45a;
+    --amber-soft: #352a17; --red: #ff8a80; --red-soft: #3a1d1b; --blue: #8ab8ff; --blue-soft: #1a2638;
+    --grey-soft: #2a2a2e; --code: #26262b; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141416; --panel: #1c1c1f; --ink: #ececec; --muted: #a5a7ab; --line: #303035; --soft: #232327;
+  --accent: #ff5a6e; --accent-soft: #3a1d22; --green: #5fd39a; --green-soft: #183026; --amber: #f2b45a;
+  --amber-soft: #352a17; --red: #ff8a80; --red-soft: #3a1d1b; --blue: #8ab8ff; --blue-soft: #1a2638;
+  --grey-soft: #2a2a2e; --code: #26262b; --shadow: none;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header.top { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 16px; height: 56px; }
+.brand { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.brand svg { width: 22px; height: 22px; }
+nav.toc { display: flex; gap: 4px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+nav.toc a { color: var(--muted); text-decoration: none; font-size: 14px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; }
+nav.toc a:hover { background: var(--soft); color: var(--ink); }
+#theme { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; height: 32px; width: 32px; cursor: pointer; flex: none; display: grid; place-items: center; margin-left: auto; }
+nav.toc + #theme { margin-left: 0; }
+#theme svg { width: 16px; height: 16px; }
+main a { color: var(--accent); }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.05; letter-spacing: -0.02em; margin: 48px 0 12px; }
+h2 { font-size: 28px; letter-spacing: -0.01em; margin: 64px 0 8px; scroll-margin-top: 72px; }
+h3 { font-size: 18px; margin: 24px 0 8px; }
+p { margin: 8px 0; }
+.lede { font-size: 19px; color: var(--muted); max-width: 760px; }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: var(--accent); text-transform: uppercase; }
+.muted { color: var(--muted); }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .88em; background: var(--code); padding: 1px 5px; border-radius: 5px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); }
+.grid { display: grid; gap: 12px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.stat b { display: block; font-size: 26px; letter-spacing: -0.01em; }
+.stat span { color: var(--muted); font-size: 14px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--soft); color: var(--muted); }
+.pill.green { background: var(--green-soft); color: var(--green); }
+.pill.amber { background: var(--amber-soft); color: var(--amber); }
+.pill.red { background: var(--red-soft); color: var(--red); }
+.pill.blue { background: var(--blue-soft); color: var(--blue); }
+.pill.grey { background: var(--grey-soft); color: var(--muted); }
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 10px 10px 0; margin: 12px 0; }
+.callout.blue { border-color: var(--blue); background: var(--blue-soft); }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.tablewrap { overflow-x: auto; }
+ul, ol { padding-left: 22px; margin: 8px 0; }
+li { margin: 4px 0; }
+
+/* users */
+.user { display: flex; gap: 12px; align-items: flex-start; }
+.avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--soft); }
+.user h4 { margin: 0; font-size: 16px; }
+.user p { margin: 2px 0 0; font-size: 14.5px; color: var(--muted); }
+
+/* journeys */
+.seg { display: inline-flex; background: var(--soft); border-radius: 10px; padding: 4px; gap: 4px; flex-wrap: wrap; }
+.seg button, .tabs button { font: inherit; border: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 14.5px; }
+.seg button[aria-selected="true"], .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); font-weight: 600; }
+.seg button:focus-visible, .tabs button:focus-visible, summary:focus-visible, a:focus-visible, #theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ol.flow { list-style: none; padding: 0; margin: 20px 0 0; position: relative; }
+ol.flow li { position: relative; padding: 0 0 22px 56px; margin: 0; }
+ol.flow li::before { content: ""; position: absolute; left: 17px; top: 36px; bottom: 0; width: 2px; background: var(--line); }
+ol.flow li:last-child::before { display: none; }
+.num { position: absolute; left: 0; top: 0; width: 36px; height: 36px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+ol.flow .step { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; box-shadow: var(--shadow); }
+ol.flow .step h4 { margin: 0 0 4px; font-size: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+ol.flow .step p { margin: 4px 0; font-size: 15px; }
+.golayer { font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.golayer:hover { text-decoration: underline; }
+.quote { font-family: Georgia, "Times New Roman", serif; font-style: italic; background: var(--soft); border-radius: 8px; padding: 8px 12px; margin: 6px 0; }
+.out { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 6px; font-size: 14.5px; background: var(--bg); }
+
+/* layers */
+.layermap { display: grid; gap: 8px; margin: 20px 0; }
+.layermap a { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.layermap a:hover { border-color: var(--accent); }
+.layermap .n { font-weight: 700; color: var(--accent); width: 22px; flex: none; }
+.layermap .t { font-weight: 600; }
+.layermap .d { color: var(--muted); font-size: 14px; margin-left: auto; text-align: right; }
+.arrow { text-align: center; color: var(--muted); font-size: 14px; line-height: 1; }
+details.layer { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; margin: 12px 0; box-shadow: var(--shadow); scroll-margin-top: 72px; }
+details.layer > summary { list-style: none; cursor: pointer; padding: 16px 20px; display: flex; gap: 14px; align-items: center; }
+details.layer > summary::-webkit-details-marker { display: none; }
+details.layer > summary .n { flex: none; width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; }
+details.layer > summary .title { font-weight: 700; font-size: 18px; }
+details.layer > summary .sub { color: var(--muted); font-size: 14.5px; }
+details.layer > summary .chev { margin-left: auto; transition: transform .2s; color: var(--muted); flex: none; }
+details.layer[open] > summary .chev { transform: rotate(180deg); }
+details.layer[open] > summary { border-bottom: 1px solid var(--line); }
+.layerbody { padding: 16px 20px 20px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; background: var(--soft); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
+.panel[hidden] { display: none; }
+.qa dt { font-weight: 600; margin-top: 14px; }
+.qa dd { margin: 4px 0 0; color: var(--ink); }
+.pipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+.pipe span { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 14px; }
+.pipe i { color: var(--muted); font-style: normal; }
+.tiers { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin: 10px 0; }
+.tier { border-radius: 10px; padding: 10px 12px; font-size: 14.5px; }
+.tier b { display: block; }
+.tier.green { background: var(--green-soft); } .tier.amber { background: var(--amber-soft); } .tier.red { background: var(--red-soft); } .tier.grey { background: var(--grey-soft); }
+dl.gloss { display: grid; grid-template-columns: minmax(120px, 200px) 1fr; gap: 6px 18px; }
+dl.gloss dt { font-weight: 700; }
+dl.gloss dd { margin: 0; color: var(--ink); }
+@media (max-width: 640px) {
+  nav.toc { display: none; }
+  nav.toc + #theme { margin-left: auto; }
+  dl.gloss { grid-template-columns: 1fr; }
+  dl.gloss dd { margin-bottom: 8px; }
+  .layermap .d { display: none; }
+  ol.flow li { padding-left: 48px; }
+}
+footer { margin: 72px 0 40px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 16px; }
+@media print {
+  header.top { position: static; }
+  details.layer { break-inside: avoid; }
+  .panel[hidden] { display: block; }
+  .tabs { display: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#c8102e" d="M12 2l1.6 3.6 2.6-1.2-.6 4.2 3.2-1.4-1 2.8 3.2 1.2-3.6 2.6.8 1.6-4.4-.6.2 3.4-2-1.4V21h-0.8v-4.2l-2 1.4.2-3.4-4.4.6.8-1.6L2 11.2l3.2-1.2-1-2.8 3.2 1.4-.6-4.2 2.6 1.2z"/></svg>
+      Kept, explained
+    </div>
+    <nav class="toc" aria-label="Sections">
+      <a href="#problem">The problem</a>
+      <a href="#users">Who uses it</a>
+      <a href="#journeys">The journey</a>
+      <a href="#layers">The layers</a>
+      <a href="#hitl">Human in the loop</a>
+      <a href="#glossary">Glossary</a>
+    </nav>
+    <button id="theme" aria-label="Switch light or dark mode" title="Light / dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============================================================ intro -->
+<p class="kicker" style="margin-top:40px">Team Sharpe Shooters · CIBC Collections Hackathon</p>
+<h1>Kept: a guarded next best action for promises customers can keep</h1>
+<p class="lede">This page explains the whole system in plain words. It starts with the people who use Kept, follows what they type or click all the way to the final result, and then opens up every layer it passes through: what it does, how it is built, why it helps, the numbers that prove it, and the questions a judge might ask.</p>
+
+<div class="grid g4" style="margin-top:24px">
+  <div class="card stat"><b>1,052,300</b><span>real customers found in 3.84M source records (one golden ID each)</span></div>
+  <div class="card stat"><b>96,000</b><span>open collections cases get a recommended action every night</span></div>
+  <div class="card stat"><b>785,594</b><span>notes and call transcripts read, with personal details removed first (0 leaks found)</span></div>
+  <div class="card stat"><b>0</b><span>actions sent by the model on its own: a person releases every one</span></div>
+</div>
+
+<!-- ============================================================ problem -->
+<h2 id="problem">The problem, in one minute</h2>
+<div class="grid g2">
+  <div class="card">
+    <h3 style="margin-top:0">What collections does</h3>
+    <p>When a customer misses a card or loan payment, the collections team contacts them, agrees a plan and recovers what is owed. Done well, it helps the customer get back on track. Done badly, it harasses someone who is already struggling and still doesn't get paid.</p>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Why it is hard today</h3>
+    <ul>
+      <li><b>One person, many records.</b> The same customer exists in CRM, cards, loans, deposits and the collections system, each with its own ID and slightly different details.</li>
+      <li><b>The important facts are in free text.</b> "Lost shifts, can pay 50 on the 15th" sits in an agent note or a call recording that no system reads.</li>
+      <li><b>Generic treatment.</b> The same reminder goes out at the same time to everyone, often due <i>before</i> payday, so promises are made that can't be kept.</li>
+    </ul>
+  </div>
+</div>
+<div class="callout"><b>Our answer.</b> Kept (1) unifies the data into one trusted record per customer, (2) lets anyone ask the data questions in plain English, and (3) recommends the next best action for each case: safety rules first, then a model that predicts who will actually pay <i>because</i> we contacted them, then a promise sized to the customer's payday and spare cash. A person reviews and releases every action.</div>
+
+<p class="muted">How this maps to the challenge brief's three layers: <b>Layer 1</b> (Data Product Factory) = <a href="#L1">layer 1</a> below. <b>Layer 2</b> (Insight and NLP) = <a href="#L6">the Collections Ask</a>. <b>Layer 3</b> (AI Decisioning) = <a href="#L2">text</a>, <a href="#L3">features</a>, <a href="#L4">decisioning</a> and <a href="#L5">human release</a>. Governance runs through all of them (<a href="#L7">layer 7</a>).</p>
+
+<!-- ============================================================ users -->
+<h2 id="users">Who uses Kept</h2>
+<p class="muted">Seven roles, each sees only what their job needs (role-based access). Names are the demo personas.</p>
+<div class="grid g2" style="margin-top:12px">
+  <div class="card user"><div class="avatar" style="background:var(--accent-soft);color:var(--accent)">AK</div><div><h4>Collections agent <span class="pill">Aisha</span></h4><p>Works a queue of cases. Opens a case, sees the recommended action and why, talks to the customer, types a note, and releases everyday actions (calls, promises, plans) on her own cases.</p></div></div>
+  <div class="card user"><div class="avatar" style="background:var(--red-soft);color:var(--red)">MS</div><div><h4>Hardship specialist <span class="pill">Maya</span></h4><p>Handles customers in financial difficulty or who are vulnerable. Approves the sensitive (Red) actions first, such as starting a hardship review.</p></div></div>
+  <div class="card user"><div class="avatar" style="background:var(--amber-soft);color:var(--amber)">TL</div><div><h4>Team lead <span class="pill">Tom</span></h4><p>Releases the low-risk (Green) reminders in a daily batch, and acts as the second person on Red actions.</p></div></div>
+  <div class="card user"><div class="avatar" style="background:var(--blue-soft);color:var(--blue)">EP</div><div><h4>Compliance <span class="pill">Elena</span></h4><p>Reads the full audit trail, can be the second approver, and is the only role that can see protected attributes, and only to check fairness.</p></div></div>
+  <div class="card user"><div class="avatar" style="background:var(--green-soft);color:var(--green)">NK</div><div><h4>Analyst <span class="pill">Noah</span></h4><p>Asks questions of the data in plain English ("what was the promise-kept rate in August?") and gets an answer with the SQL behind it.</p></div></div>
+  <div class="card user"><div class="avatar">SA</div><div><h4>Data steward <span class="pill">Sara</span></h4><p>Reviews customer matches the system isn't sure about ("are these two records the same person?") and approves or splits them.</p></div></div>
+</div>
+<div class="callout blue" style="margin-top:12px"><b>And the customer.</b> They never use the app, but everything is built around them: no contact outside their calling hours, no more than the weekly contact limit, a promise they can afford, and a hardship review instead of pressure when life goes wrong.</div>
+
+<!-- ============================================================ journeys -->
+<h2 id="journeys">The journey: from what the user does to the final result</h2>
+<p class="muted">Pick a journey. Each step names the layer that does the work; click the link to open that layer below.</p>
+<div class="seg" role="tablist" aria-label="Journeys" style="margin-top:12px">
+  <button role="tab" aria-selected="true" aria-controls="j-agent" id="jt-agent">Agent: a note changes the action</button>
+  <button role="tab" aria-selected="false" aria-controls="j-analyst" id="jt-analyst" tabindex="-1">Analyst: asks a question</button>
+  <button role="tab" aria-selected="false" aria-controls="j-night" id="jt-night" tabindex="-1">Overnight: how the data gets ready</button>
+</div>
+
+<div id="j-agent" role="tabpanel" aria-labelledby="jt-agent" class="jpanel">
+<ol class="flow">
+  <li><span class="num">1</span><div class="step">
+    <h4>Aisha opens a case from her queue <a class="golayer" href="#L5">Layer 5 →</a></h4>
+    <p>Case <code>CS-2026-820205</code>. The card already shows last night's recommendation: <b>"Send an app reminder"</b>, a <span class="pill green">Green</span> action, with three plain-English reasons, the calling window in the customer's own time zone, and every safety check ticked.</p>
+  </div></li>
+  <li><span class="num">2</span><div class="step">
+    <h4>On the call the customer explains, and Aisha types a note</h4>
+    <div class="quote">"spoke w/ cust, lost shifts at the plant since Aug, can only pay 50 on the 15th"</div>
+    <p>This is the input. Nothing in the old system would ever read it.</p>
+  </div></li>
+  <li><span class="num">3</span><div class="step">
+    <h4>Personal details are removed first <a class="golayer" href="#L2">Layer 2 →</a></h4>
+    <p>The redactor (Presidio, English and French) replaces names, phone numbers, card numbers, SINs, dates of birth and addresses with tags like <code>&lt;PERSON&gt;</code>. Only redacted text can be passed to any AI model: the code refuses anything else.</p>
+  </div></li>
+  <li><span class="num">4</span><div class="step">
+    <h4>A local AI model reads the note, about 5 seconds <a class="golayer" href="#L2">Layer 2 →</a></h4>
+    <p>Gemma 3 (12B), running on our own GPU (no data leaves the machine), returns structured facts, and <b>must quote the exact words</b> behind each one:</p>
+    <div class="out">hardship: <b>possible</b> ← "lost shifts at the plant since Aug" · promise: <b>$50</b> on the <b>15th</b> ← "can only pay 50 on the 15th"</div>
+  </div></li>
+  <li><span class="num">5</span><div class="step">
+    <h4>The customer's hardship status updates <a class="golayer" href="#L2">Layer 2 →</a></h4>
+    <p>The golden record goes from "none" to <b>possible hardship</b>. Only a person can make it "confirmed" or clear it.</p>
+  </div></li>
+  <li><span class="num">6</span><div class="step">
+    <h4>The decision engine re-runs, rules first <a class="golayer" href="#L4">Layer 4 →</a></h4>
+    <div class="pipe"><span>Hard stops</span><i>→</i><span>Permissions</span><i>→</i><span>Hardship override</span><i>→</i><span>Uplift model</span><i>→</i><span>Promise sizing</span><i>→</i><span>Rank</span><i>→</i><span>Reasons + tier</span></div>
+    <p>Because hardship is now possible, only protective actions are allowed. The card flips to <b>"Call to start a hardship review"</b>, a <span class="pill red">Red</span> action, with a banner naming the hardship programmes the customer is eligible for.</p>
+  </div></li>
+  <li><span class="num">7</span><div class="step">
+    <h4>Two people release it <a class="golayer" href="#hitl">Human in the loop →</a></h4>
+    <p>Maya (hardship specialist) approves first. Tom (team lead) approves second. It must be a different person. At release, every safety check runs <b>again</b> on fresh data: if the customer asked us to stop in the meantime, the release is blocked.</p>
+  </div></li>
+  <li><span class="num">8</span><div class="step">
+    <h4>Final output: a released, explained, audited action</h4>
+    <p>The audit log holds the recommendation, the hardship change with its quote, both approvals, and who did what and when. At wrap-up Aisha confirms or corrects the extracted facts; her confirmation is what lets a "cease contact" request become a hard stop.</p>
+  </div></li>
+</ol>
+</div>
+
+<div id="j-analyst" role="tabpanel" aria-labelledby="jt-analyst" class="jpanel" hidden>
+<ol class="flow">
+  <li><span class="num">1</span><div class="step">
+    <h4>Noah types a question <a class="golayer" href="#L6">Layer 6 →</a></h4>
+    <div class="quote">"What was the promise-kept rate for promises due in August 2026?"</div>
+  </div></li>
+  <li><span class="num">2</span><div class="step">
+    <h4>The question is redacted, then checked for scope</h4>
+    <p>Fixed rules run first, before any AI: is it asking for a protected attribute (gender, citizenship...), bulk personal data, a write action, or data we don't have? Then a small AI classifier double-checks. Out of scope means a <b>refusal with the reason</b> and, where possible, a safer question to try.</p>
+  </div></li>
+  <li><span class="num">3</span><div class="step">
+    <h4>A router works out what kind of question it is</h4>
+    <p>Three kinds: a <b>certified metric</b> (one of 15 reviewed SQL definitions), a <b>lookup</b> (anything else about the data), or a <b>policy</b> question ("how many call attempts are allowed a week?"). What it understood is shown back as editable chips.</p>
+  </div></li>
+  <li><span class="num">4</span><div class="step">
+    <h4>SQL is built, guarded, and run</h4>
+    <p>Here it is a certified metric, so reviewed SQL is used (the AI doesn't write it). For lookups the AI writes <b>three</b> SQL drafts and we keep the answer at least two agree on. Every query goes through a guard: SELECT only, 16 approved tables, no personal-data columns, a row limit, a 10-second timeout.</p>
+  </div></li>
+  <li><span class="num">5</span><div class="step">
+    <h4>Final output: an answer with its working</h4>
+    <div class="out"><b>35.1%</b> of promises due in August 2026 were kept. · <span class="muted">SQL shown · tables used · data as of the last refresh</span></div>
+    <p>Every number in the sentence is checked against the result rows (no invented numbers). Groups smaller than 10 people are hidden from analysts.</p>
+  </div></li>
+  <li><span class="num">✕</span><div class="step">
+    <h4>A question it must refuse</h4>
+    <div class="quote">"List the gender and marital status of customers who broke a promise last month."</div>
+    <div class="out">Refused: <b>protected ground</b>. Gender and marital status are excluded from collections analytics.</div>
+  </div></li>
+</ol>
+</div>
+
+<div id="j-night" role="tabpanel" aria-labelledby="jt-night" class="jpanel" hidden>
+<p class="muted" style="margin-top:16px">One command, <code>kept nightly</code>, runs every step in about 7 minutes on our machine (more the first time).</p>
+<ol class="flow">
+  <li><span class="num">1</span><div class="step"><h4>Land the raw files <a class="golayer" href="#L0">Layer 0 →</a></h4><p>31 source tables are loaded exactly as delivered (every column as text), so nothing is lost or silently changed.</p></div></li>
+  <li><span class="num">2</span><div class="step"><h4>Clean into silver <a class="golayer" href="#L1">Layer 1 →</a></h4><p>Names, dates, phones, postal codes and provinces are cleaned by tested rules. Anything unreadable is left empty and listed in a quarantine table, never guessed.</p></div></li>
+  <li><span class="num">3</span><div class="step"><h4>Match records into people <a class="golayer" href="#L1">Layer 1 →</a></h4><p>Exact keys first, then a probabilistic matcher (Splink). 3,840,513 source keys become 1,052,300 golden customer IDs.</p></div></li>
+  <li><span class="num">4</span><div class="step"><h4>Build the golden C360 and run the quality gate <a class="golayer" href="#L1">Layer 1 →</a></h4><p>One row per customer with lineage. The data contract's rules are checked; if a rule fails, nothing downstream is published.</p></div></li>
+  <li><span class="num">5</span><div class="step"><h4>Read new notes and calls <a class="golayer" href="#L2">Layer 2 →</a></h4><p>New text since the last run goes through redaction and extraction; hardship and cash-flow signals update the golden record.</p></div></li>
+  <li><span class="num">6</span><div class="step"><h4>Compute features and check parity <a class="golayer" href="#L3">Layer 3 →</a></h4><p>26 features per case land in the feature store; a parity test proves the live values equal the training values.</p></div></li>
+  <li><span class="num">7</span><div class="step"><h4>Score every open case <a class="golayer" href="#L4">Layer 4 →</a></h4><p>96,000 cards are ready for the morning: Red 38,115 · Amber 3,288 · Green 31,539 · no action 23,058.</p></div></li>
+</ol>
+</div>
+
+<!-- ============================================================ layers -->
+<h2 id="layers">The layers</h2>
+<p class="muted">The path data takes, top to bottom. Open any layer; inside, the tabs explain it from different angles.</p>
+<div class="layermap">
+  <a href="#L0"><span class="n">0</span><span class="t">Source data</span><span class="d">31 messy tables, 1M people</span></a>
+  <div class="arrow">↓</div>
+  <a href="#L1"><span class="n">1</span><span class="t">Data product factory</span><span class="d">clean, match, golden C360, quality gate</span></a>
+  <div class="arrow">↓</div>
+  <a href="#L2"><span class="n">2</span><span class="t">Text and hardship</span><span class="d">redact, read notes and calls, flag hardship</span></a>
+  <div class="arrow">↓</div>
+  <a href="#L3"><span class="n">3</span><span class="t">Feature store</span><span class="d">same numbers for training and live</span></a>
+  <div class="arrow">↓</div>
+  <a href="#L4"><span class="n">4</span><span class="t">Decisioning (next best action)</span><span class="d">rules → model → sizing → reasons</span></a>
+  <div class="arrow">↓</div>
+  <a href="#L5"><span class="n">5</span><span class="t">The app and human release</span><span class="d">card, approvals, audit</span></a>
+  <div class="arrow">· alongside ·</div>
+  <a href="#L6"><span class="n">6</span><span class="t">Collections Ask</span><span class="d">plain-English questions over the data</span></a>
+  <a href="#L7"><span class="n">7</span><span class="t">Governance (every layer)</span><span class="d">privacy, fairness, free AI only, audit</span></a>
+</div>
+
+<!-- ---------------------------------------------------------- L0 -->
+<details class="layer" id="L0">
+<summary><span class="n">0</span><span><span class="title">Source data</span><br><span class="sub">What we were given, and what's wrong with it</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it is</button><button role="tab" aria-selected="false">What's messy</button><button role="tab" aria-selected="false">Numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <p>A fully synthetic but realistic bank: <b>31 tables</b> covering about <b>1 million people</b>. Each product system has its own customer key, so the same person appears several times under different IDs.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Group</th><th>Tables (examples)</th></tr>
+    <tr><td>Customers</td><td>CRM customers (1.02M records), external bureau scores</td></tr>
+    <tr><td>Products</td><td>card accounts, loan accounts, deposit accounts, statements, instalments, monthly snapshots, transactions</td></tr>
+    <tr><td>Collections</td><td>collections cases, promises to pay, contact history, agents, hardship programmes, offers, channel capacity, model scores</td></tr>
+    <tr><td>Text and voice</td><td>760,594 agent notes, 25,000 call transcripts, voice samples</td></tr>
+    <tr><td>Reference</td><td>policies, procedures, regulations, FAQs, call scripts, incident reports, metric definitions</td></tr>
+  </table></div>
+</div>
+<div class="panel" hidden>
+  <p>The data is deliberately messy ("data traps"). A few of the ones we found and handled:</p>
+  <ul>
+    <li><b>Dates of birth typed as DD/MM or MM/DD</b> where you can't tell which (12.7% of CRM). We never guess: reading them all day-first would misread 16%.</li>
+    <li><b>Month-end dates in three formats</b> (1.25M values). A plain date conversion silently dropped them; we read all three.</li>
+    <li><b>Masked card phone numbers</b> like <code>519555xxx42</code> (58% of cards): left empty, never used for matching.</li>
+    <li><b>Loan names in two orders</b> (First Last / Last First, 20%): we learn which word is the surname from CRM.</li>
+    <li><b>A column renamed mid-stream</b>: <code>channel</code> became <code>channel_v2</code> on 26 Sep (schema drift). We merge both.</li>
+    <li><b>Provinces written five ways</b> (Ont., B.C., PQ, Quebec...), deleted CRM records still in the extract, notes with lost characters, contacts pointing at cases that don't exist.</li>
+    <li><b>National Do Not Call flag on 35% of customers.</b> It covers telemarketing, not collections, so it must <i>not</i> block collection calls (a trap a naive system falls into).</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>31</b><span>source tables</span></div>
+    <div class="card stat"><b>3,840,513</b><span>customer keys across all systems</span></div>
+    <div class="card stat"><b>19</b><span>kinds of data issue documented in the quality report</span></div>
+  </div>
+  <p class="muted">Source: <code>docs/quality_report.md</code> §2, every count queried from the warehouse.</p>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>Did you clean the data by hand?</dt><dd>No. Every cleaning rule is a tested function, and anything a rule can't read is left empty and listed in quarantine. The quality report lists each issue, how many records it hits, and what we did.</dd>
+  <dt>Why not just fix the ambiguous dates?</dt><dd>Because a wrong date of birth can merge two different people. Leaving it empty costs a little matching power; guessing would cost correctness.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L1 -->
+<details class="layer" id="L1">
+<summary><span class="n">1</span><span><span class="title">Data product factory</span><br><span class="sub">Raw → clean (silver) → one record per person (golden C360) → quality gate</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <p>Turns 31 fragmented tables into a <b>Collections 360</b>: one trusted row per real person, with every account, case and contact attached.</p>
+  <div class="pipe"><span>Bronze: land as-is</span><i>→</i><span>Silver: clean</span><i>→</i><span>Match: who is who</span><i>→</i><span>Gold: golden C360</span><i>→</i><span>Quality gate</span></div>
+  <h3>Matching people across systems (identity resolution)</h3>
+  <ol>
+    <li><b>Exact keys first.</b> Links we can prove: the case's copy of the CRM ID, the deposit account a card's autopay comes from, an identical national ID hash, CRM's own duplicate pointer, and the core-banking customer number shared by deposits and the bureau file.</li>
+    <li><b>Then a probabilistic matcher</b> (Splink) on what's left, comparing name, date of birth, phone and postal code. It gives each pair a match score from 0 to 1.</li>
+    <li><b>Then a decision by score:</b> 0.95 or more links automatically; 0.80 to 0.95 goes to a <b>data steward</b> to decide; below 0.80 stays separate. A cluster that would hold two different national IDs is never merged.</li>
+  </ol>
+  <h3>The golden record</h3>
+  <p>One row per golden ID with contact permissions (most restrictive across duplicate records), hard-stop flags (cease, insolvency, bankruptcy, deceased), current delinquency, open case, payroll pattern and hardship status. Each field carries its lineage. Protected attributes live in a separate table only compliance can read.</p>
+  <h3>The data contract and the quality gate</h3>
+  <p>The C360 is published as a <b>data product</b> with a contract (Open Data Contract Standard, <code>contracts/c360_customer.odcs.yaml</code>): its owner, schema, allowed uses (servicing, the NBA with human release, the Ask, hardship identification) and forbidden uses (marketing, credit or pricing decisions, protected attributes). Five rule groups are checked every night: unique IDs, linkage, match safety, contact safety and freshness. If the gate fails, nothing downstream is published.</p>
+</div>
+<div class="panel" hidden>
+  <table>
+    <tr><th>Piece</th><th>Tool</th><th>In plain words</th></tr>
+    <tr><td>Warehouse</td><td>DuckDB</td><td>A fast database that lives in one file on the machine; no server to run.</td></tr>
+    <tr><td>Transformations</td><td>dbt</td><td>Each table is a SQL file; dbt builds them in the right order and runs tests on them.</td></tr>
+    <tr><td>Cleaning rules</td><td>Python (<code>kept.data.clean</code>, <code>traps</code>)</td><td>Small tested functions: one for names, one for dates, phones, postal codes...</td></tr>
+    <tr><td>Matching</td><td>Splink</td><td>Learns how much each agreement (same DOB, same phone) is worth, from the data itself (no labels needed). Trained on a 20% sample, then scores all 3.84M keys.</td></tr>
+    <tr><td>Quality checks</td><td>Soda + <code>kept gate</code></td><td>Checks the contract's rules on the real gold table.</td></tr>
+    <tr><td>AI helper</td><td>LLM mapping assistant</td><td>Drafts source-to-target mappings and schema-drift fixes from column names only (never rows); an engineer approves.</td></tr>
+  </table>
+  <p class="muted">Golden IDs stay stable between runs: the last crosswalk is reused, so a nightly rerun merged 0 and split 0 customers.</p>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>The agent sees the whole person,</b> not just one account: a customer behind on a card may also have a loan in trouble and a salary that just stopped.</li>
+    <li><b>Safety depends on it.</b> If a customer asked us to stop contacting them on one record, every linked record must respect it. Permissions take the most restrictive value across duplicates.</li>
+    <li><b>Reusable, not a one-off extract.</b> The same product feeds the decision engine, the Ask, hardship flags and reporting.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>3.84M → 1.05M</b><span>source keys into golden customer IDs</span></div>
+    <div class="card stat"><b>99.3%</b><span>match precision: 298 of 300 sampled links judged correct by a reviewer</span></div>
+    <div class="card stat"><b>98.66%</b><span>of account keys linked to a customer; every open case resolves</span></div>
+    <div class="card stat"><b>99.9%</b><span>of the exact links re-found by Splink on its own (a sanity check)</span></div>
+    <div class="card stat"><b>0</b><span>clusters holding two national IDs (5,498 kept apart for that reason)</span></div>
+    <div class="card stat"><b>PASS</b><span>quality gate on the real gold table</span></div>
+  </div>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>You had no ground-truth IDs. How do you know matching works?</dt><dd>Three ways: a person reviewed 300 random predicted links (99.3% correct); Splink independently re-finds 99.9% of the links we can prove with exact keys; and no merged cluster contains two different national IDs.</dd>
+  <dt>Why train Splink on 20%?</dt><dd>Training the full 3.8M keys needed more memory than our machine had. Splink learns its weights from patterns that a 20% sample already shows well; it still scores all 3.84M keys.</dd>
+  <dt>What happens to the uncertain matches?</dt><dd>Scores between 0.80 and 0.95 go to the steward queue in the app. Nothing uncertain is merged automatically.</dd>
+  <dt>Where is the "data product" in this?</dt><dd>The golden C360 has an owner, a documented schema, quality rules, a freshness promise and allowed uses, all in its contract. Consumers read the product, not the raw tables.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L2 -->
+<details class="layer" id="L2">
+<summary><span class="n">2</span><span><span class="title">Text and hardship</span><br><span class="sub">Read notes and calls safely; spot financial hardship early</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <p>Agent notes and call transcripts hold the facts that matter most ("lost my job", "I can pay $95 on the 14th", "please stop calling"). This layer turns them into structured, evidence-backed signals.</p>
+  <div class="pipe"><span>Redact personal details</span><i>→</i><span>Local AI extracts facts + quotes</span><i>→</i><span>Quote must be in the text</span><i>→</i><span>Signals per case</span><i>→</i><span>Hardship status on the golden record</span></div>
+  <h3>What is extracted from each note or call</h3>
+  <p>Hardship signal (none / possible / clear), promise to pay (amount and date), dispute, cease-contact request, third party on the call. Every value comes with the <b>exact quote</b> it rests on; a value whose quote isn't in the text is thrown away.</p>
+  <h3>Hardship from three sources, combined</h3>
+  <ul>
+    <li><b>Text:</b> what the customer said in notes and calls.</li>
+    <li><b>Cash flow:</b> a rule on account data. Payroll at least 5 days late, pay down 20% or more, or Employment Insurance started in the last 60 days.</li>
+    <li><b>People and programmes:</b> an agent's hardship code, or an existing hardship programme.</li>
+  </ul>
+  <p>Combined status: <span class="pill amber">possible</span> from any signal; <span class="pill red">confirmed</span> only when a person or a programme confirms it. Only a person can clear it.</p>
+  <h3>Post-call summary</h3>
+  <p>For the Ask, the latest call on a case is summarised in one line: <i>"Customer reports illness; promised $95 on 14 Oct; next step: hardship plan review."</i> The AI fills in facts; fixed code writes the sentence, so wording never drifts.</p>
+</div>
+<div class="panel" hidden>
+  <table>
+    <tr><th>Piece</th><th>Tool</th><th>In plain words</th></tr>
+    <tr><td>Redaction</td><td>Microsoft Presidio + spaCy (English and French)</td><td>Finds names, phones, cards, SINs, postal codes, dates of birth, and replaces them with tags. We added Canadian SIN and postal patterns, malformed cards, and an allow-list so collections jargon isn't removed.</td></tr>
+    <tr><td>Extraction (live)</td><td>Gemma 3 12B via Ollama, on our GPU</td><td>A free, open model on the machine itself: no customer text goes to the internet. Answers in a fixed JSON format; one retry if it doesn't.</td></tr>
+    <tr><td>Backfill (history)</td><td>SetFit (small sentence model, bge-small)</td><td>Running the big model on 785K old texts would take days. We had the big model label about 1,600 texts, trained a small fast model on those labels, and let it read everything (hardship only).</td></tr>
+    <tr><td>Cash-flow rule</td><td>dbt SQL</td><td>Plain rules on payroll and deposits; no AI.</td></tr>
+    <tr><td>Combining</td><td>Python rule, mirrored in SQL</td><td>One tested function decides the status; a SQL copy runs it for a million customers, and a test proves both agree.</td></tr>
+  </table>
+  <p class="muted">Only <code>RedactedText</code> can be passed to the AI gateway: a type check, so forgetting to redact is a crash, not a leak.</p>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>Hardship is caught when the customer says it,</b> not weeks later when a code is finally entered. The card flips to protective actions within seconds of the note.</li>
+    <li><b>Evidence, not vibes.</b> The agent sees the exact quote behind every flag and can correct it.</li>
+    <li><b>Promises are captured</b> so the system doesn't ask for money the customer already promised.</li>
+    <li><b>Privacy holds:</b> no raw personal details ever reach a model.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>785,594</b><span>notes and calls redacted; a full scan found 0 leaks</span></div>
+    <div class="card stat"><b>0.98 / 0.99</b><span>hardship recall on held-out labelled notes / calls</span></div>
+    <div class="card stat"><b>6 of 7</b><span>extracted fields pass our F1 accuracy gate on held-out labels</span></div>
+    <div class="card stat"><b>20,380</b><span>customers flagged by the cash-flow rule</span></div>
+    <div class="card stat"><b>~5 s</b><span>for a live note on the warm local model</span></div>
+    <div class="card stat"><b>77%</b><span>of call summaries match the organisers' gold word for word (100 labelled calls)</span></div>
+  </div>
+  <p class="muted">The one field that failed the gate is the cease request (precision 0.60 on few examples). So a cease from text never stops contact on its own: an agent must confirm it first.</p>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>What if the AI makes up a hardship?</dt><dd>It can't without a quote, and the quote must literally appear in the note. Even then it only makes hardship "possible", which protects the customer (a review instead of a collection call); "confirmed" needs a person.</dd>
+  <dt>Why a local model and not a big hosted one?</dt><dd>Customer conversations shouldn't leave the bank. The local model runs on one GPU, costs nothing per call, and is fast enough for live use.</dd>
+  <dt>Why SetFit for the history?</dt><dd>Speed: a small model trained on the big model's labels reads 785K texts in minutes on the GPU, and still reaches 0.98+ hardship recall on held-out labels.</dd>
+  <dt>Isn't 0.60 precision on cease dangerous?</dt><dd>That's why text alone never triggers a cease. A false cease would wrongly stop help; a missed one is caught by the agent at wrap-up. A person decides.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L3 -->
+<details class="layer" id="L3">
+<summary><span class="n">3</span><span><span class="title">Feature store</span><br><span class="sub">The facts the model uses, identical in training and in live use</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <p>A <b>feature</b> is one fact about a case the model can use, like "broken promises in the last 90 days" or "days until next payday". The feature store computes them once and serves the same values to training and to the live engine.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Group</th><th>Examples (26 features in total)</th></tr>
+    <tr><td>Delinquency</td><td>max days past due, times 30+ days late in 12 months, days in current bucket, balance at risk</td></tr>
+    <tr><td>Promises</td><td>broken promises (90 days), kept-promise ratio</td></tr>
+    <tr><td>Pay and cash flow</td><td>days to next payroll, pay frequency, payroll delay, pay change vs 3-month average, spare cash per month, cash-flow trend</td></tr>
+    <tr><td>Contact behaviour</td><td>answer rate, answer rate after 18:00, payment-link usage, contacts in last 7 days</td></tr>
+    <tr><td>Cohorts</td><td>recovery and kept rates for similar cases (only for groups of 50+)</td></tr>
+    <tr><td>Text</td><td>hardship signal, promise intent, promised date and amount, dispute, cease request, third party</td></tr>
+  </table></div>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>dbt SQL</b> computes the features from silver and gold.</li>
+    <li><b>Feast</b> (open-source feature store) serves them: an offline store for training and an online store for live lookups.</li>
+    <li><b>Point in time:</b> for training, each feature is computed as it was <i>one second before</i> each past decision. Using today's values to explain yesterday's decision would leak the answer.</li>
+    <li><b>A feature registry</b> lists every feature, its source columns and its owner. A CI test walks this lineage and fails the build if any feature touches a protected attribute or a proxy.</li>
+    <li><b>Missing stays missing:</b> no transaction data means "unknown", never 0.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>No training/serving gap.</b> A model is only as good as the match between the data it learned on and the data it sees live.</li>
+    <li><b>Freshness is enforced.</b> Features older than 26 hours mean "no action" with the reason shown, never a recommendation on stale facts.</li>
+    <li><b>Fairness by construction.</b> The lineage check proves the model can't see gender, citizenship, marital status or their proxies.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>0 of 56,000</b><span>cells differ between the offline and online stores (nightly parity test)</span></div>
+    <div class="card stat"><b>96,000</b><span>open cases with features each night</span></div>
+    <div class="card stat"><b>26</b><span>registered features, each with lineage and owner</span></div>
+  </div>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>What's "parity" and why test it?</dt><dd>That the number the live engine reads for a case is exactly the number training would compute for the same moment. We compare every cell nightly; any difference fails the run.</dd>
+  <dt>How do you prevent leakage?</dt><dd>Training rows take history from timestamped tables (snapshots, promise status times, the contact-time fields), never the case's current values.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L4 -->
+<details class="layer" id="L4">
+<summary><span class="n">4</span><span><span class="title">Decisioning: the next best action</span><br><span class="sub">Rules first, then the model, then a promise the customer can keep</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <p>For each open case, picks one of <b>8 actions</b>: wait, email, app push, text a payment link, call, call for a payday-dated promise, offer a payment plan, start a hardship review. Seven stages, in this order:</p>
+  <ol>
+    <li><b>Hard stops (no AI).</b> Cease request, insolvency, bankruptcy or deceased → no contact at all, with the rule named.</li>
+    <li><b>Permissions (no AI).</b> For each action: not on the do-not-contact list; consent for that channel; inside the customer's <i>own</i> calling hours (their time zone, daylight saving, Sundays only if allowed); under the weekly contact cap (3 in 7 days by default).</li>
+    <li><b>Hardship override (no AI).</b> Hardship possible or confirmed, or a vulnerable customer → only protective actions are allowed.</li>
+    <li><b>Uplift model.</b> For each remaining action, the chance the customer pays within 14 days <i>if we do it</i>, minus the chance if we wait. That difference is the uplift.</li>
+    <li><b>Kept sizing.</b> A promise due 1 to 2 days after the expected payday, in the fewest instalments (up to 3) that each fit inside the customer's spare cash per pay period.</li>
+    <li><b>Ranking.</b> uplift × balance at risk − contact cost − customer burden, within each channel's daily capacity.</li>
+    <li><b>Reasons and tier.</b> The top 3 reasons as fixed sentences (from TreeSHAP), and a release tier that says who must approve.</li>
+  </ol>
+  <div class="tiers">
+    <div class="tier grey"><b>Blocked</b>any hard stop. Nobody can release it.</div>
+    <div class="tier red"><b>Red</b>hardship or vulnerability, reductions. Specialist + a second person.</div>
+    <div class="tier amber"><b>Amber</b>calls, promises, plans, close calls. The assigned agent.</div>
+    <div class="tier green"><b>Green</b>email, push, SMS link. Team lead, in a daily batch.</div>
+  </div>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>Model:</b> LightGBM, one model per action (a "T-learner"), predicting <code>paid within 14 days</code>. Small, regularised trees, because uplift is the difference of two models and noise adds up.</li>
+    <li><b>Training data:</b> only <b>randomly assigned</b> cases from the bank's past experiments. Randomness is what lets us read "the action caused the payment" instead of "agents called the people who were going to pay anyway".</li>
+    <li><b>Evaluation:</b> Qini, a standard uplift metric: how much more payment you get by targeting with the model than at random. Compared with the bank's current strategy.</li>
+    <li><b>Explanations:</b> TreeSHAP gives each feature's contribution in percentage points; the card shows the top 3 as fixed template sentences, never AI-written text.</li>
+    <li><b>Tracking:</b> MLflow records each model's version, parameters and metrics; every card names the model version and when its features were computed.</li>
+    <li><b>Safety valves:</b> a permanent <b>5% hold-out</b> stays on the old strategy (so we can keep measuring), and a <b>kill switch</b> sends every case back to the old strategy instantly.</li>
+    <li><b>Never crashes into an action:</b> any error or stale data gives "no action" with the reason.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>Contact the people it helps,</b> not just the people likely to pay anyway. Calling someone who would have paid regardless costs money and annoys them.</li>
+    <li><b>Promises that are kept.</b> Due right after payday and within spare cash, instead of an arbitrary date the customer can't meet.</li>
+    <li><b>Safety can't be outvoted.</b> The model only ranks actions the rules already allowed; it can't pick a forbidden one.</li>
+    <li><b>Explainable:</b> the agent reads why in plain English, with the numbers behind it.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>0.0073 vs 0.0017</b><span>Qini for calls: our model vs the current strategy (about 4× better targeting)</span></div>
+    <div class="card stat"><b>96,000</b><span>cards each night</span></div>
+    <div class="card stat"><b>~7 min</b><span>for the whole nightly run, all cases</span></div>
+  </div>
+  <div class="tablewrap" style="margin-top:12px"><table>
+    <tr><th>Tier</th><th>Cards</th><th>Share</th></tr>
+    <tr><td><span class="pill red">Red</span></td><td>38,115</td><td>40%</td></tr>
+    <tr><td><span class="pill green">Green</span></td><td>31,539</td><td>33%</td></tr>
+    <tr><td><span class="pill amber">Amber</span></td><td>3,288</td><td>3%</td></tr>
+    <tr><td><span class="pill grey">No action</span></td><td>23,058</td><td>24%</td></tr>
+  </table></div>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>Why are 40% of cards Red?</dt><dd>Red means "a hardship specialist reviews before anything is sent". About a third of open cases already carry an agent's hardship code in the source data, and more are possible from text and cash flow. A protected customer gets a review instead of a collection call: that's the protection working. A rule for customers already on a hardship plan would reduce it, and is the next step.</dd>
+  <dt>Why uplift and not "likely to pay"?</dt><dd>"Likely to pay" targets people who'd pay anyway. Uplift targets the difference our action makes, which is what saves money and contacts.</dd>
+  <dt>Why does the model never decide hardship?</dt><dd>Hardship is a protection, not a score. The rules apply it before the model runs; the model can't trade it off against expected payment.</dd>
+  <dt>How do you know it's better than today?</dt><dd>Qini on the randomly assigned cases compares our ranking with the bank's own recommendations, and the permanent 5% hold-out keeps that comparison live after launch.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L5 -->
+<details class="layer" id="L5">
+<summary><span class="n">5</span><span><span class="title">The app and human release</span><br><span class="sub">Where people see, decide and approve; nothing goes out without them</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>Page</th><th>Who</th><th>What they do there</th></tr>
+    <tr><td>Queue and case card</td><td>Agent</td><td>See the action, reasons, calling window, sizing and checks; add a note; accept, edit, pick an alternative, override (reason required) or reject.</td></tr>
+    <tr><td>Approvals</td><td>Specialist, team lead, compliance</td><td>First and second approval of Red actions; Green batch.</td></tr>
+    <tr><td>Ask</td><td>Analyst, agent</td><td>Plain-English questions, answers with SQL and sources.</td></tr>
+    <tr><td>Steward</td><td>Data steward</td><td>Approve or split uncertain customer matches.</td></tr>
+    <tr><td>Audit</td><td>Compliance</td><td>Every recommendation, change, approval and AI call, in order.</td></tr>
+    <tr><td>Guided demo</td><td>Anyone</td><td>The agent journey above, step by step on real data.</td></tr>
+  </table>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>API:</b> FastAPI (<code>kept serve</code>), the same engine and release gate as the nightly run.</li>
+    <li><b>Web app:</b> Next.js with Radix UI, light and dark mode, role-based personas.</li>
+    <li><b>Audit log:</b> append-only (events are added, never edited or deleted), in its own DuckDB file.</li>
+    <li><b>Proposals expire after 4 hours,</b> and one live proposal per case: a newer recommendation retires the older one.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li>Agents get context and a recommendation in one screen, not five systems.</li>
+    <li>The right person approves the right risk: everyday actions stay fast, sensitive ones get two people.</li>
+    <li>Every decision can be traced and explained afterwards, for complaints and regulators.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <p>The full agent journey (note → hardship → Red card → two approvals → audit) runs live on real data in the guided demo; the live note takes about 5 seconds.</p>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>Can the system contact a customer by itself?</dt><dd>No. The model creates a <i>proposal</i>. Only a person with the right role can release it, and the release gate re-checks every rule on fresh data at that moment.</dd>
+  <dt>What if the agent disagrees?</dt><dd>They can edit the amount or date (within spare cash), choose another allowed action, override with a written reason, or reject. All of it is logged.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L6 -->
+<details class="layer" id="L6">
+<summary><span class="n">6</span><span><span class="title">Collections Ask</span><br><span class="sub">Ask the data in plain English, see the working, get refused when it's not allowed</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">What it does</button><button role="tab" aria-selected="false">How it's built</button><button role="tab" aria-selected="false">How it helps</button><button role="tab" aria-selected="false">Proof and numbers</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <div class="pipe"><span>Redact question</span><i>→</i><span>Scope check</span><i>→</i><span>Router</span><i>→</i><span>Certified SQL / 3 SQL drafts / policy search</span><i>→</i><span>SQL guard</span><i>→</i><span>Grounded answer</span></div>
+  <ul>
+    <li><b>Metric questions</b> use one of 15 certified metrics with reviewed SQL. The AI only picks the metric and filters; it doesn't write that SQL.</li>
+    <li><b>Lookup questions:</b> the AI writes three SQL drafts; we run the ones the guard allows and keep the result the majority agrees on. If they disagree, it asks a clarifying question instead of guessing.</li>
+    <li><b>Policy questions:</b> search over the current versions of the policy documents, answering with the document and section cited, e.g. <i>(POL-COLL-001 §5.2)</i>. A policy beats an FAQ or a call script when they disagree.</li>
+    <li><b>Call summaries:</b> "summarise the most recent call on case X" uses the redacted transcript (layer 2).</li>
+    <li><b>Refusals</b> say why: protected attribute, bulk personal data, write action, someone else's case, or data we don't have.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <table>
+    <tr><th>Piece</th><th>Tool</th><th>In plain words</th></tr>
+    <tr><td>LLM</td><td>Gemini Flash-Lite, free tier, through LiteLLM</td><td>A hosted model, but it only ever sees redacted questions, table descriptions and result rows.</td></tr>
+    <tr><td>SQL guard</td><td>sqlglot</td><td>Parses the SQL into a tree and checks it: SELECT only, one statement, 16 approved tables, no blocked columns, row limit, 10 s timeout.</td></tr>
+    <tr><td>Policy search</td><td>LanceDB + BM25 keyword search</td><td>Finds the right section of the right (current) document.</td></tr>
+    <tr><td>Grounding check</td><td>Python</td><td>Every number in the answer must appear in the result rows; otherwise a plain fallback sentence is used.</td></tr>
+    <tr><td>Privacy</td><td>Python</td><td>Analysts never see a group smaller than 10 people.</td></tr>
+  </table>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li>Managers and analysts get answers in seconds without writing SQL or waiting for a report.</li>
+    <li>Trust: every answer shows its SQL or its source, so it can be checked.</li>
+    <li>Safety: the Ask can't be talked into exporting personal data or ranking by a protected attribute.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <div class="grid g3">
+    <div class="card stat"><b>83%</b><span>accuracy on the organisers' dev questions (target 80%)</span></div>
+    <div class="card stat"><b>100%</b><span>refusal recall: every question that must be refused was (target 95%)</span></div>
+    <div class="card stat"><b>16</b><span>approved tables; nothing else can be queried</span></div>
+  </div>
+  <p class="muted">Dev split, <code>docs/benchmark_scorecard.md</code>. The test split is answered by the final run on 4 Oct.</p>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>What stops the AI writing a dangerous query?</dt><dd>The SQL guard parses it before it runs. Anything but a single SELECT on approved tables and allowed columns is refused, with a row limit and a timeout.</dd>
+  <dt>What stops it inventing numbers?</dt><dd>The grounding check: if a number in the sentence isn't in the result, we don't show that sentence.</dd>
+  <dt>Why three SQL drafts?</dt><dd>A single AI draft can be subtly wrong. Two of three agreeing on the same result is a cheap, strong check; disagreement becomes a clarifying question.</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ---------------------------------------------------------- L7 -->
+<details class="layer" id="L7">
+<summary><span class="n">7</span><span><span class="title">Governance, in every layer</span><br><span class="sub">Privacy, fairness, access, audit and free AI only</span></span><span class="chev">▾</span></summary>
+<div class="layerbody">
+<div class="tabs" role="tablist">
+  <button role="tab" aria-selected="true">The rules we follow</button><button role="tab" aria-selected="false">How each is enforced</button><button role="tab" aria-selected="false">Fairness results</button><button role="tab" aria-selected="false">Judge questions</button>
+</div>
+<div class="panel">
+  <table>
+    <tr><th>Organisers' ground rule</th><th>What Kept does</th></tr>
+    <tr><td>Publish a data contract</td><td>The golden C360 contract: owner, schema, quality rules, allowed and forbidden uses, freshness.</td></tr>
+    <tr><td>Explain every decision</td><td>Top 3 reasons in plain English on every card, the checks that passed, sizing rationale, and the reason for "no action".</td></tr>
+    <tr><td>Keep a human in the loop</td><td>Every action is a proposal a person releases; Red needs two people; overrides need a reason; text-based cease needs an agent; uncertain matches need a steward.</td></tr>
+    <tr><td>Treat customers fairly</td><td>No protected attribute or proxy in any decision (checked in CI); hardship and vulnerability always protect; fairness report on every run.</td></tr>
+  </table>
+</div>
+<div class="panel" hidden>
+  <ul>
+    <li><b>Redaction before any AI:</b> enforced by type; the gateway refuses unredacted text.</li>
+    <li><b>Free AI only, every call audited:</b> local Gemma for text, Gemini's free tier for the Ask, all through one gateway that logs purpose, model, latency and tokens.</li>
+    <li><b>Role-based access:</b> seven roles; protected attributes live in <code>c360_restricted</code>, readable by compliance only.</li>
+    <li><b>Lineage CI check:</b> fails the build if any feature's lineage touches a protected attribute or proxy.</li>
+    <li><b>Append-only audit:</b> recommendations, hardship changes, approvals, overrides, Ask queries, AI calls.</li>
+    <li><b>Hold-out and kill switch</b> for safe rollout and rollback.</li>
+  </ul>
+</div>
+<div class="panel" hidden>
+  <p>On all 96,000 cards, using protected attributes <i>only</i> to check outcomes (never as inputs), with the four-fifths rule as a flag:</p>
+  <ul>
+    <li><b>No protected group is treated materially differently</b> on getting a contact action: ratios 0.93 to 1.00 across gender, citizenship, household, dependants, benefits and accessibility.</li>
+    <li>Flags on "call" come from a rare action (about 3% of cases), where small rates make ratios noisy.</li>
+    <li>Vulnerable customers get a hardship review about 70% of the time vs 34% for others, and fewer calls. That gap is the protection by design.</li>
+  </ul>
+  <p class="muted">Source: <code>docs/fairness_report.md</code>, <code>docs/fairness_findings.md</code>.</p>
+</div>
+<div class="panel" hidden><dl class="qa">
+  <dt>If protected attributes aren't used, why keep them?</dt><dd>To <i>check</i> fairness. Compliance can measure outcomes by group; the model and the Ask can't see them.</dd>
+  <dt>Could a proxy (like postal code) sneak in?</dt><dd>The registry lists proxies too, and the lineage test fails on them. The Ask refuses questions like "which postal areas should we stop offering hardship plans to".</dd>
+</dl></div>
+</div>
+</details>
+
+<!-- ============================================================ HITL -->
+<h2 id="hitl">Human in the loop, all in one place</h2>
+<p class="muted">The brief says: "Nothing that affects a customer happens without a person able to review it." Here is every place a person decides.</p>
+<div class="tablewrap"><table>
+  <tr><th>Moment</th><th>Who decides</th><th>What the system does</th></tr>
+  <tr><td>Releasing any action</td><td>Agent (Amber), team lead (Green batch), specialist (Red)</td><td>Creates a proposal only; re-checks every rule at release.</td></tr>
+  <tr><td>Red actions (hardship, vulnerability)</td><td>Hardship specialist, then a second, different person (team lead, compliance or specialist)</td><td>Holds it as "approved, waiting for a second person".</td></tr>
+  <tr><td>Changing the recommendation</td><td>Agent</td><td>Accept, edit amount/date (within spare cash), pick an alternative, override with a required reason, or reject.</td></tr>
+  <tr><td>Facts read from notes</td><td>Agent at wrap-up</td><td>Shows each value with its quote; a cease from text only becomes a hard stop once confirmed.</td></tr>
+  <tr><td>Hardship status</td><td>A person</td><td>AI can only raise "possible"; "confirmed" or clearing needs a person or programme.</td></tr>
+  <tr><td>Uncertain customer matches</td><td>Data steward</td><td>Scores 0.80–0.95 wait in the steward queue.</td></tr>
+  <tr><td>Data mapping and drift fixes</td><td>Engineer</td><td>The AI drafts; an engineer approves.</td></tr>
+  <tr><td>Rollout</td><td>The business</td><td>5% hold-out keeps the old strategy; the kill switch reverts everyone.</td></tr>
+</table></div>
+
+<!-- ============================================================ glossary -->
+<h2 id="glossary">Glossary</h2>
+<dl class="gloss">
+  <dt>DPD</dt><dd>Days past due: how many days a payment is late.</dd>
+  <dt>Bucket</dt><dd>A DPD range (1–30, 31–60, ...). Later buckets are more serious.</dd>
+  <dt>PTP</dt><dd>Promise to pay: the customer agrees to pay an amount by a date. "Kept" if paid on time.</dd>
+  <dt>Roll rate</dt><dd>The share of accounts that move to a worse bucket.</dd>
+  <dt>Golden ID</dt><dd>One ID for one real person, linking all their records across systems.</dd>
+  <dt>C360</dt><dd>Customer 360: the one-row-per-person view of everything we know.</dd>
+  <dt>Bronze / silver / gold</dt><dd>Raw as delivered / cleaned / joined and trusted, ready to use.</dd>
+  <dt>Data contract</dt><dd>A file that states a data product's owner, schema, quality rules and allowed uses.</dd>
+  <dt>Splink</dt><dd>Open-source probabilistic record matching: scores how likely two records are the same person.</dd>
+  <dt>Redaction</dt><dd>Removing personal details from text before anything else reads it.</dd>
+  <dt>LLM</dt><dd>Large language model: an AI that reads and writes text (Gemma, Gemini).</dd>
+  <dt>SetFit</dt><dd>A way to train a small, fast text classifier from few examples.</dd>
+  <dt>Feature</dt><dd>One fact about a case the model uses (e.g. broken promises in 90 days).</dd>
+  <dt>Feature store</dt><dd>One place that computes features and serves the same values to training and live use (Feast).</dd>
+  <dt>Point in time</dt><dd>Using only data that existed at the moment of a past decision.</dd>
+  <dt>Uplift</dt><dd>How much an action changes the chance of payment, compared with doing nothing.</dd>
+  <dt>T-learner</dt><dd>One model per action; uplift is the difference between an action's model and the "wait" model.</dd>
+  <dt>Qini</dt><dd>A score for uplift models: how much better than random targeting the ranking is.</dd>
+  <dt>TreeSHAP</dt><dd>Splits a tree model's prediction into each feature's contribution, for the reasons on the card.</dd>
+  <dt>Hold-out</dt><dd>A fixed 5% of customers kept on the old strategy, to keep measuring the difference.</dd>
+  <dt>Kill switch</dt><dd>One setting that sends every case back to the old strategy.</dd>
+  <dt>Hard stop</dt><dd>A rule that forbids all contact: cease request, insolvency, bankruptcy, deceased.</dd>
+  <dt>NL-to-SQL</dt><dd>Turning a plain-English question into a database query.</dd>
+  <dt>Grounding</dt><dd>Checking that every number in an AI answer comes from the data.</dd>
+  <dt>Four-fifths rule</dt><dd>A fairness check: a group's rate under 80% of the highest group's rate is flagged.</dd>
+</dl>
+
+<footer>
+  Kept · Team Sharpe Shooters · Numbers from the real-data runs on 3–4 Oct 2026 (quality report, benchmark scorecard, fairness report, nightly run). Source: <code>main</code> of the repository.
+</footer>
+</main>
+
+<script>
+// theme toggle (per-viewer convenience only)
+(function () {
+  var root = document.documentElement, btn = document.getElementById("theme");
+  try { var saved = localStorage.getItem("kept-theme"); if (saved) root.dataset.theme = saved; } catch (e) {}
+  btn.addEventListener("click", function () {
+    var dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("kept-theme", root.dataset.theme); } catch (e) {}
+  });
+})();
+
+// tabs: every [role=tablist] switches the panels that follow it in the same container
+function wireTabs(list, panels) {
+  var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+  function show(i) {
+    tabs.forEach(function (t, j) {
+      t.setAttribute("aria-selected", i === j ? "true" : "false");
+      t.tabIndex = i === j ? 0 : -1;
+      panels[j].hidden = i !== j;
+    });
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener("click", function () { show(i); });
+    t.addEventListener("keydown", function (e) {
+      var k = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+      if (!k) return;
+      var n = (i + k + tabs.length) % tabs.length; show(n); tabs[n].focus();
+    });
+  });
+}
+document.querySelectorAll(".layerbody").forEach(function (b) {
+  wireTabs(b.querySelector(".tabs"), b.querySelectorAll(":scope > .panel"));
+});
+wireTabs(document.querySelector(".seg"), document.querySelectorAll(".jpanel"));
+
+// links to a layer open it
+function openFromHash() {
+  var el = document.getElementById(location.hash.slice(1));
+  if (el && el.tagName === "DETAILS") el.open = true;
+}
+window.addEventListener("hashchange", openFromHash);
+openFromHash();
+document.querySelectorAll('a[href^="#L"]').forEach(function (a) {
+  a.addEventListener("click", function () {
+    var el = document.getElementById(a.getAttribute("href").slice(1));
+    if (el) el.open = true;
+  });
+});
+</script>
+</body>
+</html>
