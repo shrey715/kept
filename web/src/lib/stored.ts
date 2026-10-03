@@ -45,3 +45,9 @@ export function useStored<T>(key: string, fallback: T): [T, (v: T) => void] {
   );
   return [value, set];
 }
+
+const noop = () => () => {};
+/** False during the server render and hydration, true after: gate redirects on stored state. */
+export function useHydrated(): boolean {
+  return useSyncExternalStore(noop, () => true, () => false);
+}

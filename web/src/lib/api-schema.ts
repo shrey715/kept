@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Queue */
+        get: operations["queue_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/nba": {
         parameters: {
             query?: never;
@@ -30,6 +47,57 @@ export interface paths {
         };
         /** Get Nba */
         get: operations["get_nba_cases__case_id__nba_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/customer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Customer */
+        get: operations["get_customer_cases__case_id__customer_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Approvals */
+        get: operations["approvals_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit */
+        get: operations["audit_audit_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -49,6 +117,23 @@ export interface paths {
         put?: never;
         /** Decide */
         post: operations["decide_proposals__proposal_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/demo/cases/{case_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Note */
+        post: operations["add_note_demo_cases__case_id__notes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -139,6 +224,17 @@ export interface components {
             /** P Paid 14D */
             p_paid_14d: number;
         };
+        /** ApprovalItem */
+        ApprovalItem: {
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "specialist" | "second_person" | "green_batch" | "assigned_agent";
+            proposal: components["schemas"]["Proposal"];
+            /** First Approver */
+            first_approver?: string | null;
+        };
         /** AskAnswer */
         AskAnswer: {
             /**
@@ -191,6 +287,31 @@ export interface components {
              */
             clarification_round: number;
         };
+        /** AuditEvent */
+        AuditEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            kind: components["schemas"]["AuditKind"];
+            /** Actor Id */
+            actor_id: string;
+            actor_role?: components["schemas"]["Role"] | null;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AuditKind
+         * @enum {string}
+         */
+        AuditKind: "ask_query" | "recommendation" | "release" | "override" | "llm_call" | "match_merge" | "match_split" | "steward_decision" | "hardship_change" | "kill_switch" | "proposal_cancelled";
         /**
          * Channel
          * @enum {string}
@@ -234,6 +355,38 @@ export interface components {
             question: string;
             intent?: components["schemas"]["Intent"] | null;
         };
+        /**
+         * ContactPermissions
+         * @description Consent per channel. Unknown consent is False (most restrictive).
+         */
+        ContactPermissions: {
+            /**
+             * Call
+             * @default false
+             */
+            call: boolean;
+            /**
+             * Sms
+             * @default false
+             */
+            sms: boolean;
+            /**
+             * Email
+             * @default false
+             */
+            email: boolean;
+            /**
+             * Push
+             * @default false
+             */
+            push: boolean;
+        };
+        /**
+         * DpdBucket
+         * @description Days-past-due buckets. TBC: confirm bucket edges with the organisers.
+         * @enum {string}
+         */
+        DpdBucket: "current" | "1-30" | "31-60" | "61-90" | "91-120" | "121+";
         /**
          * Evidence
          * @description The quote that supports an extracted value. Must be a substring of the redacted input.
@@ -298,6 +451,97 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * GoldenCustomer
+         * @description One row of gold.c360_customer, one per golden_customer_id.
+         */
+        GoldenCustomer: {
+            /** Golden Customer Id */
+            golden_customer_id: string;
+            /** Source Keys */
+            source_keys: components["schemas"]["SourceKey"][];
+            /** Match Confidence Min */
+            match_confidence_min?: number | null;
+            match_review_status: components["schemas"]["MatchReviewStatus"];
+            /** Display Name */
+            display_name?: string | null;
+            /** Primary Phone E164 */
+            primary_phone_e164?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Province Code */
+            province_code?: string | null;
+            /** Time Zone */
+            time_zone?: string | null;
+            /** Preferred Language */
+            preferred_language?: string | null;
+            /** Total Overdue */
+            total_overdue: string;
+            /** Max Dpd */
+            max_dpd: number;
+            current_bucket: components["schemas"]["DpdBucket"];
+            /** Open Case Id */
+            open_case_id?: string | null;
+            /** Assigned Agent Id */
+            assigned_agent_id?: string | null;
+            contact_permissions: components["schemas"]["ContactPermissions"];
+            /** Permitted Call Start Local */
+            permitted_call_start_local?: string | null;
+            /** Permitted Call End Local */
+            permitted_call_end_local?: string | null;
+            /**
+             * Sunday Contact Permitted
+             * @default false
+             */
+            sunday_contact_permitted: boolean;
+            /** Do Not Contact */
+            do_not_contact: boolean;
+            /** Collections Hold */
+            collections_hold: boolean;
+            hardship_status: components["schemas"]["HardshipStatus"];
+            hardship_source?: components["schemas"]["HardshipSource"] | null;
+            /**
+             * Vulnerability Flag
+             * @default false
+             */
+            vulnerability_flag: boolean;
+            /** Expected Next Payroll Date */
+            expected_next_payroll_date?: string | null;
+            /** @default unknown */
+            payroll_frequency_detected: components["schemas"]["PayrollFrequency"];
+            /**
+             * As Of Date
+             * Format: date
+             */
+            as_of_date: string;
+            /**
+             * Refreshed At
+             * Format: date-time
+             */
+            refreshed_at: string;
+            /** Display Name Source */
+            display_name_source?: string | null;
+            /** Primary Phone E164 Source */
+            primary_phone_e164_source?: string | null;
+            /** Email Source */
+            email_source?: string | null;
+            /** Province Code Source */
+            province_code_source?: string | null;
+            /** Time Zone Source */
+            time_zone_source?: string | null;
+            /** Preferred Language Source */
+            preferred_language_source?: string | null;
+            /** Total Overdue Source */
+            total_overdue_source?: string | null;
+            /** Contact Permissions Source */
+            contact_permissions_source?: string | null;
+            /** Do Not Contact Source */
+            do_not_contact_source?: string | null;
+            /** Collections Hold Source */
+            collections_hold_source?: string | null;
+            /** Expected Next Payroll Date Source */
+            expected_next_payroll_date_source?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -326,12 +570,32 @@ export interface components {
          * @enum {string}
          */
         HardshipSignal: "none" | "possible" | "clear";
+        /**
+         * HardshipSource
+         * @description collections_cases.hardship_source uses agent_coded / customer_form / model / llm_flag;
+         *     we add account programmes (card/loan hardship_program_flag) and our cash-flow rule.
+         * @enum {string}
+         */
+        HardshipSource: "agent" | "customer_form" | "account_programme" | "model" | "llm" | "cash_flow";
+        /**
+         * HardshipStatus
+         * @description Combined status on the golden record. Only a person can set CONFIRMED or clear it.
+         * @enum {string}
+         */
+        HardshipStatus: "none" | "possible" | "confirmed";
         /** HealthResponse */
         HealthResponse: {
             /** Status */
             status: string;
             /** Version */
             version: string;
+            /**
+             * Now
+             * Format: date-time
+             */
+            now: string;
+            /** Demo */
+            demo: boolean;
         };
         /**
          * Intent
@@ -362,6 +626,12 @@ export interface components {
          * @enum {string}
          */
         IntentKind: "metric" | "lookup" | "policy";
+        /**
+         * MatchReviewStatus
+         * @description match_review_status on the golden record (data contract).
+         * @enum {string}
+         */
+        MatchReviewStatus: "auto" | "steward_approved" | "unlinked";
         /**
          * NBACard
          * @description What the agent sees (architecture page, bottom panel).
@@ -403,6 +673,19 @@ export interface components {
             /** No Action Reason */
             no_action_reason?: string | null;
         };
+        /** NoteIn */
+        NoteIn: {
+            /** Text */
+            text: string;
+            /** User Id */
+            user_id: string;
+            role: components["schemas"]["Role"];
+        };
+        /**
+         * PayrollFrequency
+         * @enum {string}
+         */
+        PayrollFrequency: "weekly" | "biweekly" | "semi_monthly" | "monthly" | "irregular" | "unknown";
         /**
          * PromiseSizing
          * @description Kept sizing: plain arithmetic, no model.
@@ -476,6 +759,34 @@ export interface components {
          * @enum {string}
          */
         ProposalStatus: "pending" | "approved" | "released" | "expired" | "cancelled" | "rejected";
+        /** QueueItem */
+        QueueItem: {
+            /** Case Id */
+            case_id: string;
+            /** Golden Customer Id */
+            golden_customer_id: string;
+            /** Display Name */
+            display_name: string | null;
+            /** Total Overdue */
+            total_overdue: string;
+            /** Max Dpd */
+            max_dpd: number;
+            /** Current Bucket */
+            current_bucket: string;
+            /** Headline */
+            headline: string;
+            action: components["schemas"]["Action"] | null;
+            tier: components["schemas"]["ReleaseTier"] | null;
+            proposal_status: components["schemas"]["ProposalStatus"] | null;
+            /** Expected Value */
+            expected_value: string;
+            /** Hardship */
+            hardship: boolean;
+            /** Hard Stop */
+            hard_stop: boolean;
+            /** No Action Reason */
+            no_action_reason: string | null;
+        };
         /** Reason */
         Reason: {
             /** Feature */
@@ -557,6 +868,21 @@ export interface components {
          * @enum {string}
          */
         Role: "agent" | "hardship_specialist" | "team_lead" | "analyst" | "compliance" | "data_steward" | "engineer";
+        /**
+         * SourceKey
+         * @description One customer key in one product system.
+         */
+        SourceKey: {
+            system: components["schemas"]["SourceSystem"];
+            /** Key */
+            key: string;
+        };
+        /**
+         * SourceSystem
+         * @description Each product system uses its own customer key.
+         * @enum {string}
+         */
+        SourceSystem: "crm" | "card" | "loan" | "deposit" | "collections" | "bureau";
         /**
          * StatedReason
          * @description Why the customer says they can't pay. Triggers hardship handling only; never a feature.
@@ -652,6 +978,38 @@ export interface operations {
             };
         };
     };
+    queue_queue_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_nba_cases__case_id__nba_get: {
         parameters: {
             query: {
@@ -687,6 +1045,107 @@ export interface operations {
             };
         };
     };
+    get_customer_cases__case_id__customer_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoldenCustomer"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approvals_approvals_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_audit_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+                case_id?: string | null;
+                kind?: components["schemas"]["AuditKind"] | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     decide_proposals__proposal_id__decision_post: {
         parameters: {
             query?: never;
@@ -709,6 +1168,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReleaseResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_note_demo_cases__case_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NBACard"];
                 };
             };
             /** @description Validation Error */
