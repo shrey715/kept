@@ -3,9 +3,9 @@
 Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 2, then the later phases' parallel tasks against fakes (Shreyas's call while G0 waits)
-- Working on: Phase 4 (sizing, ranking, explanations, engine)
-- Waiting on: G0 for merging; nothing blocks coding
+- Phase: parallel tasks for Phases 1-5 done
+- Working on: nothing; what's left needs other tracks (see Open questions)
+- Waiting on: G0 (merge), then G2 for real features/labels, G3/G4 for real services
 
 ## Done
 - `DuckDBAuditLog` + `new_event_id` (early provider, Q2): `tests/common/test_audit.py` 7/7. Branch `track-d`.
@@ -17,6 +17,10 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 2: dbt feature models (`dbt/models/features/`): spine, promise, contact, cohort, `case_features`. `tests/features/test_dbt_features.py` checks the SQL against the Python definitions point in time (4/4, needs dbt: see the test's docstring).
 
 - Phase 3: `KeptContextBuilder` (S3, `tests/nba/test_context.py` 13/13); `TLearnerUplift` + Qini (uplift tests 8/8, incl. the LightGBM integration test); `FeastFeatureProvider` + `export_features` (`tests/features/test_feast_store.py` 4/4).
+
+- Phase 4: Kept sizing and ranking (`test_sizing_ranking_tiers.py` 45/45); explanations with a fixed sentence for every model feature + TreeSHAP contributions; `KeptEngine` stages 1-7 (`test_engine.py` 15/15).
+- Phase 5: `Releaser` + `cancel_pending` (`test_release.py` 34/34); `/cases/{id}/nba` and `/proposals/{id}/decision` with access checks (`tests/app` 8/8, `/ask` is B's); `kept serve --demo`.
+- Frontend: Next.js app in `web/` (case card + review/release, Ask, steward). Screenshot-checked on desktop and phone.
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -37,10 +41,19 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Context builder** reads the case row from `silver.collections_cases` (cap, case-level hard stops, `nba_recommendation_last`). A fresh text hardship signal raises `NONE` to `POSSIBLE` before gold catches up; it never lowers gold. Unknown time zone or contact count fails closed.
 - **Qini test** threshold was above the analytic value (0.01875); it now asserts that value. Own commit.
 
+- **UI is Next.js, not the plan's static page** (§4 S7 said "no frontend framework"). Shreyas's call. Cost: `web/` with ~450 MB node_modules; the demo machine (C's) needs Node 22 + pnpm; the demo runs two processes (`make serve-demo` / `make serve` and `make web`). A's steward queue and B's Ask box are pages in `web/`, calling their existing API routes.
+- **Engine checks safety at the proposed slot**, not "now": a 06:00 batch would otherwise block every contact. The release gate rechecks everything at release time.
+- **Release re-tiers** ALTERNATIVE/OVERRIDE to the stricter tier of the two actions, and a hardship flag that appears after the proposal makes it Red.
+- **SHAP without the shap package:** LightGBM's own `pred_contrib`, converted to probability points per feature (leave-one-out; signs and sizes right, not exactly additive).
+- Port 8000 is taken by VS Code on Shreyas's machine; `kept serve --port` and `KEPT_API_URL` cover it. In dev, open `localhost:3000`, not `127.0.0.1` (Next 16 blocks dev resources cross-origin).
+
 ## Open questions
+- **paid_14d source (§9, D + A):** dated payment events exist in `loan_instalments` (`paid_date`, `paid_amount`), `card_statements` (`payments_amount`, `first_payment_after_due_date`, per cycle), `transactions` (sample only) and `contact_history.payment_taken_flag`. Proposal for A: loans from `loan_instalments.paid_date`; cards from `transactions` where present, else `card_statements` (cycle-level, so `paid_14d` is approximate for cards). Needs A's silver.
+- **Still needs other tracks:** `kept train` (real features + labels, after G2), `kept score` and real `kept serve` (A's `DuckDBC360Reader`, G3/G4), `kept nightly` (every track's subcommands), hardship programmes on the banner (C's `eligible_programs`).
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
+- 3 Oct: Phases 3-5 parallel tasks done against fakes; Next.js frontend; demo server.
 - 3 Oct: dataset downloaded and laid out under data/; Phase 2 parallel tasks done; continuing into later phases against fakes.
 - 3 Oct: PR to main held until the other tracks finish Phase 1 (Shreyas's call).
 - 3 Oct: Phase 1 parallel tasks done; rebased onto force-pushed main (4b21af6).
