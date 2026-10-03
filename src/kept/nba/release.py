@@ -7,10 +7,12 @@ errors or stale data mean "no action"; a kill switch reverts to the old strategy
 
 from __future__ import annotations
 
+import hashlib
 import random
 from collections.abc import Sequence
 from datetime import datetime
 
+from kept.config import FEATURE_MAX_STALENESS
 from kept.contracts.interfaces import AuditLog, CaseContextBuilder
 from kept.contracts.nba import Proposal, ReleaseDecision, ReleaseResult
 
@@ -18,19 +20,20 @@ from kept.contracts.nba import Proposal, ReleaseDecision, ReleaseResult
 def in_holdout(golden_customer_id: str, *, salt: str, share: float = 0.05) -> bool:
     """Permanent, deterministic hold-out on the old strategy: hash(salt, id) -> [0, 1) < share.
     Same inputs always give the same answer; independent of call order."""
-    raise NotImplementedError("Track D")
+    digest = hashlib.sha256(f"{salt}:{golden_customer_id}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") / 2**64 < share
 
 
 def sample_for_batch_review(
     proposals: Sequence[Proposal], *, n: int = 20, rng: random.Random
 ) -> list[Proposal]:
     """Green batch: the team lead samples n cases (all of them if fewer). No duplicates."""
-    raise NotImplementedError("Track D")
+    return rng.sample(list(proposals), min(n, len(proposals)))
 
 
 def is_stale(features_as_of: datetime, *, now: datetime) -> bool:
     """True when now - features_as_of > FEATURE_MAX_STALENESS or features_as_of is in the future."""
-    raise NotImplementedError("Track D")
+    return features_as_of > now or now - features_as_of > FEATURE_MAX_STALENESS
 
 
 class Releaser:
