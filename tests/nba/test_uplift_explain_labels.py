@@ -108,6 +108,10 @@ def test_t_learner_recovers_heterogeneous_effect_from_random_rows_only() -> None
     assert pos - neg > 0.15
     assert abs(neg) < 0.1
     assert m.model_version
+    helps = m.contributions(pd.DataFrame({"x": [0.6]}), Action.CALL)
+    hurts = m.contributions(pd.DataFrame({"x": [-0.6]}), Action.CALL)
+    # relative to the average case: x > 0 pushes toward calling, x < 0 against it
+    assert set(helps) == {"x"} and helps["x"] > 0 > hurts["x"] and helps["x"] - hurts["x"] > 0.05
 
 
 # ----------------------------------------------------------------- explanations
@@ -146,10 +150,36 @@ def test_reason_ties_broken_by_name() -> None:
     assert r[0].feature == "answer_rate_after_18h"
 
 
-@pytest.mark.todo("Track D: write a fixed reason sentence for every model feature")
 def test_every_model_feature_has_a_reason_template() -> None:
     missing = sorted(set(model_inputs()) - set(REASON_TEMPLATES))
     assert missing == []
+
+
+def test_default_templates_format_values() -> None:
+    r = top_reasons(
+        {
+            "pay_change_vs_3m_avg": 0.09,
+            "answer_rate_after_18h": 0.05,
+            "days_to_next_payroll": 0.04,
+            "max_dpd": 0.02,
+        },
+        {
+            "pay_change_vs_3m_avg": -0.2672,
+            "answer_rate_after_18h": 0.8,
+            "days_to_next_payroll": 4,
+            "max_dpd": 18,
+        },
+    )
+    assert [x.sentence for x in r] == [
+        "Latest pay is down 27% against the 3-month average",
+        "Answers 80% of calls after 18:00",
+        "Pay lands in 4 days",
+    ]
+
+
+def test_reason_without_its_value_is_skipped() -> None:
+    r = top_reasons({"max_dpd": 0.09, "promise_intent": 0.05}, {"max_dpd": None, "promise_intent": True})
+    assert [x.feature for x in r] == ["promise_intent"]
 
 
 def test_similar_cases_line() -> None:

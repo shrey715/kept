@@ -99,6 +99,33 @@ class TLearnerUplift:
         proba = self.predict_proba(features)
         return proba.sub(proba[baseline.value], axis=0)
 
+    def contributions(
+        self, row: pd.DataFrame, action: Action, *, baseline: Action = Action.WAIT
+    ) -> dict[str, float]:
+        """TreeSHAP (LightGBM's own pred_contrib) for one row: how much each feature moves
+        P(paid | action) - P(paid | baseline) away from the average case, in probability units.
+        Each model's log-odds contribution c_i becomes sigmoid(L) - sigmoid(L - c_i) (L = the
+        row's full log-odds), then baseline is subtracted from action.
+        ponytail: leave-one-out in probability space keeps sign and size but doesn't sum exactly
+        to the uplift; use the shap package's probability explainer if exact additivity matters."""
+        if len(row) != 1:
+            raise ValueError("contributions takes exactly one row")
+        X = row[self._columns]
+        out = self._prob_contrib(action, X) - self._prob_contrib(baseline, X)
+        return {c: float(v) for c, v in zip(self._columns, out, strict=True)}
+
+    def _prob_contrib(self, a: Action, X: pd.DataFrame) -> np.ndarray:
+        m = self._models[a]
+        if isinstance(m, float):  # constant model: no feature moves it
+            return np.zeros(len(self._columns))
+        contrib = np.asarray(m.predict_proba(X, pred_contrib=True))[0]
+        logit, c = contrib.sum(), contrib[:-1]  # last entry is the bias
+
+        def sig(z: np.ndarray | float) -> np.ndarray:
+            return np.asarray(1 / (1 + np.exp(-np.asarray(z, dtype=float))))
+
+        return np.asarray(sig(logit) - sig(logit - c), dtype=float)
+
 
 def qini_curve(
     uplift_score: np.ndarray, treated: np.ndarray, outcome: np.ndarray
