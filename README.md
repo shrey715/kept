@@ -136,6 +136,28 @@ cd web && pnpm lint && npx tsc --noEmit
 - **Feast offline store is `file` (D):** the DuckDB offline store needs `ibis`; the file store reads
   the same Parquet export.
 
+- **Core-banking customer number as an exact link (A):** not in the design; it comes from the release README.
+  `deposit_accounts.src_customer_ref = external.bank_subject_ref`, and for the 495,420 keys in both tables name,
+  DOB and postal code agree 99.7 to 100%.
+- **Payment accounts at other banks don't link (A):** 64.7% of card autopay and loan PAD source accounts are not
+  our deposit accounts, so they are ignored for matching instead of linking strangers.
+- **Ambiguous dates of birth are never guessed (A):** 12.7% of CRM DOBs could be DD/MM or MM/DD. Reading them all
+  day-first misreads 16%, which could merge two people; they stay null and other fields carry the match.
+- **Loan names in either order (A):** 20% of loan borrower names are "Last First"; the token CRM uses more as a
+  surname is taken as the surname (`silver.int_name_lexicon`).
+- **Match precision measured by a person (A):** the organisers gave no ground-truth IDs, so a person reviewed 300
+  random predicted links (160 Splink, 140 exact) sorted into review tiers: 298 correct, **99.3%** (target 98%).
+  Both misses were Splink links with different surnames. Splink also re-finds 99.9% of the exact links on its own.
+- **Golden IDs stay stable (A):** `kept match` reuses the last crosswalk: the oldest ID survives a merge, the
+  largest part keeps its ID on a split, and IDs are never reused. Steward verdicts feed back into the next match
+  ("same person" links, "different people" cuts the link).
+- **The contract is enforced, not just written (A):** gold models have dbt contract enforcement (a wrong type
+  fails the build), and the Soda checks are generated from the ODCS contract (21 of 21 pass).
+- **Silver keeps source labels where the contract is coarser (A):** buckets like 121-150 stay in silver; gold
+  derives its bucket from days past due. Province spellings (Ont., B.C., PQ ...) are normalised.
+- **Reloading the backfill never undoes a person (A, found with C):** the extraction loader only replaces a row
+  with a newer one, and never drops an agent's confirmation.
+
 - **Text extraction runs on a local model (C):** `gemma3:12b` through Ollama on the team's GPU,
   not a hosted API: no rate limits, no cost, and note text never leaves the machine. Every value
   needs a verbatim quote from the note, or it is dropped.
@@ -153,6 +175,16 @@ cd web && pnpm lint && npx tsc --noEmit
   RAM; training on a 1-in-5 DOB-hash sample and scoring every key gives 1,052,300 golden IDs.
 - **Cash-flow hardship from deposit data (C):** late payroll, a 20% pay drop or new EI deposits
   add a possible-hardship observation to gold (`hardship.cashflow_observations`).
+- **Post-call summary (C):** `kept.text.calls.summarise_call` reads a case's newest redacted transcript; the LLM
+  fills structured fields and fixed code writes the sentence. The template reproduces all 500 public gold
+  summaries exactly from their labels; with the local model, 77 of 100 labelled calls match word for word.
+- **Decimals are not personal data (C):** the redactor read long decimals in Ask result rows (0.42059…) as card or
+  phone numbers; digits inside a decimal are never redacted now.
+- **Voice is not built (C):** the design's planned cut (§10, "drop the semantic layer first, then voice"). All
+  25,000 calls already come as transcripts and go through the same redaction and extraction;
+  `kept/text/transcribe.py` stays a stub.
+- **The demo runs on real data (C, in D's web app):** the guided demo uses a real case and agent when the server
+  is not in demo mode, and the agent persona works a real agent's queue (179 open cases).
 
 - **Ask on a free hosted model (B):** `gemini/gemini-3.5-flash-lite` through LiteLLM, one free key per
   person, because a paid key is not an option. Every question is redacted (Presidio) before any LLM call,
@@ -212,7 +244,7 @@ src/kept/
   common/         LLM gateway (LiteLLM), audit log, DuckDB connection
   data/           Layer 1  Data Product Factory: ingest, clean, traps, identity/, gold, quality   (A)
   ask/            Layer 2  Collections Ask: scope, router, metrics, lookup, policy, SQL guard     (B)
-  text/           Layer 3  redaction, extraction, SetFit backfill, F1 gate, Whisper               (C)
+  text/           Layer 3  redaction, extraction, call summaries, SetFit backfill, F1 gate        (C)
   hardship/       hardship combination, cash-flow rule, programme eligibility                     (C)
   governance/     lineage CI check, fairness (C); role access and masking (D)
   features/       Layer 3  feature definitions, Feast provider (D); parity (A)
