@@ -228,7 +228,7 @@ def generate_soda_checks(contract: DataContract) -> str:
 
     freshness = {
         "freshness(refreshed_at)": {
-            "name": "Q5-freshness: published within 26h of the source extract (warn), 48h (block)",
+            "name": "Q5-freshness: gold refreshed within 26h (warn) and 48h (block); kept gate compares it with the source extract",
             "warn": "when > 26h",
             "fail": "when > 48h",
         }
