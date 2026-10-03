@@ -22,6 +22,7 @@ select
     cast(null as boolean)        as sunday_contact_permitted,
     cast(null as boolean)        as do_not_contact,
     cast(null as boolean)        as collections_hold,
+    cast(null as varchar[])      as hard_stop_flags,
     cast(null as varchar)        as hardship_status,
     cast(null as varchar)        as hardship_source,
     cast(null as boolean)        as vulnerability_flag,

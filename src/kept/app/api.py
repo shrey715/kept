@@ -25,8 +25,16 @@ from kept.contracts.audit import AuditEvent, AuditKind
 from kept.contracts.enums import Action, ReleaseTier, Role
 from kept.contracts.features import TextExtraction
 from kept.contracts.identity import GoldenCustomer
-from kept.contracts.interfaces import AskService, AuditLog, C360Reader, NBAEngine, ReleaseGate
+from kept.contracts.interfaces import (
+    AskService,
+    AuditLog,
+    C360Reader,
+    ExtractionStore,
+    NBAEngine,
+    ReleaseGate,
+)
 from kept.contracts.nba import NBACard, Proposal, ProposalStatus, ReleaseDecision, ReleaseResult
+from kept.data.identity.steward import StewardQueue
 from kept.governance.access import can_view_case, masked_view
 
 CASE_WIDE_ROLES = frozenset({Role.HARDSHIP_SPECIALIST, Role.TEAM_LEAD, Role.COMPLIANCE})
@@ -47,6 +55,8 @@ class Services:
     open_cases: Callable[[], list[str]] | None = None  # every open case ID (queue); real: from gold
     clock: Callable[[], datetime] = _utcnow  # demo runs on a business-hours clock
     add_note: Callable[[str, str, str, datetime], None] | None = None  # demo only: (case, text, user, now)
+    steward: StewardQueue | None = None  # Track A: /steward routes
+    extractions: ExtractionStore | None = None  # Track C: /extractions routes
 
 
 class HealthResponse(BaseModel):

@@ -53,7 +53,7 @@ PARITY_MAX_MISMATCH_RATE: Final = 0.001  # nightly offline/online parity, blocks
 COHORT_MIN_GROUP_SIZE: Final = 50  # cohort stats only for groups of 50+
 TEXT_FEATURE_MIN_F1: Final = 0.80
 HARDSHIP_MIN_RECALL: Final = 0.90
-TEXT_EVAL_SAMPLE_SIZE: Final = 300  # notes labelled twice
+TEXT_EVAL_SAMPLE_SIZE: Final = 500  # public labels per source; gate on the 30% holdout (kept.text.labels)
 
 # ------------------------------------------------- Layer 4: decisioning
 PAID_WINDOW_DAYS: Final = 14  # outcome: paid within 14 days (paid_14d)
