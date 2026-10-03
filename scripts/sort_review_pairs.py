@@ -9,7 +9,13 @@ from pathlib import Path
 import pandas as pd
 
 PATH = Path("data/labels/match_pairs.csv")
-FIELDS = {"name": "name_key", "first": "first_name_key", "dob": "dob", "phone": "phone_e164", "postal": "postal_code"}
+FIELDS = {
+    "name": "name_key",
+    "first": "first_name_key",
+    "dob": "dob",
+    "phone": "phone_e164",
+    "postal": "postal_code",
+}
 
 
 def state(d: pd.DataFrame, col: str) -> pd.Series:
