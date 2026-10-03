@@ -4,7 +4,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: 2, then the later phases' parallel tasks against fakes (Shreyas's call while G0 waits)
-- Working on: Phase 3 (context builder, uplift, Feast)
+- Working on: Phase 4 (sizing, ranking, explanations, engine)
 - Waiting on: G0 for merging; nothing blocks coding
 
 ## Done
@@ -15,6 +15,8 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - `/health`: `tests/app/test_api.py::test_health`.
 - Phase 2: feature definitions + deny-list (`tests/features/test_definitions_and_store.py` 56/56); legacy code mapping from real data (`tests/nba/test_legacy.py` 17/17); tiers, hold-out, staleness, batch sample.
 - Phase 2: dbt feature models (`dbt/models/features/`): spine, promise, contact, cohort, `case_features`. `tests/features/test_dbt_features.py` checks the SQL against the Python definitions point in time (4/4, needs dbt: see the test's docstring).
+
+- Phase 3: `KeptContextBuilder` (S3, `tests/nba/test_context.py` 13/13); `TLearnerUplift` + Qini (uplift tests 8/8, incl. the LightGBM integration test); `FeastFeatureProvider` + `export_features` (`tests/features/test_feast_store.py` 4/4).
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -31,8 +33,12 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **For A (dbt):** `pyproject.toml` has `dbt-core>=1.8`, so `uv.lock` picks dbt-core 1.8.8 with dbt-duckdb 1.11, which crashes on start (`Capability.MicrobatchConcurrency`). `dbt-core>=1.10` works (1.12.5). Until then: `uv run --with "dbt-core>=1.10" --with "dbt-duckdb>=1.9" dbt ...`.
 - **For A (K3 layout), from the release:** `data/raw/` = the 31 tables only; `data/files/{transcripts,docs}` (the tables' `file_path` columns are relative to `files/`); `data/labels/` = the two public label files; `data/benchmark/` = dev answers + answers template; `data/release/` = release README, MANIFEST, schema, dictionary. `primary_product` uses `card` (not `credit_card`).
 
+- **Feast offline store is `file`, not `duckdb`:** Feast's duckdb store needs `ibis`, which we don't install. It reads the same Parquet export.
+- **Context builder** reads the case row from `silver.collections_cases` (cap, case-level hard stops, `nba_recommendation_last`). A fresh text hardship signal raises `NONE` to `POSSIBLE` before gold catches up; it never lowers gold. Unknown time zone or contact count fails closed.
+- **Qini test** threshold was above the analytic value (0.01875); it now asserts that value. Own commit.
+
 ## Open questions
-- None blocking Phase 1. For G0: random-assignment values and legacy code lists (§9) need `code_lookups` from the real data.
+- **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
 - 3 Oct: dataset downloaded and laid out under data/; Phase 2 parallel tasks done; continuing into later phases against fakes.
