@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+
+from kept.config import RAW_DIR
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -21,12 +25,35 @@ COMMANDS = {
 }
 
 
+def _land(raw_dir: Path, extracted_at: datetime) -> int:
+    from kept.common.db import connect
+    from kept.data.ingest import land_directory
+
+    conn = connect()
+    try:
+        for t in land_directory(conn, raw_dir, extracted_at=extracted_at):
+            print(f"{t.table:<40} {t.row_count:>12,}")
+    finally:
+        conn.close()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kept")
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
-        sub.add_parser(name, help=help_text)
+        p = sub.add_parser(name, help=help_text)
+        if name == "land":
+            p.add_argument("--raw-dir", type=Path, default=RAW_DIR)
+            p.add_argument(
+                "--extracted-at",
+                type=datetime.fromisoformat,
+                default=None,
+                help="source extract time, ISO 8601 with offset (default: now, UTC)",
+            )
     args = parser.parse_args(argv)
+    if args.command == "land":
+        return _land(args.raw_dir, args.extracted_at or datetime.now(UTC))
     raise NotImplementedError(f"kept {args.command}: {COMMANDS[args.command]}")
 
 
