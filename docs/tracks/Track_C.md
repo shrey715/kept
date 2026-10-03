@@ -4,8 +4,8 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: 1 (parallel tasks done)
-- Working on: nothing; waiting for G0
-- Waiting on: G0 (A, B, D Phase 1)
+- Working on: G0 contract PR (`docs/NEXT_STEPS.md` §3), then Phase 2
+- Waiting on: owners' reviews of the G0 PR; B's hosted Ask model choice
 
 ## Done
 - `PresidioRedactor` (early provider): EN + FR spaCy, Canadian SIN/postal, non-Luhn cards, phones, context-gated bank accounts and DOBs, jargon allow-list, idempotent. `tests/text/test_redact.py` 16 pass.
@@ -27,12 +27,13 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Proposed local extraction model for G0: `ollama/gemma3:12b-it-qat` (already on the machine, ~10.6 GB VRAM).
 
 ## Open questions
-- D: does the Next.js card page include the extraction confirm/edit panel for `/extractions/{source_id}/confirm` (Phase 4), or does C build it in `web/`? Plan §5 Phase 4 lists only C's API handler.
+- Extraction confirm panel: D builds it in `web/`, C builds the route (`docs/NEXT_STEPS.md` §4).
 - A: 4,636 agent notes have mojibake (`appel�`, `F�VR.`), mostly French. Data quality report item; worth fixing in silver before redaction/extraction.
 - Team: shared handover folder (§1a) for Parquet outputs; needs a Drive folder link.
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 15:30 Merged all PRs (#2–#6) into main: fixed B's CI (sqlglot importorskip), resolved D's `cli.py` conflict, pinned dbt-duckdb<1.10. Wrote `docs/NEXT_STEPS.md` for all tracks.
 - 14:55 Phase 1 parallel tasks done; checks green. Waiting for G0.
 - 14:45 SetFit GPU smoke run and Ollama call OK. setfit bumped.
 - 14:35 PyPI throttled (~90 KB/s/conn): fetched torch/cuDNN with aria2c, verified hashes, installed.
