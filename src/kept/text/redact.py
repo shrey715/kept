@@ -38,7 +38,7 @@ class PresidioRedactor:
     Money amounts and ordinary dates (e.g. "3 Oct", "$140") are kept: extraction needs them.
     """
 
-    version: str = "presidio-v2"
+    version: str = "presidio-v3"
 
     def __init__(self, *, models: dict[str, str] | None = None) -> None:
         from presidio_analyzer import AnalyzerEngine
@@ -70,7 +70,12 @@ class PresidioRedactor:
         )
         # Never touch a placeholder from an earlier pass: keeps redact() idempotent.
         kept_spans = [m.span() for m in _PLACEHOLDER.finditer(text)]
-        results = [r for r in results if not any(r.start < e and s < r.end for s, e in kept_spans)]
+        results = [
+            r
+            for r in results
+            if not any(r.start < e and s < r.end for s, e in kept_spans)
+            and (r.entity_type not in _NER_ENTITIES or _looks_like_name(text[r.start : r.end]))
+        ]
         if not results:
             return RedactedText(text=text, redactor_version=self.version)
         out = self._anonymizer.anonymize(text=text, analyzer_results=results)  # type: ignore[arg-type]
@@ -151,6 +156,64 @@ def looks_french(text: str) -> bool:
 
 # Collections shorthand spaCy mistakes for names or places ("escalated to TL" -> <LOCATION>).
 JARGON = ("TL", "CB", "PTP", "RPC", "NSF", "EI", "PAD", "DPD", "LVM", "VM", "TPI", "CX", "cust", "pmt")
+
+# spaCy NER on agent shorthand tags typos ("cust caleld"), months ("Jun") and ALL-CAPS template
+# phrases ("RAPPEL PRÉVU") as names and places. Keep an NER span only if it has a Titlecase word that
+# isn't a month. ponytail: an all-caps name ("JOHN SMITH") passes unredacted; notes hold almost no
+# names (transcripts do, in Titlecase). Add a name list if the PII spot-check finds one.
+_NER_ENTITIES = frozenset({"PERSON", "LOCATION"})
+_MONTH_WORDS = frozenset(
+    [
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "may",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "sept",
+        "oct",
+        "nov",
+        "dec",
+        "january",
+        "february",
+        "march",
+        "april",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+        "janv",
+        "févr",
+        "fév",
+        "avr",
+        "mai",
+        "juin",
+        "juil",
+        "août",
+        "déc",
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "juillet",
+        "septembre",
+        "octobre",
+        "novembre",
+        "décembre",
+    ]
+)
+
+
+def _looks_like_name(span: str) -> bool:
+    words = re.findall(r"[^\W\d_]+", span)
+    return any(w[0].isupper() and w[1:].islower() and w.lower() not in _MONTH_WORDS for w in words)
+
 
 _PLACEHOLDER = re.compile(r"<[A-Z_]+>")
 # Weak patterns (bank accounts, DOBs) score 0.05 and only pass with a context word nearby (+0.35).

@@ -73,3 +73,20 @@ def test_card_number_without_luhn_removed(redactor: PresidioRedactor) -> None:
 def test_french_note_keeps_content(redactor: PresidioRedactor) -> None:
     note = "client a appelé. a perdu son emploi en juin. demande si pmt peut être réduit. réf. équipe difficultés"
     assert redactor.redact(note).text == note
+
+
+@pytest.mark.parametrize(
+    "note",
+    [
+        "cust caleld in. PTP $40 Jun. 12. sent pmt lnik",
+        "PARLÉ AU CLIENT. RAPPEL PRÉVU",
+        "spoke w/ csut, can pay 55 on 3 juil",
+    ],
+)
+def test_shorthand_typos_months_and_caps_kept(redactor: PresidioRedactor, note: str) -> None:
+    assert redactor.redact(note).text == note
+
+
+def test_titlecase_name_in_transcript_removed(redactor: PresidioRedactor) -> None:
+    out = redactor.redact("agent: Puis-je parler à Daniel Morin?\ncustomer: C'est moi.").text
+    assert "Daniel" not in out and "Morin" not in out
