@@ -9,31 +9,38 @@ Team Sharpe Shooters, CIBC Collections Hackathon.
 
 ## Run it
 
+Two ways to run Kept. **The demo** needs nothing but this repo (12 in-memory cases). **The real
+system** runs the nightly pipeline over the 1M-customer release, then serves every open case.
+
 ### 1. Prerequisites
 
 | Tool | Version | Who needs it |
 |---|---|---|
 | Python + [uv](https://docs.astral.sh/uv/) | 3.12, uv ≥ 0.5 | everyone |
-| Node + [pnpm](https://pnpm.io/) | Node 22, pnpm ≥ 10 | whoever runs the web app (the demo machine) |
-| Google Chrome or Firefox | current | the demo |
+| Node + [pnpm](https://pnpm.io/) | Node 22, pnpm ≥ 10 | the web app |
+| [Ollama](https://ollama.com/) with `gemma3:12b-it-qat` (`ollama pull gemma3:12b-it-qat`, ~9 GB) | current | text extraction (a GPU with ~11 GB VRAM) |
+| RAM | 16 GB for serving; **≥ 24 GB for the full nightly** (land peaks at ~7 GB, match at ~15 GB) | the machine that runs `kept nightly` |
+| Disk | ~25 GB free (release 7.3 GB, warehouse ~9 GB, exports) | the real system |
 
 ### 2. Install
 
 ```bash
-make setup                 # core + dev tools
-make setup-d               # or setup-a / -b / -c / setup-all: your track's libraries
+make setup-all             # every track's libraries (large: pulls torch); or setup + setup-a/-b/-c/-d
 make web-setup             # web app (pnpm install in web/)
+cp .env.example .env       # then fill it in (below)
 ```
 
-Copy `.env.example` to `.env` (free LLMs only: a local Ollama model and a free hosted tier).
+`.env`, never committed. Free LLMs only:
 
-### 3. Data
+| Variable | Set it to |
+|---|---|
+| `KEPT_HOLDOUT_SALT` | **the team's one shared value.** It decides which cases are in the 5% hold-out; every machine must match, and it never changes after go-live |
+| `GEMINI_API_KEY` | your own free key (the Ask: `KEPT_ASK_LLM_MODEL=gemini/gemini-3.5-flash-lite`) |
+| `KEPT_TEXT_LLM_MODEL`, `OLLAMA_API_BASE` | leave as in `.env.example` (local gemma3 through Ollama) |
+| `MLFLOW_TRACKING_URI` | `sqlite:///mlflow.db` (MLflow 3 refuses the old `file:./mlruns`) |
+| `KEPT_KILL_SWITCH` | `false`; `true` falls every card back to the current strategy |
 
-Download the release and lay it out under `data/` exactly as [`data/README.md`](data/README.md) says,
-then land it: `uv run kept land` (31 bronze tables in `data/warehouse/kept.duckdb`). Nothing under
-`data/` is ever committed.
-
-### 4. The demo (no warehouse needed)
+### 3. The demo (no warehouse needed)
 
 Two terminals:
 
@@ -50,34 +57,67 @@ six-step script. Personas have direct links, e.g. `/signin?as=agent-7&next=/queu
   calling-hours check at any time of day. Restarting the API resets the demo cases.
 - **Port 8000 taken** (VS Code often holds it): `uv run kept serve --demo --port 8010` and
   `cd web && KEPT_API_URL=http://127.0.0.1:8010 pnpm dev`.
-- **Showing it from another machine on the network:** `cd web && KEPT_DEV_ORIGINS=<this machine's IP> pnpm dev`,
+- **From another machine on the network:** `cd web && KEPT_DEV_ORIGINS=<this machine's IP> pnpm dev`,
   then open `http://<ip>:3000`. Without it the dev server serves the page but not its scripts.
 - **For the live demo**, use the production build (faster, no dev overlay):
   `cd web && pnpm build && KEPT_API_URL=http://127.0.0.1:8000 pnpm start`.
-- `uv run kept serve --demo --reload` restarts the API when Python code changes (demo state resets).
 
-### 5. The pipeline on real data
+### 4. The real system
+
+**Data.** Download the release and lay it out under `data/` exactly as [`data/README.md`](data/README.md)
+says. Nothing under `data/` is ever committed. Then put the team's hand-over files in place (Drive folder):
+
+| File | Where | Why |
+|---|---|---|
+| `extractions_880b98c_20261003.parquet` | `data/exports/extractions/` | the SetFit backfill of all 785,594 notes and calls. **Without it the first nightly would send every note through the live model** |
+| `identity_crosswalk_<run>.parquet` (+ `review_pairs_<run>.parquet`) | `data/exports/identity_crosswalk/` | optional: `kept match` keeps these golden IDs stable; without it the first run assigns new ones. The review pairs fill the steward queue |
+
+**First run on a fresh machine** (each step is its own process; about 20 minutes in all):
 
 ```bash
-uv run kept land           # A: raw -> bronze
-uv run kept build          # A: dbt bronze -> silver -> gold          (G1/G2)
-uv run kept match          # A: exact links + Splink                  (G1)
-uv run kept features       # D: dbt features -> Parquet -> Feast      (G2)
-uv run kept train          # D: uplift models, logged to MLflow       (after G2)
-uv run kept score          # D: a card for every open case            (G3)
-uv run kept serve          # D: the API on the real services          (G4)
-uv run kept nightly        # everyone: the steps above in order       (G4)
+uv run kept nightly --skip score   # land -> silver -> match -> gold -> gate -> extract -> features -> parity
+uv run kept features --training    # features one second before every past decision (features_train)
+uv run kept train                  # uplift model -> data/exports/models/uplift.pkl, metrics in MLflow
+uv run kept score                  # a card for every open case -> nba.cards (96,000 in ~2.5 min)
+uv run python scripts/build_policy_index.py   # the Ask's policy search (data/policy -> LanceDB), once
 ```
 
-Commands marked with a gate land when that gate passes (`docs/TEAM_PLAN.md` §6).
+**Every night after that:** `uv run kept nightly`. It stops at the first failing step, so a blocked
+quality gate publishes no features or cards; resume with `--from <step>`, leave a step out with
+`--skip <step>` (e.g. `--skip extract` on a machine without Ollama). `kept features` defaults to the
+latest 06:00 UTC run, so cards are never stale.
 
-### 6. Tests
+| Step | Command | Owner | What it does |
+|---|---|---|---|
+| land | `kept land` | A | `data/raw` -> 31 bronze tables |
+| silver | `kept build --silver-only` | A | dbt: cleaned silver |
+| match | `kept match --train-sample-mod 5` | A | exact links + Splink (trained on a 1-in-5 sample, scores every key) -> crosswalk |
+| gold | `kept build --gold-only` | A | crosswalk + extractions -> `gold.c360_customer`, hardship via `hardship.combine` |
+| gate | `kept gate` | A | quality rules Q1-Q5; blocks the run on failure |
+| extract | `kept extract --new` | C | tonight's new notes -> redaction -> gemma3 -> `text.extractions` |
+| features | `kept features` | D | dbt features (point in time) -> Parquet -> Feast online store |
+| parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
+| score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
+
+**Serve it** (the API owns the warehouse while it runs: no batch jobs against it at the same time):
+
+```bash
+uv run kept serve          # API on :8000 over the real services
+make web                   # or the production build above
+```
+
+- `/queue` reads the nightly's cards (an agent sees their own cases); opening a case re-checks it live.
+- **Add a note** on a case runs live extraction (Presidio + gemma3, a few seconds) and re-checks the card:
+  a hardship note turns it Red. A possible cease request shows a red banner the assigned agent confirms.
+- The Ask answers with the free Gemini tier; policy questions cite the section.
+- Without Presidio installed (`make setup-c`) adding a note answers 503; everything else works.
+
+### 5. Tests
 
 ```bash
 make test-contract         # shared API: always green
-make test-d                # one track (a / b / c / d)
+make test                  # the full suite (1,100+ tests)
 make lint typecheck
-make progress              # stubs left per track
 cd web && pnpm lint && npx tsc --noEmit
 ```
 
