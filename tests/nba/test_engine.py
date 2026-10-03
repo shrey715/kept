@@ -216,6 +216,35 @@ def test_new_recommendation_supersedes_the_pending_one(make_ctx) -> None:  # typ
     assert store[b.proposal_id].status is ProposalStatus.PENDING
 
 
+def test_a_cease_that_lands_cancels_the_pending_proposal(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    from kept.contracts.enums import HardStop
+    from kept.contracts.nba import ProposalStatus
+
+    ctx = make_ctx()
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+    )
+    cases = {ctx.case_id: ctx}
+    store: dict[str, Any] = {}
+    log = InMemoryAuditLog()
+    eng = KeptEngine(
+        context=FixedContextBuilder(cases),
+        features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(PROBS),
+        audit_log=log,
+        proposals=store,
+    )
+    a = eng.recommend(ctx.case_id, NOW).proposal
+    cases[ctx.case_id] = ctx.model_copy(update={"hard_stop_flags": frozenset({HardStop.CEASE})})
+    card = eng.recommend(ctx.case_id, NOW)
+    assert a and card.proposal is None and store[a.proposal_id].status is ProposalStatus.CANCELLED
+    cancelled = [e for e in log.read() if e.kind is AuditKind.PROPOSAL_CANCELLED]
+    assert len(cancelled) == 1 and "cease" in cancelled[0].payload["reason"]
+
+
 def test_window_starts_on_a_half_hour(engine) -> None:  # type: ignore[no-untyped-def]
     from zoneinfo import ZoneInfo
 
