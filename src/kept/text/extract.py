@@ -15,7 +15,7 @@ from kept.contracts.enums import HardshipSignal
 from kept.contracts.features import Evidence, ExtractedValue, RedactedText, StatedReason, TextExtraction
 from kept.contracts.interfaces import LLMGateway
 
-PROMPT_VERSION = "extract-v1"
+PROMPT_VERSION = "extract-v2"
 
 SYSTEM_PROMPT = """You read one collections agent note or call transcript (English or French; personal \
 details are already replaced by placeholders like <PERSON>) and extract eight fields.
@@ -33,9 +33,11 @@ Fields:
   pay cut), "medical" (illness, disability), "bereavement", "other" (separation, rate reset, disaster, other),
   or "none" when no hardship cause is stated. Forgetting the due date or payroll timing is "none".
 - promise_intent: true when the customer commits to pay (a promise to pay, PTP), else false.
-- promised_date: when the promised payment will be made, as "YYYY-MM-DD" if the year is clear,
-  "MM-DD" if only month and day are given, "day:N" for "the Nth", "weekday:<monday..sunday>" for a weekday,
-  else null.
+- promised_date: when the promised payment will be made, written exactly as the text gives it. Never
+  add a year, month or day the text doesn't state; the system resolves relative dates itself.
+  "Oct 3", "3 oct", "SEP 29" -> "10-03" / "09-29" (MM-DD); "the 2nd", "le 15" -> "day:2" / "day:15";
+  "Friday", "vendredi" -> "weekday:friday"; a full date with a year -> "YYYY-MM-DD";
+  "next payday", "after payday", no date -> null.
 - promised_amount: the promised amount as a plain number string like "140.00", else null.
 - dispute: true when the customer disputes the debt, a charge, a fee or the amount owed.
 - cease_request: true when the customer asks the bank to stop calling or contacting them.
@@ -203,6 +205,11 @@ def _date(v: Any, anchor: date | None) -> date | None:
             except ValueError:
                 return None
     return None
+
+
+def transcript_text(turns: list[dict[str, Any]]) -> str:
+    """One line per turn, "speaker: text", in turn order (call_transcripts JSON `turns`)."""
+    return "\n".join(f"{t['speaker']}: {t['text']}" for t in sorted(turns, key=lambda t: t["turn_index"]))
 
 
 def confirm(
