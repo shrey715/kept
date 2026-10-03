@@ -126,3 +126,106 @@ def test_duckdb_case_reader(tmp_path: Path) -> None:
     assert row == CaseRow("CS-1", Decimal("1617.64"), 2, "sms_payment_link", False, True, False)
     with pytest.raises(KeyError):
         duckdb_case_reader(db)("CS-2")
+
+
+# ----------------------------------------------------------------- fresh notes and gold hard stops
+def _extraction(
+    source_id: str, at: datetime, *, signal: str = "none", cease: bool = False, confirmed: str | None = None
+):  # type: ignore[no-untyped-def]
+    from kept.contracts.features import TextExtraction
+
+    def v(value, conf=0.9):  # type: ignore[no-untyped-def]
+        return {"value": value, "evidence": None, "confidence": conf}
+
+    return TextExtraction.model_validate(
+        {
+            "source_id": source_id,
+            "case_id": CASE,
+            "hardship_signal": v(signal),
+            "stated_reason": v("none"),
+            "promise_intent": v(False),
+            "promised_date": v(None),
+            "promised_amount": v(None),
+            "dispute": v(False),
+            "cease_request": v(cease),
+            "third_party_present": v(False),
+            "extractor": "llm:test",
+            "extracted_at": at,
+            "confirmed_by_agent_id": confirmed,
+        }
+    )
+
+
+def _with_store(make_customer, now_utc, rows, **customer):  # type: ignore[no-untyped-def]
+    from tests.fakes import InMemoryExtractionStore
+
+    store = InMemoryExtractionStore()
+    for r in rows:
+        store.put(r)
+    c = make_customer(**customer)
+    vec = FeatureVector(
+        case_id=CASE,
+        golden_customer_id=c.golden_customer_id,
+        as_of=now_utc - timedelta(hours=16),
+        feature_set_version="fs-0.1",
+        contacts_last_7d=1,
+    )
+    builder = KeptContextBuilder(
+        c360=DictC360Reader(customers={c.golden_customer_id: c}),
+        features=StaticFeatureProvider(vectors={CASE: vec}),
+        cases=lambda cid: CaseRow(case_id=cid, total_overdue=Decimal("420.00")),
+        holdout_salt="t",
+        extractions=store,
+    )
+    return builder.build(CASE, now_utc)
+
+
+def test_a_fresh_note_flips_hardship_before_the_nightly_build(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    ctx = _with_store(
+        make_customer, now_utc, [_extraction("N-1", now_utc - timedelta(minutes=5), signal="possible")]
+    )
+    assert ctx.hardship_status is HardshipStatus.POSSIBLE
+
+
+def test_an_agent_confirmed_note_makes_hardship_confirmed(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    ctx = _with_store(
+        make_customer,
+        now_utc,
+        [_extraction("N-1", now_utc - timedelta(minutes=5), signal="clear", confirmed="agent-7")],
+    )
+    assert ctx.hardship_status is HardshipStatus.CONFIRMED
+
+
+def test_notes_never_lower_gold_and_future_notes_are_ignored(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    ctx = _with_store(
+        make_customer,
+        now_utc,
+        [_extraction("N-1", now_utc - timedelta(minutes=5))],
+        hardship_status=HardshipStatus.CONFIRMED,
+    )
+    assert ctx.hardship_status is HardshipStatus.CONFIRMED
+    later = _with_store(
+        make_customer, now_utc, [_extraction("N-2", now_utc + timedelta(minutes=5), signal="clear")]
+    )
+    assert later.hardship_status is HardshipStatus.NONE
+
+
+def test_text_cease_needs_agent_confirmation(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    at = now_utc - timedelta(minutes=5)
+    assert (
+        HardStop.CEASE
+        not in _with_store(make_customer, now_utc, [_extraction("N-1", at, cease=True)]).hard_stop_flags
+    )
+    assert (
+        HardStop.CEASE
+        in _with_store(
+            make_customer, now_utc, [_extraction("N-1", at, cease=True, confirmed="agent-7")]
+        ).hard_stop_flags
+    )
+
+
+def test_gold_hard_stop_flags_are_used(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    ctx = _with_store(
+        make_customer, now_utc, [], collections_hold=True, hard_stop_flags=frozenset({HardStop.BANKRUPTCY})
+    )
+    assert ctx.hard_stop_flags == {HardStop.BANKRUPTCY}  # named by gold: no INSOLVENCY guess

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from kept.contracts.enums import HardshipSignal, HardshipSource, HardshipStatus
+from kept.contracts.features import TextExtraction
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,3 +58,20 @@ def _confirms(o: HardshipObservation) -> bool:
     return o.confirmed_by is not None or (
         o.source in _CONFIRMING_SOURCES and o.signal is HardshipSignal.CLEAR
     )
+
+
+def observations_from_extractions(extractions: Iterable[TextExtraction]) -> list[HardshipObservation]:
+    """Track C's text extractions as combine() input: the same rule as gold's SQL (A,
+    int_hardship_observations, 'llm' branch). NONE signals add nothing; an agent's confirmation
+    (confirmed_by_agent_id) confirms. For the live path: combine(observations_from_extractions(
+    store.for_case(case_id))) flips a case on a fresh note before the nightly gold rebuild."""
+    return [
+        HardshipObservation(
+            source=HardshipSource.LLM,
+            signal=x.hardship_signal.value,
+            observed_at=x.extracted_at,
+            confirmed_by=x.confirmed_by_agent_id,
+        )
+        for x in extractions
+        if x.hardship_signal.value is not HardshipSignal.NONE
+    ]

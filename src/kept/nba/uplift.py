@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from kept.contracts.enums import Action
+from kept.contracts.enums import Action, PayrollFrequency
 from kept.features.store import assert_no_denied
 
 # Small, regularised trees: the random-assignment rows are a minority of the data.
@@ -30,6 +30,25 @@ DEFAULT_PARAMS: dict[str, Any] = {
     "colsample_bytree": 0.8,
     "verbose": -1,
 }
+
+
+# category features: fixed levels so training and serving encode them the same way
+_CATEGORIES = {"pay_frequency": [p.value for p in PayrollFrequency]}
+
+
+def _frame(X: pd.DataFrame) -> pd.DataFrame:
+    """LightGBM dtypes from warehouse rows or FeatureVector dicts: categories with fixed levels,
+    bools / decimals / None (object columns) as floats with NaN for missing."""
+    out: dict[str, Any] = {}
+    for c in X.columns:
+        col = X[c]
+        if c in _CATEGORIES:
+            out[c] = pd.Categorical(col.where(col.notna(), None).astype(object), categories=_CATEGORIES[c])
+        elif col.dtype == object or col.dtype == bool:
+            out[c] = col.astype(object).where(col.notna(), np.nan).astype(float)
+        else:
+            out[c] = col
+    return pd.DataFrame(out, index=X.index)
 
 
 class TLearnerUplift:
@@ -58,6 +77,7 @@ class TLearnerUplift:
         assert_no_denied(X)
         from lightgbm import LGBMClassifier
 
+        X = _frame(X)
         keep = is_random_assignment.to_numpy(dtype=bool)
         Xr, ar, yr = X[keep], action[keep].to_numpy(), paid_14d[keep].to_numpy(dtype=int)
         models: dict[Action, Any] = {}
@@ -84,7 +104,7 @@ class TLearnerUplift:
         Not fitted -> RuntimeError."""
         if not self._models:
             raise RuntimeError("TLearnerUplift is not fitted")
-        X = features[self._columns]
+        X = _frame(features[self._columns])
         out = {
             a.value: np.full(len(X), m) if isinstance(m, float) else m.predict_proba(X)[:, 1]
             for a, m in self._models.items()
@@ -110,7 +130,7 @@ class TLearnerUplift:
         to the uplift; use the shap package's probability explainer if exact additivity matters."""
         if len(row) != 1:
             raise ValueError("contributions takes exactly one row")
-        X = row[self._columns]
+        X = _frame(row[self._columns])
         out = self._prob_contrib(action, X) - self._prob_contrib(baseline, X)
         return {c: float(v) for c, v in zip(self._columns, out, strict=True)}
 

@@ -271,3 +271,12 @@ def test_policy_question_is_answered_with_citations(
     assert (
         a.narrative == "At most 3 attempts in any rolling 7 days (POL-COLL-001 §5.2)."
     )  # grounded in the excerpt
+
+
+def test_relative_dates_use_the_snapshot_date_not_the_gold_build_time(build, ask_db) -> None:  # type: ignore[no-untyped-def]
+    """Gold's refreshed_at is when it was built; "today" for the router is its as_of_date."""
+    ask_db.execute("ALTER TABLE gold.c360_customer ADD COLUMN as_of_date DATE DEFAULT DATE '2026-09-28'")
+    svc, llm = build({Purpose.ASK_ROUTE: [METRIC_INTENT], Purpose.ASK_NARRATE: ["ok"]})
+    svc.ask(_req("promise kept rate by product"))
+    route_call = next(c for c in llm.calls if c["purpose"] == Purpose.ASK_ROUTE)
+    assert "relative to 2026-09-28" in route_call["system"]
