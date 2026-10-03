@@ -38,7 +38,7 @@ class PresidioRedactor:
     Money amounts and ordinary dates (e.g. "3 Oct", "$140") are kept: extraction needs them.
     """
 
-    version: str = "presidio-v3"
+    version: str = "presidio-v4"
 
     def __init__(self, *, models: dict[str, str] | None = None) -> None:
         from presidio_analyzer import AnalyzerEngine
@@ -237,6 +237,10 @@ def _canadian_recognizers(language: str) -> list[Any]:
         def validate_result(self, pattern_text: str) -> bool:
             return _luhn_ok(pattern_text)
 
+    class CardRecognizer(PatternRecognizer):  # type: ignore[misc]
+        def validate_result(self, pattern_text: str) -> bool:
+            return 12 <= sum(c.isdigit() for c in pattern_text) <= 19
+
     def rec(entity: str, regex: str, score: float, context: list[str]) -> PatternRecognizer:
         return PatternRecognizer(
             supported_entity=entity,
@@ -245,9 +249,11 @@ def _canadian_recognizers(language: str) -> list[Any]:
             supported_language=language,
         )
 
+    # A real month name, so "May 31 DOB 1987-01-13" can't match "31 DOB 1987" and hide the real DOB.
+    month = "(?i:" + "|".join(sorted(_MONTH_WORDS, key=len, reverse=True)) + ")"
     date = (
         r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}"
-        r"|\d{1,2}\s+[A-Za-z]{3,9}\.?,?\s+\d{4}|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4})\b"
+        rf"|\d{{1,2}}\s+{month}\.?,?\s+\d{{4}}|{month}\.?\s+\d{{1,2}},?\s+\d{{4}})\b"
     )
     return [
         SinRecognizer(
@@ -262,12 +268,15 @@ def _canadian_recognizers(language: str) -> list[Any]:
             0.6,
             ["postal"],
         ),
-        # Card numbers in notes need not pass Luhn (the built-in recognizer requires it; fr has none).
-        rec(
-            "CREDIT_CARD",
-            r"(?<!\d)\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{4}(?!\d)|(?<!\d)\d{15,16}(?!\d)",
-            0.6,
-            ["card", "carte"],
+        # Card numbers in notes need not pass Luhn (the built-in recognizer requires it; fr has none),
+        # and synthetic notes drop digits ("4520 766 9760 7290"): 3-5 groups, 12-19 digits in all.
+        CardRecognizer(
+            supported_entity="CREDIT_CARD",
+            patterns=[
+                Pattern("card", r"(?<!\d)\d{2,5}(?:[- ]\d{2,5}){2,4}(?!\d)|(?<!\d)\d{13,19}(?!\d)", 0.6)
+            ],
+            context=["card", "carte"],
+            supported_language=language,
         ),
         # North American numbers phonenumbers rejects (e.g. 555 exchanges in test data).
         rec(

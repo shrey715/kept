@@ -90,3 +90,21 @@ def test_shorthand_typos_months_and_caps_kept(redactor: PresidioRedactor, note: 
 def test_titlecase_name_in_transcript_removed(redactor: PresidioRedactor) -> None:
     out = redactor.redact("agent: Puis-je parler à Daniel Morin?\ncustomer: C'est moi.").text
     assert "Daniel" not in out and "Morin" not in out
+
+
+@pytest.mark.parametrize(
+    "note,secret",
+    [
+        ("card 4520 766 9760 7290. CB scheduled", "766 9760"),  # a digit dropped
+        ("crad 420 369 585 454", "369 585"),
+        ("spoke w/ cust PTP 65 May 31 DOB 1987-01-13", "1987-01-13"),
+    ],
+)
+def test_malformed_cards_and_dob_after_dates_removed(
+    redactor: PresidioRedactor, note: str, secret: str
+) -> None:
+    assert secret not in redactor.redact(note).text
+
+
+def test_phone_number_is_not_a_card(redactor: PresidioRedactor) -> None:
+    assert "<PHONE_NUMBER>" in redactor.redact("call back at 416-555-0123").text
