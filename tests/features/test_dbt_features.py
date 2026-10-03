@@ -291,7 +291,7 @@ def _same(a: object, b: float | None) -> bool:
 
 
 def test_text_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.DataFrame]]) -> None:
-    """Strongest hardship in 90 days, latest promise in 30 days, any dispute in 90 days,
+    """Hardship by the 30/90 rule (>= 1 flagged note in 30 days and >= 2 in 90), latest promise in 30 days, any dispute in 90 days,
     any confirmed cease ever, latest note's third party; no notes -> missing."""
     out, silver = built
     notes = silver["text_signals"]
@@ -306,7 +306,13 @@ def test_text_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.D
             assert pd.isna(row.hardship_signal) and pd.isna(row.third_party_present_flag)
             continue
         recent = n[n.written_at > as_of - timedelta(days=90)]
-        want = max((rank[x] for x in recent.hardship_signal), default=None)
+        flagged = recent[recent.hardship_signal != "none"]
+        repeated = len(flagged) >= 2 and (flagged.written_at > as_of - timedelta(days=30)).any()
+        want = (
+            max((rank[x] for x in recent.hardship_signal), default=None)
+            if repeated
+            else (0 if len(recent) else None)
+        )
         got = None if pd.isna(row.hardship_signal) else rank[row.hardship_signal]
         assert got == want, row.case_id
         assert bool(row.dispute_flag) == bool(recent.dispute_flag.any())

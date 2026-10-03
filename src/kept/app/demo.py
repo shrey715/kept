@@ -22,9 +22,9 @@ from zoneinfo import ZoneInfo
 import duckdb
 import pandas as pd
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
-from kept.app.api import ExtractionConfirmIn, Services, create_app
+from kept.app.api import ExtractionConfirmIn, NoteExtraction, Services, create_app
 from kept.common.audit import DuckDBAuditLog, new_event_id
 from kept.config import RAW_DIR
 from kept.contracts.ask import (
@@ -500,7 +500,8 @@ class DemoWorld:
             if ex.hardship_signal.value is not HardshipSignal.NONE:
                 found = HardshipStatus.CONFIRMED if ex.confirmed_by_agent_id else HardshipStatus.POSSIBLE
                 status = max(status, found, key=order.index)
-            cease = cease or ex.cease_request.value
+            # a text cease counts only once a person confirmed it (as in the real context builder)
+            cease = cease or bool(ex.cease_request.value and ex.confirmed_by_agent_id)
         ctx = self.contexts[case_id]
         before = ctx.hardship_status
         stops = (ctx.hard_stop_flags - {HardStop.CEASE}) | ({HardStop.CEASE} if cease else set())
@@ -716,12 +717,8 @@ def demo_services() -> Services:
         open_cases=lambda: [c[0] for c in CASES],
         clock=_business_clock,
         add_note=world.add_note,
+        demo=True,
     )
-
-
-class NoteExtraction(BaseModel):
-    note: str
-    extraction: TextExtraction
 
 
 def demo_app() -> FastAPI:

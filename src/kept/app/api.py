@@ -56,9 +56,11 @@ class Services:
     proposals: dict[str, Proposal] = field(default_factory=dict)  # the engine's proposal store
     open_cases: Callable[[], list[str]] | None = None  # every open case ID (queue); real: from gold
     clock: Callable[[], datetime] = _utcnow  # demo runs on a business-hours clock
-    add_note: Callable[[str, str, str, datetime], None] | None = None  # demo only: (case, text, user, now)
+    add_note: Callable[[str, str, str, datetime], None] | None = None  # (case, text, user, now)
     steward: StewardQueue | None = None  # Track A: /steward routes
     extractions: ExtractionStore | None = None  # Track C: /extractions routes
+    note_text: Callable[[str], str | None] | None = None  # source_id -> the note's text, for the panel
+    demo: bool = False
 
 
 class HealthResponse(BaseModel):
@@ -110,6 +112,11 @@ class StewardVerdictIn(BaseModel):
     steward_id: str
 
 
+class NoteExtraction(BaseModel):
+    note: str
+    extraction: TextExtraction
+
+
 class ExtractionConfirmIn(BaseModel):
     agent_id: str
     edits: dict[str, object] = {}
@@ -128,7 +135,11 @@ def create_app(services: Services) -> FastAPI:
     GET  /audit?user_id&role[&case_id][&kind]     200 list[AuditEvent], newest first
     POST /proposals/{proposal_id}/decision        200 ReleaseResult; 422 if body.proposal_id
                                                   differs from the path
-    POST /demo/cases/{case_id}/notes              200 NBACard after the note; 404 outside demo
+    POST /cases/{case_id}/notes                   200 NBACard after the note is extracted (live
+                                                  extraction; /demo/... is the same route); 502
+                                                  extraction failed; 503 no live extraction
+    GET  /cases/{case_id}/extractions?user_id&role 200 list[NoteExtraction], newest first (20);
+                                                  503 no store
     POST /ask                                     200 AskAnswer | Refusal | Clarification
     GET  /steward/queue                           200 list[StewardItemOut]
     POST /steward/items/{item_id}                 200 {"status": ...}; 404 unknown item
@@ -160,9 +171,7 @@ def create_app(services: Services) -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        return HealthResponse(
-            status="ok", version=__version__, now=services.clock(), demo=services.add_note is not None
-        )
+        return HealthResponse(status="ok", version=__version__, now=services.clock(), demo=services.demo)
 
     @app.get("/queue", response_model=list[QueueItem])
     def queue(user_id: str, role: Role) -> list[QueueItem]:
@@ -264,14 +273,26 @@ def create_app(services: Services) -> FastAPI:
             raise HTTPException(422, "proposal_id in the body must match the path")
         return services.release_gate.release(decision, services.clock())  # server time decides expiry
 
-    @app.post("/demo/cases/{case_id}/notes", response_model=NBACard)
+    @app.post("/cases/{case_id}/notes", response_model=NBACard)
+    @app.post("/demo/cases/{case_id}/notes", response_model=NBACard, include_in_schema=False)
     def add_note(case_id: str, note: NoteIn) -> NBACard:
         if services.add_note is None:
-            raise HTTPException(404, "notes are added through text extraction outside demo mode")
+            raise HTTPException(503, "live extraction is not configured")
         guard_case(case_id, note.user_id, note.role)
-        now = services.clock()
-        services.add_note(case_id, note.text, note.user_id, now)
-        return card_for(case_id, now)
+        try:
+            services.add_note(case_id, note.text, note.user_id, services.clock())
+        except RuntimeError as e:  # the extraction model failed or timed out: nothing was stored
+            raise HTTPException(502, str(e)) from None
+        return card_for(case_id, services.clock())  # after extraction: the note is in the past
+
+    @app.get("/cases/{case_id}/extractions", response_model=list[NoteExtraction])
+    def case_extractions(case_id: str, user_id: str, role: Role) -> list[NoteExtraction]:
+        if services.extractions is None:
+            raise HTTPException(503, "extraction store not configured")
+        guard_case(case_id, user_id, role)
+        found = sorted(services.extractions.for_case(case_id), key=lambda x: x.extracted_at, reverse=True)
+        text = services.note_text or (lambda _: None)
+        return [NoteExtraction(note=text(x.source_id) or "", extraction=x) for x in found[:20]]
 
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
