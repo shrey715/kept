@@ -80,6 +80,20 @@ def test_exact_links_found() -> None:
     assert pairs[frozenset({("crm", "RYM-2001"), ("crm", "RYM-1142")})] == "exact:crm_duplicate_pointer"
 
 
+def test_core_banking_cif_links_bureau_to_deposit() -> None:
+    rows = pd.DataFrame(
+        [
+            _row("deposit", "0003647280", core_banking_cif="0003647280"),
+            _row("bureau", "0003647280", core_banking_cif="0003647280"),
+            _row("bureau", "0099999999", core_banking_cif="0099999999"),  # no deposit account: links nothing
+        ]
+    )
+    out = exact_link_pairs(rows)
+    assert out[["left_system", "right_system", "rule"]].values.tolist() == [
+        ["bureau", "deposit", "exact:core_banking_cif"]
+    ]
+
+
 def test_exact_links_shape_and_invariants() -> None:
     out = exact_link_pairs(_records())
     assert list(out.columns) == ["left_system", "left_key", "right_system", "right_key", "rule", "score"]
