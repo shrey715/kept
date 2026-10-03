@@ -25,6 +25,10 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - `parse_tolerance` raises on "direction of effect" and "exact count, ±1 CAD" (test questions). Decide how the scorer treats them.
 
 ## Log
-- 2026-10-03: Track B confirmed; plan read. Dataset downloaded to `~/Documents/kept_dl`.
-- 2026-10-03: gateway, metrics, certified SQL, benchmark code written; branch `track-b` pushed; draft PR #3 opened.
-- 2026-10-03: certified SQL checked against real tables and dev gold answers.
+Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 14:04: waiting on the `ask` extra install to run the gateway tests.
+- 2026-10-03 14:03: certified SQL test and this file committed and pushed.
+- 2026-10-03 14:01: lint clean; draft PR #3 opened.
+- 2026-10-03 13:58: gateway, metrics, certified SQL and benchmark code committed; branch `track-b` pushed.
+- 2026-10-03 13:32: dataset downloaded to `~/Documents/kept_dl` (started 13:18).
+- 2026-10-03 ~13:10: Track B confirmed; plan read.
