@@ -15,7 +15,7 @@ from kept.contracts.enums import HardshipSignal
 from kept.contracts.features import Evidence, ExtractedValue, RedactedText, StatedReason, TextExtraction
 from kept.contracts.interfaces import LLMGateway
 
-PROMPT_VERSION = "extract-v3"
+PROMPT_VERSION = "extract-v4"
 
 SYSTEM_PROMPT = """You read one collections agent note or call transcript (English or French; personal \
 details are already replaced by placeholders like <PERSON>) and extract eight fields.
@@ -40,12 +40,15 @@ Fields:
   "Friday", "vendredi" -> "weekday:friday"; a full date with a year -> "YYYY-MM-DD";
   "next payday", "after payday", no date -> null.
 - promised_amount: the promised amount as a plain number string like "140.00", else null.
-- dispute: true only when the customer says they don't owe the debt, a charge or fee is wrong, the amount
-  is wrong, or the account or transaction isn't theirs (fraud). NOT a dispute: complaints about service or
-  the number of calls, wanting to file a complaint, refusing to pay, a bank or transfer problem.
-- cease_request: true only when the customer asks the bank to stop calling or contacting them ("stop
-  calling", "cease contact", "ne plus appeler"). Being unhappy about the number of calls is not a
-  cease request.
+- dispute: true only when the customer contests what the bank says they owe.
+  true: "disputes the charge", "says pmt not applied", "says charges are fraud", "dispute opened",
+  disputes a late fee, "billing error", "conteste les frais".
+  false: "says bank issue w/ transfer", "refuses to pay", "wants to file a complaint", "veut porter
+  plainte", "unhappy w/ # of calls", "says someone else uses card".
+- cease_request: true only when the customer asks the bank to stop contacting them.
+  true: "asked us to stop calling", "cease contact noted", "demande d'arrêter les appels".
+  false: "unhappy w/ # of calls"; "cease contact noted" after the customer "filed bankruptcy" or a
+  consumer proposal (that is a legal stay, not the customer's request).
 - third_party_present: true when someone other than the customer takes part (spouse, family member,
   representative, "3rd party on line"), else false.
 
@@ -190,8 +193,10 @@ def _bool(v: Any) -> bool:
 def _amount(v: Any) -> Decimal | None:
     if v is None or v == "":
         return None
+    s = re.sub(r"[\s$]", "", str(v))  # "$140", "17$", "1 635 $"
+    s = s.replace(",", ".") if re.fullmatch(r"\d+,\d{2}", s) else s.replace(",", "")  # "17,50" vs "1,635"
     try:
-        return Decimal(str(v).replace(",", "").lstrip("$").strip()).quantize(CENT)
+        return Decimal(s).quantize(CENT)
     except InvalidOperation as e:
         raise ValueError(f"bad amount {v!r}") from e
 

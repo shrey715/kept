@@ -204,3 +204,20 @@ def test_relative_promised_dates(value: str, expected: date | None) -> None:
         NOTE, source_id="N-1", case_id="C-1", written_at=datetime(2026, 9, 18, 15, tzinfo=UTC)
     )
     assert x.promised_date.value == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("140.00", "140.00"),
+        ("$140", "140.00"),
+        ("17$", "17.00"),
+        ("1 635 $", "1635.00"),
+        ("17,50", "17.50"),
+        ("1,635", "1635.00"),
+        (55, "55.00"),
+    ],
+)
+def test_amount_formats(raw: object, expected: str) -> None:
+    x = _extract(_reply(promised_amount={"value": raw, "quote": "$140", "confidence": 0.9}))
+    assert x.promised_amount.value == Decimal(expected)
