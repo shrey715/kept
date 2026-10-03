@@ -180,6 +180,7 @@ def run_matching(
     steward = pairs[(pairs.rule == "splink") & (pairs.score < AUTO_LINK_THRESHOLD)].assign(
         reason=f"score_{STEWARD_REVIEW_THRESHOLD:.2f}_{AUTO_LINK_THRESHOLD:.2f}"
     )
+    weakest = pd.Series(score[auto]).groupby(root[li[auto]]).min()  # per cluster root: its weakest link
     held_rows = pd.DataFrame({"pos": np.flatnonzero(held)})
     held_rows["root"] = root[held_rows["pos"]]
     held_rows = held_rows[held_rows["pos"] != held_rows["root"]]  # the root key is the anchor
@@ -191,7 +192,7 @@ def run_matching(
             "right_system": keys.get_level_values(0)[held_rows["root"]],
             "right_key": keys.get_level_values(1)[held_rows["root"]],
             "rule": "held_cluster",
-            "score": np.nan,
+            "score": weakest.reindex(held_rows["root"]).to_numpy(),
             "reason": reasons[held_rows["root"]],
         }
     )

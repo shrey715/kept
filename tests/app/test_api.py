@@ -15,6 +15,7 @@ from kept.contracts import (
     Action,
     AskRequest,
     AuditKind,
+    CandidatePair,
     Channel,
     ExtractedValue,
     GoldenCustomer,
@@ -27,9 +28,13 @@ from kept.contracts import (
     ReleaseResult,
     ReleaseTier,
     Role,
+    SourceKey,
+    SourceSystem,
     StatedReason,
     TextExtraction,
 )
+from kept.data.identity.clustering import decide
+from kept.data.identity.steward import StewardQueue
 
 from ..fakes import DictC360Reader, InMemoryAuditLog, InMemoryExtractionStore
 
@@ -256,3 +261,80 @@ def test_confirm_other_agent_403(confirm_setup: Confirm) -> None:
 
 def test_confirm_without_store_503(client: TestClient) -> None:
     assert client.post("/extractions/N-1/confirm", json={"agent_id": "agent-7"}).status_code == 503
+
+
+# ----------------------------------------------------------------- /steward (Track A)
+def _steward_client(queue: StewardQueue | None, audit: InMemoryAuditLog) -> TestClient:
+    services = Services(
+        engine=FakeEngine(),
+        release_gate=FakeGate(),
+        ask=FakeAsk(),
+        c360=DictC360Reader(),
+        audit_log=audit,
+        steward=queue,
+        clock=lambda: NOW,
+    )
+    return TestClient(create_app(services))
+
+
+def _queue_with_one_pair() -> tuple[StewardQueue, str]:
+    pair = CandidatePair(
+        left=SourceKey(system=SourceSystem.CRM, key="C1"),
+        right=SourceKey(system=SourceSystem.LOAN, key="L1"),
+        score=0.88,
+        rule="splink",
+    )
+    queue = StewardQueue()
+    item = queue.enqueue(decide(pair), reasons=("score_0.80_0.95",), at=NOW)
+    return queue, item.item_id
+
+
+def test_steward_queue_lists_pending_items() -> None:
+    queue, item_id = _queue_with_one_pair()
+    r = _steward_client(queue, InMemoryAuditLog()).get("/steward/queue")
+    assert r.status_code == 200
+    assert r.json() == [
+        {
+            "item_id": item_id,
+            "left_key": "crm:C1",
+            "right_key": "loan:L1",
+            "score": 0.88,
+            "reasons": ["score_0.80_0.95"],
+        }
+    ]
+
+
+def test_steward_resolve_audits_and_drops_the_item_from_the_queue() -> None:
+    queue, item_id = _queue_with_one_pair()
+    audit = InMemoryAuditLog()
+    client = _steward_client(queue, audit)
+    r = client.post(f"/steward/items/{item_id}", json={"verdict": "same_person", "steward_id": "steward-1"})
+    assert r.status_code == 200 and r.json() == {"status": "resolved"}
+    assert client.get("/steward/queue").json() == []
+    (event,) = audit.read(kind=AuditKind.STEWARD_DECISION)
+    assert event.actor_id == "steward-1" and event.actor_role is Role.DATA_STEWARD
+    assert event.subject_id == item_id and event.payload == {"verdict": "same_person"}
+
+
+def test_steward_unsure_keeps_the_item_pending() -> None:
+    queue, item_id = _queue_with_one_pair()
+    client = _steward_client(queue, InMemoryAuditLog())
+    r = client.post(f"/steward/items/{item_id}", json={"verdict": "unsure", "steward_id": "steward-1"})
+    assert r.json() == {"status": "pending"} and len(client.get("/steward/queue").json()) == 1
+
+
+def test_steward_resolve_errors() -> None:
+    queue, item_id = _queue_with_one_pair()
+    client = _steward_client(queue, InMemoryAuditLog())
+    body = {"verdict": "same_person", "steward_id": "steward-1"}
+    assert client.post("/steward/items/SI-missing", json=body).status_code == 404
+    assert client.post(f"/steward/items/{item_id}", json={**body, "verdict": "maybe"}).status_code == 422
+    assert client.post(f"/steward/items/{item_id}", json=body).status_code == 200
+    assert client.post(f"/steward/items/{item_id}", json=body).status_code == 409  # already resolved
+
+
+def test_steward_routes_are_503_without_a_queue() -> None:
+    client = _steward_client(None, InMemoryAuditLog())
+    assert client.get("/steward/queue").status_code == 503
+    body = {"verdict": "same_person", "steward_id": "s"}
+    assert client.post("/steward/items/SI-1", json=body).status_code == 503

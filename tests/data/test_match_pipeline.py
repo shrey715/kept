@@ -94,6 +94,8 @@ def test_match_run_links_holds_and_assigns_ids(silver: duckdb.DuckDBPyConnection
     assert t1["match_review_status"] == t2["match_review_status"] == "unlinked"
     assert run.summary["held_clusters"] == 1
     assert (run.review_pairs["rule"] == "held_cluster").sum() == 1
+    held = run.review_pairs[run.review_pairs["rule"] == "held_cluster"]
+    assert held["score"].notna().all() and held["score"].between(0, 1).all()  # the cluster's weakest link
 
 
 def test_previous_crosswalk_keeps_golden_ids(silver: duckdb.DuckDBPyConnection) -> None:

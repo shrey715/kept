@@ -65,6 +65,8 @@ None. The open items from Phase 1-3 are decided below, on the data and docs we h
 
 ## Log
 <!-- Newest first: time, what happened. -->
+- 2026-10-03: Phase 4 started early against fakes (Satvik's call; merges at G3): `StewardQueue` + `precision` + `enqueue_review_pairs`, `/steward/queue` and `/steward/items/{id}` routes (audit STEWARD_DECISION). Verdicts persist in `steward.verdicts`; item IDs are stable hashes of the pair. Held-cluster review rows now carry their weakest link score.
+- 2026-10-03: Nightly-style run (`kept land` + `kept build` + `kept gate`, 8.5 min): silver 48/48, gold 39/39, gate WARN only on `hardship-text` (no extractions yet); freshness PASS. Spot-check of C's crosswalk: 49 of 50 random Splink-linked clusters fully consistent; the one flagged is a day/month DOB swap that is the same person; 0 clusters with two national IDs, 1.96% of multi-key clusters have a surname or DOB conflict (name changes, typos).
 - 2026-10-03: Phase 3 parallel tasks done; gold built on crosswalk v1; stop message for G2.
 - 2026-10-03: G1 integrated; merged main (C's PR #14, #15) into track-a.
 - 2026-10-03: Open questions decided (see Decisions taken).
