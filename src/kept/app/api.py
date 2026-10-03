@@ -10,9 +10,11 @@ every handler applies kept.governance.access before returning data.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kept import __version__
@@ -21,6 +23,9 @@ from kept.contracts.enums import Role
 from kept.contracts.features import TextExtraction
 from kept.contracts.interfaces import AskService, AuditLog, C360Reader, NBAEngine, ReleaseGate
 from kept.contracts.nba import NBACard, ReleaseDecision, ReleaseResult
+from kept.governance.access import can_view_case
+
+PAGE = Path(__file__).parent / "static" / "index.html"
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,17 +75,36 @@ def create_app(services: Services) -> FastAPI:
     """
     app = FastAPI(title="Kept", version=__version__)
 
+    @app.get("/", include_in_schema=False)
+    def page() -> FileResponse:
+        """The card page (S7): NBA card, Ask box and steward queue. Static, no framework."""
+        return FileResponse(PAGE, media_type="text/html")
+
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         return HealthResponse(status="ok", version=__version__)
 
     @app.get("/cases/{case_id}/nba", response_model=NBACard)
     def get_nba(case_id: str, user_id: str, role: Role, now: datetime | None = None) -> NBACard:
-        raise NotImplementedError("Track D")
+        # ponytail: user_id/role come from the query string; real auth (SSO) replaces this
+        try:
+            assigned = services.c360.customer_for_case(case_id).assigned_agent_id
+        except KeyError:
+            raise HTTPException(404, f"unknown case {case_id}") from None
+        if not can_view_case(role=role, user_id=user_id, assigned_agent_id=assigned):
+            raise HTTPException(403, "not your case")
+        if now is not None and now.tzinfo is None:
+            raise HTTPException(422, "now must include a time zone")
+        try:
+            return services.engine.recommend(case_id, now or datetime.now(UTC))
+        except KeyError:
+            raise HTTPException(404, f"unknown case {case_id}") from None
 
     @app.post("/proposals/{proposal_id}/decision", response_model=ReleaseResult)
     def decide(proposal_id: str, decision: ReleaseDecision) -> ReleaseResult:
-        raise NotImplementedError("Track D")
+        if decision.proposal_id != proposal_id:
+            raise HTTPException(422, "proposal_id in the body must match the path")
+        return services.release_gate.release(decision, datetime.now(UTC))  # server time decides expiry
 
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
