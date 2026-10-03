@@ -16,6 +16,7 @@ with typed as (
         try_cast("write_off_flag" as BOOLEAN) as "write_off_flag",
         try_cast("salary_credit_amount" as DECIMAL(18,2)) as "salary_credit_amount",
         "batch_id",
+        "month_end_date" as "month_end_date_raw",
         _source_file,
         _extracted_at,
         _loaded_at
