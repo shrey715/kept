@@ -30,6 +30,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - `make test-contract` green, `make lint` clean, track_c: 25 passed, rest stubbed for later phases.
 
 ## Decisions and changes from the plan
+- `text_signals` writes NULL ("unknown"), not false, for every field except hardship on SetFit backfill rows (Akshat, 3 Oct): `promise_intent` is an uplift input, and "false" for all history vs "yes" from live LLM notes would be train/serve skew. Verified: 785,594 rows, hardship filled, the rest NULL; D's features build 7/7; G2 hardship check 3/3.
 - Backfilled extractions all carry `extracted_at` = the backfill run time (3 Oct), not the note's time; point-in-time readers must use `text_signals.written_at` (the note's own time).
 - Cash-flow hardship enters gold at **G2** (Akshat, 3 Oct): `hardship.cashflow_observations` (C, PR #25) is one more branch of A's `int_hardship_observations` (PR #24). Merge order at G2: #25 first, then #24.
 - Promised amounts are scored within $1: notes write whole dollars ("$21") while labels hold the promise record's cents (21.03). Gold dates for "next payday" come from payroll data, not the text, so they stay misses.
@@ -46,8 +47,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Proposed local extraction model for G0: `ollama/gemma3:12b-it-qat` (already on the machine, ~10.6 GB VRAM).
 
 ## Open questions
-- (D) SetFit fills only `hardship_signal`; for history `promise_intent`, `dispute`, `cease_request`, `third_party_present` are written as nothing-found (False, confidence 0), so the features read "false" instead of "unknown". Proposal: `text_signals` emits NULL for those four on `setfit:` rows (one SQL change in our model). Awaiting Akshat.
-- (D) Hardship load: a SetFit threshold doesn't help (probabilities saturate: notes flagged 36.9% at t=0.5 vs 35.6% at 0.95; held-out precision 0.78→0.81, recall 0.977 either way). Open cases with a text hardship note in 90 days: 41% (39,398); ≥1 in 30 d **and** ≥2 in 90 d: 19% (18,301). Gold status of open cases is 32% CONFIRMED (agent-coded source data), 19% POSSIBLE, so most Red reviews come from confirmed hardship, not text. Proposal: text-only POSSIBLE needs recent + repeated mentions (D's rule/feature). Awaiting Akshat.
+- (D, decided) Hardship load: a SetFit threshold doesn't help (probabilities saturate: notes flagged 36.9% at t=0.5 vs 35.6% at 0.95; held-out precision 0.78→0.81, recall 0.977 either way). Open cases with a text hardship note in 90 days: 41% (39,398); ≥1 in 30 d **and** ≥2 in 90 d: 19% (18,301). Gold status of open cases is 32% CONFIRMED (agent-coded source data), 19% POSSIBLE, so most Red reviews come from confirmed hardship, not text. **Decided (Akshat): text-only POSSIBLE needs ≥1 flagged note in the last 30 days and ≥2 in 90 days** (D implements in the context builder / text features). Confirmed hardship and agent-confirmed notes are unchanged.
 - (D) Online features: account/deposit features (max_dpd, days_in_bucket, balance_at_risk, payroll, spare cash, trends) are 0% filled for 500 random open cases; promise_* 0%.
 - Extraction confirm panel: D builds it in `web/`, C builds the route (`docs/NEXT_STEPS.md` §4).
 - A: 4,636 agent notes have mojibake (`appel�`, `F�VR.`), mostly French. Data quality report item; worth fixing in silver before redaction/extraction.
@@ -55,6 +55,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 22:30 Decisions 1-3 done; extractions file to Satvik (sha256 670ce9f1…).
 - 21:45 G2 integration done on C's machine: 4 PRs merged, rebuild green, report to Akshat.
 - 20:55 Cash-flow observations built (20,380 golden customers, matches the Python rule); moved into G2 with A's #24.
 - 20:30 Backfill done and verified; gate passed on this machine. Two power cuts (19:1x, 20:0x): labels file intact both times; git objects repaired after the first.
