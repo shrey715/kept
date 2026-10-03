@@ -69,10 +69,13 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **`collections_cases.account_ids`** is a JSON list except 18,314 cases holding one bare ID; `training_rows` reads both. **For A:** worth normalising in silver.
 - **No text extractions in the warehouse yet:** I created the empty `text.extractions` with C's `DuckDBExtractionStore` so `text_signals` builds; text columns are null until C's backfill runs.
 - **`text` models get the `TimeZone = 'UTC'` pre-hook** (`dbt_project.yml`, one line in C's section, same as features): `text_signals.written_at` is `timestamptz` (coalesce with `extracted_at`), so naive UTC note times were read in the build machine's zone; on IST machines every note was 5.5 hours early. **For C:** your machine's `text_signals` has the shift; rebuild after this merges.
+- **`CLOSE_CALL_MARGIN` = 0.05** (was TBC 0.02; Shreyas asked me to pick). It is relative: top two dollar scores within 5% of the top. Chosen from 6 bootstrap retrains on real data: the *kind* of action (wait / green / call) is stable in 95% of resamples, and the margin barely separates stable from unstable cases (cross-kind cases below 0.02 hold 54%, 0.02-0.05 71%, above that 55-83% with no trend), so it works as a review-load setting: 7.2% of cases are close calls (0.02: 3.7%, 0.1: 18%).
+- **Model limitation:** which green channel (email / push / SMS) wins for a given case is noise: the exact top action holds in only about 37% of resamples. The Qini numbers are against WAIT. Upgrade: fewer features or stronger regularisation, or a pooled model with action as a feature.
+- **Engine with the real model:** promise, plan and hardship review were never randomised, so the model has no arm for them, and 193 of 300 real cards failed closed with a `KeyError`. They are call conversations, so they now take the call model's P(paid); hardship review only when hardship or vulnerability protects the case (with the call's P(paid) and a lower burden it would beat every call). `ponytail` note: a P(kept | promise) model is the upgrade. On 300 real cases: 300/300 cards, 182 proposals (green 93, amber 12, red 77). New test in `test_engine.py`.
+- **For the team:** 26% of real cards are Red hardship reviews (C's high-recall hardship: 41% of open cases), a large specialist review load.
 - Uplift models convert inputs themselves (fixed `pay_frequency` levels, bools/None to float), so a serving `FeatureVector` scores the same as a warehouse row.
 
 ## Open questions
-- **`CLOSE_CALL_MARGIN` (config, TBC 0.02):** on the real model, the top two actions are within 0.02 for 29.7% of open cases (0.01: 7.3%, 0.03: 44.5%). Median gap 0.036. Shreyas to pick; 0.01 if "close call" should be the exception.
 - **paid_14d source (§9, D + A, by G2). Proposal for Satvik, from counts on the raw data (3 Oct):**
   `paid_14d` = any dated payment in (decision, decision + 14 days], from the union of:
   1. `contact_history` at the contact's time: `payment_taken_flag` (20,072), `link_payment_flag` (26,581), `app_payment_after_contact_flag` (38,084). All products.
@@ -91,6 +94,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Batch scoring needs one shared read-only connection:** each reader opens the warehouse per call (K5), about 60 ms each, so a card takes about 0.3 s; `kept score` (G3) should read the case rows, gold and extractions in bulk.
 
 ## Log
+- 3 Oct: close-call margin 0.05 from bootstrap stability; engine fixed for the real model's five arms (300/300 real cards).
 - 3 Oct: C's extractions loaded; text features on real data; context builder on A's real reader 2,000/2,000; G2 checks done on Track D's side.
 - 3 Oct: G2 on real gold: gold from Satvik's crosswalk (matches his export), features + Feast on real gold, training rows + features, `kept features` and `kept train` handlers, first real training run.
 - 3 Oct: G1: bronze + silver built on real data here; dbt features 13/13 on real silver, 96,000 open cases, parity 200/200. Stop message posted.
