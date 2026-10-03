@@ -4,14 +4,15 @@
 #
 # tests/contracts/test_contract_consistency.py checks that every column below
 # matches kept.contracts.identity.GoldenCustomer and dbt/models/gold/schema.yml.
-# Items marked TBC must be resolved on build day 1 (see docs/TEAM_PLAN.md).
+# Frozen at G3: the columns, types, classifications and quality rules change only with a version bump and
+# the breaking-change notice below. Decisions that were open on build day 1 are under customProperties.decisions.
 
 apiVersion: v3.0.2
 kind: DataContract
 id: kept-c360-customer
 name: Golden Customer Record
 version: 1.0.0
-status: draft
+status: active
 domain: collections
 dataProduct: c360
 tenant: cibc-collections
@@ -304,9 +305,10 @@ customProperties:
       - silver.model_scores
       - silver.metric_definitions
       - silver.agents
-  - property: tbc
+  - property: decisions
     value:
-      - Whether the organisers have ground-truth IDs to score our matching
-      - The certified metric_id for roll rate (see metric_definitions)
-      - Which assignment_method / test_cell values mean random assignment (code_lookups)
-      - Whether autopay_source_account values at other FIs should be ignored or quarantined
+      - "Ground-truth IDs: the organisers provided none. Match precision is evidenced by the checks in docs/quality_report.md section 4 and a steward's review of 300 predicted links (target 98%)."
+      - "Roll rate: the certified metric and its SQL are in kept/ask/certified.py (Track B)."
+      - "Random assignment: collections_cases.assignment_method = 'random' (Track D)."
+      - "Autopay/PAD accounts at other banks: ignored for linking (nothing to link to); left untouched in silver."
+      - "Delinquency bucket: one 121+ bucket in gold; silver keeps the source's finer labels."
