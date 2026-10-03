@@ -5,31 +5,33 @@
 
 Reads silver.int_identity_evidence and silver.int_identity_records, writes parquet files
 (identity_crosswalk, review_pairs, run_summary) and the Splink settings JSON.
+
+At 3.5M records the clustering runs on integer arrays: building a pydantic CandidatePair and
+SourceKey for each of ~5M pairs needed more than 16 GB. connected_components and GoldenIdRegistry
+(kept.data.identity.clustering) are the tested reference for the same rules; the registry is used
+here when a previous crosswalk must keep its golden IDs.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
+import numpy as np
 import pandas as pd
 
-from kept.config import AUTO_LINK_THRESHOLD, STEWARD_REVIEW_THRESHOLD
+from kept.config import AUTO_LINK_THRESHOLD, MAX_KEYS_PER_CLUSTER, STEWARD_REVIEW_THRESHOLD
 from kept.contracts.enums import MatchReviewStatus, SourceSystem
-from kept.contracts.identity import CandidatePair, SourceKey
-from kept.data.identity.clustering import (
-    Cluster,
-    GoldenIdRegistry,
-    cluster_review_reasons,
-    connected_components,
-)
+from kept.contracts.identity import SourceKey
+from kept.data.identity.clustering import Cluster, GoldenIdRegistry
 from kept.data.identity.exact import exact_link_pairs
-from kept.data.identity.probabilistic import build_settings, score_pairs
+from kept.data.identity.probabilistic import build_settings, score_pairs, train_model
 
 PAIR = ["left_system", "left_key", "right_system", "right_key"]
+GOLDEN_ID_FORMAT = "G-{:06d}"
 
 
 @dataclass(frozen=True)
@@ -37,23 +39,54 @@ class MatchRun:
     crosswalk: pd.DataFrame  # gold.identity_crosswalk columns
     review_pairs: pd.DataFrame  # Splink pairs in the steward band + pairs inside held clusters
     summary: dict[str, object]
+    model: dict[str, object]  # the trained Splink model, saved next to the crosswalk
 
 
-def _key(system: str, key: str) -> SourceKey:
-    return SourceKey(system=SourceSystem(system), key=key)
+def _roots(n: int, left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    """Union-find over n nodes: the root node of each node's connected component."""
+    parent = np.arange(n)
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]  # path halving
+            x = parent[x]
+        return int(x)
+
+    for a, b in zip(left.tolist(), right.tolist(), strict=True):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)  # the smaller key index stays the root
+    return np.array([find(x) for x in range(n)])
 
 
-def _candidates(pairs: pd.DataFrame) -> list[CandidatePair]:
-    return [
-        CandidatePair(left=_key(a, b), right=_key(c, d), score=s, rule=r)
-        for a, b, c, d, r, s in pairs[[*PAIR, "rule", "score"]].itertuples(index=False)
-    ]
+def _assign_with_registry(
+    keys: pd.MultiIndex, group: np.ndarray, previous: pd.DataFrame, at: datetime
+) -> np.ndarray:
+    """Golden ID numbers for each key, keeping the IDs of `previous` (merges and splits are logged)."""
+    registry = GoldenIdRegistry()
+    sk = [SourceKey(system=SourceSystem(a), key=b) for a, b in keys]
+    registry.seed(
+        {
+            SourceKey(system=SourceSystem(s), key=k): g
+            for g, s, k in previous[["golden_customer_id", "source_system", "source_key"]].itertuples(
+                index=False
+            )
+        }
+    )
+    members: dict[int, list[int]] = {}
+    for i, g in enumerate(group.tolist()):
+        members.setdefault(g, []).append(i)
+    ids = registry.assign(
+        (Cluster(keys=frozenset(sk[i] for i in m)) for m in members.values()), actor_id="kept-match", at=at
+    )
+    return np.array([int(ids[k].removeprefix("G-")) for k in sk])
 
 
 def run_matching(
     conn: duckdb.DuckDBPyConnection,
     *,
     sample_mod: int | None = None,
+    train_sample_mod: int | None = None,
     previous: pd.DataFrame | None = None,
     at: datetime | None = None,
 ) -> MatchRun:
@@ -64,131 +97,125 @@ def run_matching(
     records = conn.execute(f"select * from silver.int_identity_records {sample}").df()
     evidence = conn.execute("select * from silver.int_identity_evidence").df()
     if sample_mod:  # keep the evidence rows that belong to the sample (collections follow their CRM key)
-        keep = set(zip(records.source_system, records.source_key, strict=True))
+        have = pd.MultiIndex.from_frame(records[["source_system", "source_key"]])
         crm = set(records.loc[records.source_system == "crm", "source_key"])
-        in_sample = [
-            (s, k) in keep or (s == "collections" and k in crm)
-            for s, k in zip(evidence.source_system, evidence.source_key, strict=True)
-        ]
+        in_sample = have.get_indexer(pd.MultiIndex.from_frame(evidence[["source_system", "source_key"]])) >= 0
+        in_sample |= (evidence.source_system == "collections") & evidence.source_key.isin(crm)
         evidence = evidence[in_sample]
-    all_keys = sorted(set(zip(evidence.source_system, evidence.source_key, strict=True)))
+    keys = pd.MultiIndex.from_frame(evidence[["source_system", "source_key"]].drop_duplicates()).sort_values()
+    n = len(keys)
+
+    def positions(frame: pd.DataFrame, system: str, key: str) -> np.ndarray:
+        return keys.get_indexer(pd.MultiIndex.from_frame(frame[[system, key]]))
 
     exact = exact_link_pairs(evidence)
-    in_keys = set(all_keys)
+    del evidence  # millions of rows of strings; only the pairs are needed from here
     exact = exact[
-        [
-            (a, b) in in_keys and (c, d) in in_keys
-            for a, b, c, d in zip(
-                exact.left_system, exact.left_key, exact.right_system, exact.right_key, strict=True
-            )
-        ]
+        (positions(exact, "left_system", "left_key") >= 0)
+        & (positions(exact, "right_system", "right_key") >= 0)
     ]
-    splink = score_pairs(records, exclude_pairs=exact)
+
+    hashed = records.dropna(subset=["national_id_hash"])[["source_system", "source_key", "national_id_hash"]]
+    model = train_model(records, sample_mod=train_sample_mod)
+    splink = score_pairs(records, exclude_pairs=exact, model=model)
+    del records
     pairs = pd.concat([exact, splink], ignore_index=True)
+    li, ri = positions(pairs, "left_system", "left_key"), positions(pairs, "right_system", "right_key")
+    is_exact = pairs["rule"].str.startswith("exact:").to_numpy()
+    score = pairs["score"].to_numpy()
+    auto = is_exact | (score >= AUTO_LINK_THRESHOLD)
 
-    links = _candidates(pairs)
-    clusters = connected_components([_key(s, k) for s, k in all_keys], links)
-    national_ids = (
-        records.dropna(subset=["national_id_hash"])
-        .groupby(["source_system", "source_key"])["national_id_hash"]
-        .agg(frozenset)
-        .to_dict()
-    )
-    held: list[tuple[Cluster, tuple[str, ...]]] = []
-    final: list[Cluster] = []
-    for c in clusters:
-        hashes = frozenset().union(*(national_ids.get((k.system.value, k.key), frozenset()) for k in c.keys))
-        c = replace(c, national_id_hashes=hashes)
-        if reasons := cluster_review_reasons(c):
-            held.append((c, reasons))  # never auto-link: its keys stay apart until a steward looks
-            final += [Cluster(keys=frozenset({k})) for k in c.keys]
-        else:
-            final.append(c)
+    # clusters, and the ones that must not be auto-linked
+    root = _roots(n, li[auto], ri[auto])
+    size = np.bincount(root, minlength=n)
+    nid_root = root[positions(hashed, "source_system", "source_key")]
+    distinct_ids = pd.Series(hashed["national_id_hash"].to_numpy()).groupby(nid_root).nunique()
+    two_ids = np.zeros(n, dtype=bool)
+    two_ids[distinct_ids[distinct_ids > 1].index.to_numpy()] = True
+    too_big = size > MAX_KEYS_PER_CLUSTER
+    held_root = two_ids | too_big
+    held = held_root[root]  # never auto-link: these keys stay apart until a steward looks
+    group = np.where(held, np.arange(n), root)
 
-    registry = GoldenIdRegistry()
     if previous is not None and len(previous):
-        registry.seed(
-            {
-                _key(s, k): g
-                for g, s, k in previous[["golden_customer_id", "source_system", "source_key"]].itertuples(
-                    index=False
-                )
-            }
-        )
-    ids = registry.assign(final, actor_id="kept-match", at=at)
+        number = _assign_with_registry(keys, group, previous, at)
+    else:  # a first run: IDs in order of each cluster's smallest key, as GoldenIdRegistry would issue them
+        number = pd.factorize(group)[0] + 1
+    golden = pd.Series(number).map(GOLDEN_ID_FORMAT.format).to_numpy()
 
     # per key: the strongest link that put it in a cluster (exact beats Splink), else a singleton
-    auto = pairs[(pairs.rule != "splink") | (pairs.score >= AUTO_LINK_THRESHOLD)]
-    long = pd.concat(
-        [
-            auto.rename(columns={"left_system": "system", "left_key": "key"})[
-                ["system", "key", "rule", "score"]
-            ],
-            auto.rename(columns={"right_system": "system", "right_key": "key"})[
-                ["system", "key", "rule", "score"]
-            ],
-        ]
+    ends = pd.DataFrame(
+        {
+            "pos": np.concatenate([li[auto], ri[auto]]),
+            "exact": np.tile(is_exact[auto], 2),
+            "score": np.tile(score[auto], 2),
+            "rule": np.tile(pairs["rule"].to_numpy()[auto], 2),
+        }
     )
-    long["_exact"] = long["rule"].str.startswith("exact:")
-    best = long.sort_values(["_exact", "score"], ascending=False).drop_duplicates(["system", "key"])
-    link_of = {(sys, k): (rule, score, exact) for sys, k, rule, score, exact in best.itertuples(index=False)}
-    held_keys = {k for c, _ in held for k in c.keys}
-    rows = []
-    for key, gid in ids.items():
-        link = link_of.get((key.system.value, key.key))
-        linked = link is not None and key not in held_keys
-        rows.append(
-            {
-                "golden_customer_id": gid,
-                "source_system": key.system.value,
-                "source_key": key.key,
-                "match_score": None if link is None or link[2] else float(link[1]),
-                "match_rule": link[0] if link is not None and linked else "singleton",
-                "match_review_status": (
-                    MatchReviewStatus.AUTO if linked else MatchReviewStatus.UNLINKED
-                ).value,
-                "linked_at": at,
-                "valid_to": pd.NaT,
-            }
-        )
-    crosswalk = pd.DataFrame(rows).sort_values(["source_system", "source_key"]).reset_index(drop=True)
+    best = ends.sort_values(["exact", "score"], ascending=False).drop_duplicates("pos").set_index("pos")
+    linked = np.zeros(n, dtype=bool)
+    linked[best.index.to_numpy()] = True
+    linked &= ~held
+    rule = np.full(n, "singleton", dtype=object)
+    match_score = np.full(n, np.nan)
+    rule[best.index.to_numpy()] = best["rule"].to_numpy()
+    match_score[best.index.to_numpy()] = np.where(best["exact"], np.nan, best["score"])
+    rule[~linked] = "singleton"
+    match_score[~linked] = np.nan
+    crosswalk = pd.DataFrame(
+        {
+            "golden_customer_id": golden,
+            "source_system": keys.get_level_values(0),
+            "source_key": keys.get_level_values(1),
+            "match_score": match_score,
+            "match_rule": rule,
+            "match_review_status": np.where(
+                linked, MatchReviewStatus.AUTO.value, MatchReviewStatus.UNLINKED.value
+            ),
+            "linked_at": at,
+            "valid_to": pd.NaT,
+        }
+    )
 
     steward = pairs[(pairs.rule == "splink") & (pairs.score < AUTO_LINK_THRESHOLD)].assign(
         reason=f"score_{STEWARD_REVIEW_THRESHOLD:.2f}_{AUTO_LINK_THRESHOLD:.2f}"
     )
-    held_pairs = []
-    for c, reasons in held:
-        members = sorted((k.system.value, k.key) for k in c.keys)
-        held_pairs += [
-            {
-                "left_system": s,
-                "left_key": k,
-                "right_system": members[0][0],
-                "right_key": members[0][1],
-                "rule": "held_cluster",
-                "score": c.min_score,
-                "reason": "+".join(reasons),
-            }
-            for s, k in members[1:]
-        ]
-    review = pd.concat([steward, pd.DataFrame(held_pairs)], ignore_index=True)
+    held_rows = pd.DataFrame({"pos": np.flatnonzero(held)})
+    held_rows["root"] = root[held_rows["pos"]]
+    held_rows = held_rows[held_rows["pos"] != held_rows["root"]]  # the root key is the anchor
+    reasons = np.where(two_ids, "two_national_ids", "too_many_keys")
+    held_pairs = pd.DataFrame(
+        {
+            "left_system": keys.get_level_values(0)[held_rows["pos"]],
+            "left_key": keys.get_level_values(1)[held_rows["pos"]],
+            "right_system": keys.get_level_values(0)[held_rows["root"]],
+            "right_key": keys.get_level_values(1)[held_rows["root"]],
+            "rule": "held_cluster",
+            "score": np.nan,
+            "reason": reasons[held_rows["root"]],
+        }
+    )
+    review = pd.concat([steward, held_pairs], ignore_index=True)
 
     sizes = crosswalk.groupby("golden_customer_id").size()
     summary: dict[str, object] = {
         "run_at": at.isoformat(),
         "sample_mod": sample_mod,
-        "keys": len(crosswalk),
+        "keys": n,
         "golden_ids": int(sizes.size),
         "multi_key_clusters": int((sizes > 1).sum()),
         "largest_cluster": int(sizes.max()),
         "exact_pairs": len(exact),
         "splink_pairs_auto": int((splink.score >= AUTO_LINK_THRESHOLD).sum()),
         "splink_pairs_review": int((splink.score < AUTO_LINK_THRESHOLD).sum()),
-        "held_clusters": len(held),
-        "held_reasons": pd.Series([r for _, rs in held for r in rs]).value_counts().to_dict(),
+        "held_clusters": int(held_root[np.unique(root[held])].sum()) if held.any() else 0,
+        "held_reasons": {
+            "two_national_ids": int(two_ids[np.unique(root[held])].sum()) if held.any() else 0,
+            "too_many_keys": int(too_big[np.unique(root[held])].sum()) if held.any() else 0,
+        },
         "splink_settings": build_settings(),
     }
-    return MatchRun(crosswalk=crosswalk, review_pairs=review, summary=summary)
+    return MatchRun(crosswalk=crosswalk, review_pairs=review, summary=summary, model=model)
 
 
 def write_run(run: MatchRun, out_dir: Path, *, tag: str) -> list[Path]:
@@ -199,6 +226,29 @@ def write_run(run: MatchRun, out_dir: Path, *, tag: str) -> list[Path]:
         path = out_dir / f"{name}_{tag}.parquet"
         frame.to_parquet(path, index=False)
         written.append(path)
+    model_path = out_dir / f"splink_model_{tag}.json"
+    model_path.write_text(json.dumps(run.model, indent=2, default=str))
+    written.append(model_path)
     path = out_dir / f"run_summary_{tag}.json"
     path.write_text(json.dumps(run.summary, indent=2, default=str))
     return [*written, path]
+
+
+def latest_crosswalk(directory: Path) -> Path:
+    """The newest crosswalk parquet in `directory`; a full run beats a sample run."""
+    found = sorted(directory.glob("identity_crosswalk_*.parquet"), key=lambda p: p.stat().st_mtime)
+    if not found:
+        raise FileNotFoundError(f"no identity_crosswalk_*.parquet in {directory}: run `kept match` first")
+    full = [p for p in found if "-full" in p.stem]  # also "-full-train5" (kept match --train-sample-mod 5)
+    return (full or found)[-1]
+
+
+def load_crosswalk(conn: duckdb.DuckDBPyConnection, parquet: Path) -> int:
+    """Put a crosswalk parquet into silver.int_crosswalk, where the gold models read it."""
+    conn.execute("create schema if not exists silver")
+    conn.execute(
+        "create or replace table silver.int_crosswalk as select * from read_parquet(?)", [str(parquet)]
+    )
+    row = conn.execute("select count(*) from silver.int_crosswalk").fetchone()
+    assert row is not None
+    return int(row[0])

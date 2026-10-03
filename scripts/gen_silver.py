@@ -99,6 +99,7 @@ def render(table: str, columns: list[dict]) -> str:
             "coalesce(date_of_birth, kept_dob(dob_raw)) as dob_clean",
             "coalesce(primary_phone_e164, kept_phone(primary_phone_raw)) as primary_phone_clean",
             "coalesce(postal_code, kept_postal(postal_code_raw)) as postal_code_clean",
+            "kept_province(province_code) as province_code_clean",  # 'Ont.', 'B.C.', 'PQ' -> ON, BC, QC
         ]
         # SCD2 + CDC: the current version per key, and a current version that is deleted disappears
         return (
@@ -153,6 +154,7 @@ def quarantine(table: str) -> str | None:
             check(key, "dob_raw", "dob_clean", dob),
             check(key, "primary_phone_raw", "primary_phone_clean", "not a valid Canadian phone number"),
             check(key, "postal_code_raw", "postal_code_clean", "not a valid Canadian postal code"),
+            check(key, "province_code", "province_code_clean", "not a Canadian province or territory"),
             check(
                 key,
                 "is_deleted",

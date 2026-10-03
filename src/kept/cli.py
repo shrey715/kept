@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from kept.config import EXPORT_DIR, RAW_DIR
+from kept.config import EXPORT_DIR, RAW_DIR, WAREHOUSE_PATH
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -76,13 +76,16 @@ def match(args: argparse.Namespace) -> int:
     conn = connect(read_only=True)
     try:
         previous = pd.read_parquet(args.previous) if args.previous else None
-        run = run_matching(conn, sample_mod=args.sample_mod, previous=previous)
+        run = run_matching(
+            conn, sample_mod=args.sample_mod, train_sample_mod=args.train_sample_mod, previous=previous
+        )
     finally:
         conn.close()
     commit = subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
     ).stdout.strip()
     scope = f"sample{args.sample_mod}" if args.sample_mod else "full"
+    scope += f"-train{args.train_sample_mod}" if args.train_sample_mod else ""
     tag = f"{commit or 'nogit'}-{datetime.now(UTC):%Y%m%d}-{scope}"
     for path in write_run(run, args.out_dir, tag=tag):
         print(path)
@@ -90,8 +93,56 @@ def match(args: argparse.Namespace) -> int:
     return 0
 
 
+def build(args: argparse.Namespace) -> int:
+    """Track A: dbt silver (unless --gold-only), load the crosswalk, dbt gold, export c360 parquet."""
+    from kept.common.db import connect
+    from kept.data.gold import build_gold, export_parquet, run_dbt
+
+    conn = connect()
+    warehouse = str(args.warehouse or WAREHOUSE_PATH)
+    conn.close()
+    if not args.gold_only:
+        run_dbt(["silver"], warehouse=warehouse)
+    conn = connect()
+    build_gold(conn, crosswalk=args.crosswalk)  # closes conn
+    conn = connect()  # not read_only: dbt's connection in this process holds the file read-write
+    try:
+        export_parquet(conn, as_of_date=args.as_of_date)
+        row = conn.execute("select count(*) from gold.c360_customer").fetchone()
+        print(f"gold.c360_customer: {row[0] if row else 0:,} rows -> {EXPORT_DIR / 'c360_customer'}")
+    finally:
+        conn.close()
+    return 0
+
+
+def gate(args: argparse.Namespace) -> int:
+    """Track A: Q1-Q5 on the warehouse -> data quality report + Soda checks. Exit 1 if the gate blocks."""
+    from kept.common.db import connect
+    from kept.contracts.data_contract import load_data_contract
+    from kept.data.gate import gather_results, write_soda_checks
+    from kept.data.quality import Status, quality_report, run_gate
+
+    write_soda_checks()
+    conn = connect(read_only=True)
+    try:
+        results = gather_results(conn)
+    finally:
+        conn.close()
+    report = quality_report(results, contract_version=load_data_contract().version, as_of=datetime.now(UTC))
+    args.report.parent.mkdir(parents=True, exist_ok=True)
+    args.report.write_text(report)
+    print(report)
+    return 1 if run_gate(results) is Status.BLOCK else 0
+
+
 # Each track adds its own handler here when its step works (plan K9).
-HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve, "land": land, "match": match}
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "serve": serve,
+    "land": land,
+    "match": match,
+    "build": build,
+    "gate": gate,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -112,9 +163,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default=None,
                 help="source extract time, ISO 8601 with offset (default: now, UTC)",
             )
+        if name == "build":
+            p.add_argument("--gold-only", action="store_true", help="skip the silver build (about 3 min)")
+            p.add_argument("--crosswalk", type=Path, default=None, help="crosswalk parquet (default: newest)")
+            p.add_argument("--warehouse", type=Path, default=None)
+            p.add_argument("--as-of-date", default="2026-09-28", help="snapshot date of the load")
+        if name == "gate":
+            p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "match":
             p.add_argument(
                 "--sample-mod", type=int, default=None, help="tune on 1/N of the records (hash of DOB)"
+            )
+            p.add_argument(
+                "--train-sample-mod",
+                type=int,
+                default=None,
+                help="train Splink on 1/N of the records (hash of DOB), score all of them",
             )
             p.add_argument("--out-dir", type=Path, default=EXPORT_DIR / "identity_crosswalk")
             p.add_argument(

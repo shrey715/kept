@@ -33,4 +33,27 @@ def combine(observations: Iterable[HardshipObservation]) -> tuple[HardshipStatus
     Vulnerability (customers.vulnerability_flag, contact_history.vulnerability_disclosed_flag)
     arrives as an AGENT observation with signal POSSIBLE: it protects exactly like hardship.
     """
-    raise NotImplementedError("Track C")
+    observations = list(observations)
+    cleared_at = max((o.observed_at for o in observations if o.cleared_by), default=None)
+    best: tuple[int, datetime, int] | None = None
+    best_source: HardshipSource | None = None
+    for o in observations:
+        if o.signal is HardshipSignal.NONE or (cleared_at is not None and o.observed_at <= cleared_at):
+            continue
+        rank = 2 if _confirms(o) else 1
+        key = (rank, o.observed_at, -_ORDER.index(o.source))
+        if best is None or key > best:
+            best, best_source = key, o.source
+    if best is None:
+        return HardshipStatus.NONE, None
+    return (HardshipStatus.CONFIRMED if best[0] == 2 else HardshipStatus.POSSIBLE), best_source
+
+
+_ORDER = list(HardshipSource)
+_CONFIRMING_SOURCES = (HardshipSource.AGENT, HardshipSource.ACCOUNT_PROGRAMME)
+
+
+def _confirms(o: HardshipObservation) -> bool:
+    return o.confirmed_by is not None or (
+        o.source in _CONFIRMING_SOURCES and o.signal is HardshipSignal.CLEAR
+    )

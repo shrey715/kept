@@ -1,0 +1,57 @@
+checks for gold.c360_customer:
+- duplicate_count(golden_customer_id) = 0:
+    name: 'Q1-unique-ids: no duplicated golden ID'
+- missing_count(golden_customer_id) = 0:
+    name: 'Q1-unique-ids: no null golden ID'
+- missing_count(source_keys) = 0:
+    name: 'required column: source_keys is not null (contract)'
+- missing_count(match_review_status) = 0:
+    name: 'required column: match_review_status is not null (contract)'
+- missing_count(total_overdue) = 0:
+    name: 'required column: total_overdue is not null (contract)'
+- missing_count(max_dpd) = 0:
+    name: 'required column: max_dpd is not null (contract)'
+- missing_count(current_bucket) = 0:
+    name: 'required column: current_bucket is not null (contract)'
+- missing_count(contact_permissions) = 0:
+    name: 'required column: contact_permissions is not null (contract)'
+- missing_count(do_not_contact) = 0:
+    name: 'required column: do_not_contact is not null (contract)'
+- missing_count(collections_hold) = 0:
+    name: 'required column: collections_hold is not null (contract)'
+- missing_count(hardship_status) = 0:
+    name: 'required column: hardship_status is not null (contract)'
+- missing_count(payroll_frequency_detected) = 0:
+    name: 'required column: payroll_frequency_detected is not null (contract)'
+- missing_count(as_of_date) = 0:
+    name: 'required column: as_of_date is not null (contract)'
+- missing_count(refreshed_at) = 0:
+    name: 'required column: refreshed_at is not null (contract)'
+- failed rows:
+    name: 'Q4-contact-safety: a source do-not-call, cease or hold reaches the golden record'
+    fail query: select g.golden_customer_id from gold.c360_customer g join silver.int_source_flags f using (golden_customer_id)
+      where (f.any_do_not_contact and not g.do_not_contact) or (f.any_collections_hold and not g.collections_hold)
+- freshness(refreshed_at):
+    name: 'Q5-freshness: published within 26h of the source extract (warn), 48h (block)'
+    warn: when > 26h
+    fail: when > 48h
+- row_count > 0:
+    name: 'Q5-freshness: not empty (the 10% row-count tolerance: kept.data.quality)'
+checks for gold.identity_crosswalk:
+- duplicate_count(source_system, source_key) = 0:
+    name: 'Q1-unique-ids: each active source key maps to one golden ID'
+    filter: valid_to is null
+- failed rows:
+    name: 'Q3-match-safety: an auto link scores below the threshold'
+    fail query: select golden_customer_id from gold.identity_crosswalk where match_review_status = 'auto' and match_score
+      is not null and match_score < 0.95
+- failed rows:
+    name: 'Q3-match-safety: a cluster holds two national IDs'
+    fail query: select x.golden_customer_id from gold.identity_crosswalk x join silver.int_identity_records r on r.source_system
+      = x.source_system and r.source_key = x.source_key where x.valid_to is null and r.national_id_hash is not null group
+      by x.golden_customer_id having count(distinct r.national_id_hash) > 1
+- failed rows:
+    name: 'Q2-linkage: an open case without a golden ID'
+    fail query: select c.case_id from silver.collections_cases c left join gold.identity_crosswalk x on x.source_system =
+      'collections' and x.source_key = c.coll_customer_ref and x.valid_to is null where c.outcome is null and x.golden_customer_id
+      is null

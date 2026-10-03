@@ -16,5 +16,10 @@ from {{ ref('customers') }} where postal_code_raw is not null and postal_code_cl
 
 union all
 
+select 'customers' as "table", crm_customer_id::varchar as row_id, 'province_code' as "column", province_code::varchar as raw_value, 'not a Canadian province or territory' as reason
+from {{ ref('customers') }} where province_code is not null and province_code_clean is null
+
+union all
+
 select 'customers' as "table", crm_customer_id::varchar as row_id, 'is_deleted' as "column", is_deleted::varchar as raw_value, 'current version deleted in CRM (CDC); left out of silver' as reason
 from {{ source('bronze', 'customers') }} where lower(is_deleted) = 'true' and (effective_to_ts is null or effective_to_ts >= '9999-12-31')
