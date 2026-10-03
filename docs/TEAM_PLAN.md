@@ -542,14 +542,14 @@ own commit with a one-line reason, and tell the track that consumes the behaviou
 | Which `assignment_method` / `test_cell` values mean random assignment (`code_lookups`) | D + A | `kept/nba/uplift.py` | uplift training (Q7) | Answered (D): `collections_cases.assignment_method = 'random'` (146,573 cases) |
 | Full code lists for `nba_recommendation_last` and `treatment_code` → `Action` | D | `kept/nba/legacy.py` | legacy mapping, hold-out, Qini baseline | Answered (D): 5 `nba_recommendation_last` values mapped; `send_letter` / `letter` map to no Action |
 | Certified `metric_id` for roll rate; hand-translate certified metrics to SQL | B | `kept/ask/metrics.py` | Ask metric path | Answered (B): certified SQL in `kept/ask/certified.py`, 14 of 15 metrics |
-| Final Ask table list vs `benchmark_questions.expected_tables` | B + A | `contracts/c360_customer.odcs.yaml` | SQL guard allow-list | In the G0 PR: the 16 tables in `askAllowedTables` cover B's certified SQL; B + A confirm in review |
+| Final Ask table list vs `benchmark_questions.expected_tables` | B + A | `contracts/c360_customer.odcs.yaml` | SQL guard allow-list | Answered at G0: the 16 tables in `askAllowedTables`, confirmed by B and A |
 | Authoritative payment source per product for `paid_14d` | D + A | `kept/nba/labels.py` | labels → uplift training | Open, D + A by G2: D's proposal in `docs/tracks/Track_D.md` |
 | Ground-truth IDs for scoring matching? Ask the organisers | A | `kept/data/identity/` | match precision claim (by G1) | Open, A by G1: ask the organisers |
 | Autopay/PAD accounts at other FIs: ignore or quarantine | A | `kept/data/identity/exact.py` | exact links | Open, A by G1 |
 | Cash-flow rule thresholds, proposal TTL, close-call margin | C, D | `kept/hardship/cashflow_rule.py`, `kept/config.py` | hardship rule, release, tiers (by G2) | Open, C + D by G2 |
 | Fill `REASON_TEMPLATES` (one fixed sentence per model feature) | D | `kept/nba/explain.py` (test marked `todo`) | explanation (by G3) | Answered (D): a fixed sentence per model feature |
 | `text.extractions` shape (S4) | C, reviewed by A + D | `dbt/models/text/` | hardship into gold, text features | Answered (C): `dbt/models/text/sources.yml`, store interface `ExtractionStore` |
-| Free LLM choices (§1b): the hosted free model for the Ask, the local model for text extraction | B (Ask), C (local) | `.env.example` | every LLM call | In the G0 PR: text `ollama/gemma3:12b-it-qat` (C); Ask model TBC, B picks before G0 merges |
+| Free LLM choices (§1b): the hosted free model for the Ask, the local model for text extraction | B (Ask), C (local) | `.env.example` | every LLM call | Answered at G0: text `ollama/gemma3:12b-it-qat` (C); Ask `gemini/gemini-3.5-flash-lite`, spare `groq/llama-3.1-8b-instant` (B) |
 
 ## 10. Data traps the dictionary confirms (tests already cover them)
 

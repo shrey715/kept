@@ -122,6 +122,10 @@ class InMemoryExtractionStore:
     def put(self, extraction: TextExtraction) -> None:
         self._rows[extraction.source_id] = extraction
 
+    def for_case(self, case_id: str) -> Sequence[TextExtraction]:
+        rows = [x for x in self._rows.values() if x.case_id == case_id]
+        return sorted(rows, key=lambda x: x.extracted_at, reverse=True)
+
 
 class InMemoryAuditLog:
     def __init__(self) -> None:

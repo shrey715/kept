@@ -132,6 +132,10 @@ class ExtractionStore(Protocol):
 
     def get(self, source_id: str) -> TextExtraction | None: ...
 
+    def for_case(self, case_id: str) -> Sequence[TextExtraction]:
+        """Every extraction for the case, newest first (the case card's confirm panel)."""
+        ...
+
     def put(self, extraction: TextExtraction) -> None:
         """Insert, or replace the row with the same source_id (re-extraction, agent confirm)."""
         ...
