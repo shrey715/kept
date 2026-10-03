@@ -45,9 +45,10 @@ def test_qini_oracle_beats_random_beats_anti_oracle() -> None:
     oracle = qini_coefficient(x, t, y)
     random = qini_coefficient(rng.random(len(x)), t, y)
     anti = qini_coefficient(-x, t, y)
-    assert oracle > 0.02
-    assert abs(random) < 0.01
-    assert anti < -0.02
+    # true value: curve rises to 0.075 at half way, then flat: 0.05625 - 0.0375 = 0.01875
+    assert oracle == pytest.approx(0.01875, abs=0.003)
+    assert abs(random) < 0.005
+    assert anti == pytest.approx(-0.01875, abs=0.003)
 
 
 @pytest.mark.parametrize(
