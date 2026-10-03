@@ -85,3 +85,14 @@ def test_score_pairs_skips_excluded(records: pd.DataFrame) -> None:
         ((out.left_key == "C1") & (out.right_key == "L1"))
         | ((out.left_key == "L1") & (out.right_key == "C1"))
     ).any()
+
+
+def test_score_pairs_trained_on_sample_scores_everyone(records: pd.DataFrame) -> None:
+    pytest.importorskip("splink")
+    # mod 1 trains on every record with a DOB, then rebuilds the linker from the saved model
+    out = score_pairs(records, train_sample_mod=1)
+    hit = out[
+        ((out.left_key == "C1") & (out.right_key == "L1"))
+        | ((out.left_key == "L1") & (out.right_key == "C1"))
+    ]
+    assert len(hit) and float(hit["score"].iloc[0]) >= 0.95
