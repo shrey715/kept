@@ -14,6 +14,7 @@ from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 
 from kept.common.db import connect
@@ -51,7 +52,7 @@ class StewardQueue:
                 conn.execute(
                     "create table if not exists steward.verdicts "
                     "(item_id varchar primary key, verdict varchar, steward_id varchar, "
-                    "resolved_at timestamptz)"
+                    "resolved_at timestamptz, left_label varchar, right_label varchar)"
                 )
                 self._resolved = {
                     item_id: StewardVerdict(v)
@@ -86,12 +87,30 @@ class StewardQueue:
         if self._path is not None:
             conn = connect(self._path)
             try:
+                pair = self._items[item_id].decision.pair
                 conn.execute(
-                    "insert or replace into steward.verdicts values (?, ?, ?, ?)",
-                    [item_id, verdict.value, steward_id, at],
+                    "insert or replace into steward.verdicts values (?, ?, ?, ?, ?, ?)",
+                    [item_id, verdict.value, steward_id, at, _label(pair.left), _label(pair.right)],
                 )
             finally:
                 conn.close()
+
+
+def read_verdicts(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """The stewards' resolved verdicts as pairs (left/right_system, left/right_key, verdict), for
+    kept match. Empty if nobody has resolved anything yet."""
+    columns = ["left_system", "left_key", "right_system", "right_key", "verdict"]
+    exists = conn.execute(
+        "select count(*) from duckdb_tables() where schema_name = 'steward' and table_name = 'verdicts'"
+    ).fetchone()
+    if not exists or not exists[0]:
+        return pd.DataFrame(columns=columns)
+    rows = conn.execute("select left_label, right_label, verdict from steward.verdicts").fetchall()
+    out = []
+    for left, right, verdict in rows:
+        (ls, _, lk), (rs, _, rk) = left.partition(":"), right.partition(":")
+        out.append((ls, lk, rs, rk, verdict))
+    return pd.DataFrame(out, columns=columns)
 
 
 def enqueue_review_pairs(queue: StewardQueue, pairs: pd.DataFrame, *, at: datetime) -> int:
@@ -108,6 +127,28 @@ def enqueue_review_pairs(queue: StewardQueue, pairs: pd.DataFrame, *, at: dateti
         )
         queue.enqueue(decide(pair), reasons=(str(row["reason"]),), at=at)
     return len(pairs)
+
+
+def load_steward_queue(*, warehouse: Path | str | None = None, directory: Path | None = None) -> StewardQueue:
+    """The real queue for `Services(steward=...)`: the review pairs of the crosswalk that is loaded
+    (the newest `review_pairs_<run>.parquet` next to `identity_crosswalk_<run>.parquet`), minus the
+    pairs a steward has already resolved (steward.verdicts in the warehouse). Items are created at
+    the file's modified time, so their order is the same on every start."""
+    from datetime import UTC
+
+    from kept.config import EXPORT_DIR, WAREHOUSE_PATH
+    from kept.data.identity.pipeline import latest_crosswalk
+
+    directory = directory or EXPORT_DIR / "identity_crosswalk"
+    queue = StewardQueue(path=warehouse or WAREHOUSE_PATH)
+    review = latest_crosswalk(directory).with_name(
+        latest_crosswalk(directory).name.replace("identity_crosswalk_", "review_pairs_", 1)
+    )
+    if review.exists():
+        enqueue_review_pairs(
+            queue, pd.read_parquet(review), at=datetime.fromtimestamp(review.stat().st_mtime, tz=UTC)
+        )
+    return queue
 
 
 def precision(predicted_link: list[bool], is_true_match: list[bool]) -> float:

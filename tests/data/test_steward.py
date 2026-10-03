@@ -10,7 +10,13 @@ import pandas as pd
 from kept.common.db import connect
 from kept.contracts import CandidatePair, SourceKey, SourceSystem
 from kept.data.identity.clustering import decide
-from kept.data.identity.steward import StewardQueue, StewardVerdict, enqueue_review_pairs
+from kept.data.identity.steward import (
+    StewardQueue,
+    StewardVerdict,
+    enqueue_review_pairs,
+    load_steward_queue,
+    read_verdicts,
+)
 
 AT = datetime(2026, 10, 3, 2, 0, tzinfo=UTC)
 
@@ -75,3 +81,38 @@ def test_enqueue_review_pairs_takes_the_review_band_and_held_clusters() -> None:
     assert len(items) == 3
     assert {i.reasons for i in items} == {("score_0.80_0.95",), ("two_national_ids",), ("too_many_keys",)}
     assert all(0.0 <= i.decision.pair.score <= 1.0 for i in items)
+
+
+def test_read_verdicts_is_empty_before_anyone_resolves_anything() -> None:
+    import duckdb
+
+    assert read_verdicts(duckdb.connect()).empty
+
+
+def test_load_steward_queue_uses_the_review_pairs_of_the_loaded_crosswalk(tmp_path: Path) -> None:
+    duckdb_dir = tmp_path / "xw"
+    duckdb_dir.mkdir()
+    pairs = pd.DataFrame(
+        [
+            ("crm", "1", "loan", "2", "splink", 0.88, "score_0.80_0.95"),
+            ("crm", "3", "crm", "4", "held_cluster", 0.97, "two_national_ids"),
+        ],
+        columns=["left_system", "left_key", "right_system", "right_key", "rule", "score", "reason"],
+    )
+    for run in ("old", "new"):
+        (duckdb_dir / f"identity_crosswalk_{run}-full.parquet").write_bytes(b"x")
+        (pairs if run == "new" else pairs.iloc[:1]).to_parquet(
+            duckdb_dir / f"review_pairs_{run}-full.parquet"
+        )
+    import os
+
+    os.utime(duckdb_dir / "identity_crosswalk_new-full.parquet", (9e9, 9e9))  # newest crosswalk = "new"
+    queue = load_steward_queue(warehouse=tmp_path / "w.duckdb", directory=duckdb_dir)
+    assert len(queue.pending()) == 2  # the "new" run's two pairs, not the old run's one
+    first = queue.pending()[0]
+    queue.resolve(first.item_id, StewardVerdict.DIFFERENT_PEOPLE, steward_id="s1", at=AT)
+    again = load_steward_queue(warehouse=tmp_path / "w.duckdb", directory=duckdb_dir)  # a restart
+    assert [i.item_id for i in again.pending()] != [i.item_id for i in queue.pending()] or len(
+        again.pending()
+    ) == 1
+    assert first.item_id not in [i.item_id for i in again.pending()]

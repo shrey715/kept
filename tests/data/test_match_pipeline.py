@@ -103,3 +103,79 @@ def test_previous_crosswalk_keeps_golden_ids(silver: duckdb.DuckDBPyConnection) 
     first = run_matching(silver)
     second = run_matching(silver, previous=first.crosswalk)
     assert first.crosswalk["golden_customer_id"].tolist() == second.crosswalk["golden_customer_id"].tolist()
+
+
+# ----------------------------------------------------------------- the stewards' verdicts
+def _verdicts(*rows: tuple[str, str, str, str, str]) -> pd.DataFrame:
+    return pd.DataFrame(rows, columns=["left_system", "left_key", "right_system", "right_key", "verdict"])
+
+
+def _status(run, system: str, key: str) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+    row = run.crosswalk.set_index(["source_system", "source_key"]).loc[(system, key)]
+    return row["match_rule"], row["match_review_status"]
+
+
+def _golden(run, system: str, key: str) -> str:  # type: ignore[no-untyped-def]
+    return run.crosswalk.set_index(["source_system", "source_key"]).loc[(system, key), "golden_customer_id"]
+
+
+def test_different_people_verdict_cuts_a_splink_link(silver: duckdb.DuckDBPyConnection) -> None:
+    pytest.importorskip("splink")
+    before = run_matching(silver, verdicts=_verdicts())
+    assert _golden(before, "crm", "C1") == _golden(before, "loan", "L1")
+    after = run_matching(silver, verdicts=_verdicts(("crm", "C1", "loan", "L1", "different_people")))
+    assert _golden(after, "crm", "C1") != _golden(after, "loan", "L1")
+    assert after.summary["steward_cuts"] == 1
+
+
+def test_same_person_verdict_links_any_pair_as_steward_approved(silver: duckdb.DuckDBPyConnection) -> None:
+    pytest.importorskip("splink")
+    run = run_matching(silver, verdicts=_verdicts(("crm", "F3", "crm", "F4", "same_person")))
+    assert _golden(run, "crm", "F3") == _golden(run, "crm", "F4")
+    assert _status(run, "crm", "F3") == ("steward:same_person", "steward_approved")
+    assert run.summary["steward_links"] == 1
+
+
+def _add_duplicate_chain(conn: duckdb.DuckDBPyConnection, n: int) -> None:
+    """n CRM records that CRM's own duplicate pointer joins into one cluster, with distinct names/DOBs."""
+    for i in range(n):
+        conn.execute(
+            "insert into silver.int_identity_records values ('crm', ?, ?, null, ?, ?, ?, null)",
+            [f"B{i:02d}", f"big{i} b", f"1970-02-{i + 1:02d}", f"+1905555{2000 + i}", "H0H 0H0"],
+        )
+        conn.execute(
+            "insert into silver.int_identity_evidence values ('crm', ?, null, null, null, null, ?, null)",
+            [f"B{i:02d}", None if i == 0 else "B00"],
+        )
+
+
+def test_same_person_verdict_releases_a_member_of_a_too_big_cluster(
+    silver: duckdb.DuckDBPyConnection,
+) -> None:
+    pytest.importorskip("splink")
+    _add_duplicate_chain(silver, 13)  # 13 keys: over the limit of 12, held with no national ID involved
+    held = run_matching(silver, verdicts=_verdicts())
+    assert held.summary["held_reasons"]["too_many_keys"] == 1  # type: ignore[index]
+    assert _golden(held, "crm", "B03") != _golden(held, "crm", "B00")
+    released = run_matching(silver, verdicts=_verdicts(("crm", "B03", "crm", "B00", "same_person")))
+    assert _golden(released, "crm", "B03") == _golden(released, "crm", "B00")
+    assert _status(released, "crm", "B03")[1] == "steward_approved"
+    assert _golden(released, "crm", "B05") != _golden(released, "crm", "B00")  # the others stay apart
+
+
+def test_same_person_verdict_cannot_release_a_two_national_id_cluster(
+    silver: duckdb.DuckDBPyConnection,
+) -> None:
+    pytest.importorskip("splink")
+    run = run_matching(silver, verdicts=_verdicts(("crm", "T2", "crm", "T1", "same_person")))
+    assert _golden(run, "crm", "T1") != _golden(run, "crm", "T2")  # Q3: no cluster holds two national IDs
+    assert _status(run, "crm", "T1")[1] == "unlinked"
+
+
+def test_a_cut_that_other_links_undo_holds_the_cluster(silver: duckdb.DuckDBPyConnection) -> None:
+    pytest.importorskip("splink")
+    _add_duplicate_chain(silver, 3)  # B00 - B01, B00 - B02: B01 and B02 are joined only through B00
+    run = run_matching(silver, verdicts=_verdicts(("crm", "B01", "crm", "B02", "different_people")))
+    # no direct link between B01 and B02 to cut, and they are still in one cluster: held
+    assert run.summary["held_reasons"]["steward_cannot_link"] == 1  # type: ignore[index]
+    assert _golden(run, "crm", "B01") != _golden(run, "crm", "B02")
