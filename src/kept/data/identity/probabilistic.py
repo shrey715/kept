@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
+import duckdb
 import pandas as pd
 
 from kept.config import STEWARD_REVIEW_THRESHOLD
@@ -88,56 +90,97 @@ def _comparison(spec: dict[str, object]) -> Any:
     return cl.ExactMatch(column)
 
 
-def score_pairs(records: pd.DataFrame, *, exclude_pairs: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Splink match probabilities for candidate pairs.
+TRAIN_ALL_BELOW = 600_000  # records; above this the model is trained on a DOB-hash sample
+EM_MAX_PAIRS = 5_000_000  # EM on every blocked pair of the sample did not fit in 16 GB
+SPLINK_MEMORY = os.environ.get("KEPT_SPLINK_MEMORY", "4GB")  # DuckDB spills to disk above this
 
-    Input: one row per source key with source_system, source_key and MATCH_COLUMNS.
-    Output columns: left_system, left_key, right_system, right_key, rule ("splink"),
-    score in [0, 1]. Pairs already in exclude_pairs (exact links) are not rescored.
-    Only pairs at or above the steward-review threshold are returned: below it a pair is not a link.
-    """
-    from splink import DuckDBAPI, Linker, SettingsCreator, block_on
 
-    spec = build_settings()
+def _db() -> Any:
+    """Splink's DuckDB, capped: its default (80% of RAM) plus the pandas frames ran a 16 GB laptop dry."""
+    from splink import DuckDBAPI
+
+    conn = duckdb.connect(":memory:", config={"memory_limit": SPLINK_MEMORY})
+    return DuckDBAPI(conn)
+
+
+def _people(records: pd.DataFrame) -> pd.DataFrame:
     people = records.assign(unique_id=records["source_system"] + ":" + records["source_key"])
     for col in OPTIONAL_COLUMNS:
         if col not in people:
             people[col] = None
-        people[col] = people[col].astype(
-            "string"
-        )  # an all-null column would otherwise reach DuckDB as INTEGER
+        # an all-null column would otherwise reach DuckDB as INTEGER
+        people[col] = people[col].astype("string")
     parts = people["name_key"].str.split(" ", n=1, expand=True)
     people["surname"], people["first_initial"] = parts[0], (parts[1] if parts.shape[1] > 1 else None)
-    people = people[
-        [
-            "unique_id",
-            "source_system",
-            "source_key",
-            *MATCH_COLUMNS,
-            *OPTIONAL_COLUMNS,
-            "surname",
-            "first_initial",
-        ]
-    ]
-    settings = SettingsCreator(
+    keep = ["unique_id", "source_system", "source_key", *MATCH_COLUMNS, *OPTIONAL_COLUMNS]
+    return people[[*keep, "surname", "first_initial"]]
+
+
+def _settings() -> Any:
+    from splink import SettingsCreator
+
+    spec = build_settings()
+    return SettingsCreator(
         link_type="dedupe_only",
         unique_id_column_name=str(spec["unique_id_column_name"]),
         comparisons=[_comparison(c) for c in spec["comparisons"]],  # type: ignore[attr-defined,misc]
         blocking_rules_to_generate_predictions=list(spec["blocking_rules"]),  # type: ignore[call-overload]
         additional_columns_to_retain=["source_system", "source_key"],
+        # at 3.5M records a frame of every column of ~4M pairs does not fit in 16 GB
+        retain_matching_columns=False,
+        retain_intermediate_calculation_columns=False,
     )
-    db = DuckDBAPI()
-    linker = Linker(db.register(people), settings)
+
+
+def train_model(records: pd.DataFrame, *, sample_mod: int = 20) -> dict[str, Any]:
+    """Train Splink (unsupervised: u by random sampling, m by EM) and return the model as a
+    JSON-able dict. Above TRAIN_ALL_BELOW records it trains on the records whose hash(dob) % sample_mod
+    is 0, so both sides of a true match are in the sample; EM over every record would need hundreds
+    of millions of pairs in memory."""
+    from splink import Linker, block_on
+
+    people = _people(records)
+    if len(people) > TRAIN_ALL_BELOW:
+        in_sample = pd.util.hash_pandas_object(people["dob"].fillna(""), index=False) % sample_mod == 0
+        people = people[in_sample & people["dob"].notna()]
+    spec = build_settings()
+    linker = Linker(_db().register(people), _settings())
     linker.training.estimate_probability_two_random_records_match(
         [block_on(*spec["deterministic_rule"])],  # type: ignore[misc]
         recall=float(spec["recall_of_deterministic_rule"]),  # type: ignore[arg-type]
     )
     linker.training.estimate_u_using_random_sampling(max_pairs=2_000_000, seed=1)
     for block in spec["training_blocks"]:  # type: ignore[attr-defined]
-        linker.training.estimate_parameters_using_expectation_maximisation(block_on(*block))
-    scored = linker.inference.predict(
-        threshold_match_probability=STEWARD_REVIEW_THRESHOLD
-    ).as_pandas_dataframe()  # type: ignore[no-untyped-call]
+        linker.training.estimate_parameters_using_expectation_maximisation(
+            block_on(*block), max_pairs=EM_MAX_PAIRS
+        )
+    return linker.misc.save_model_to_json()
+
+
+def score_pairs(
+    records: pd.DataFrame,
+    *,
+    exclude_pairs: pd.DataFrame | None = None,
+    model: dict[str, Any] | None = None,
+) -> pd.DataFrame:
+    """Splink match probabilities for candidate pairs.
+
+    Input: one row per source key with source_system, source_key and MATCH_COLUMNS.
+    Output columns: left_system, left_key, right_system, right_key, rule ("splink"),
+    score in [0, 1]. Pairs already in exclude_pairs (exact links) are not rescored.
+    Only pairs at or above the steward-review threshold are returned: below it a pair is not a link.
+    `model` is a trained model from train_model; without one, one is trained on `records`.
+    """
+    from splink import Linker
+
+    people = _people(records)
+    linker = Linker(_db().register(people), model or train_model(records))
+    predicted = linker.inference.predict(threshold_match_probability=STEWARD_REVIEW_THRESHOLD)
+    scored = linker.misc.query_sql(  # type: ignore[no-untyped-call]
+        "select source_system_l, source_key_l, source_system_r, source_key_r, match_probability "
+        f"from {predicted.physical_name}",
+        output_type="pandas",
+    )
 
     out = pd.DataFrame(
         {
