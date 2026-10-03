@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterable, Mapping
+from datetime import date
+from pathlib import Path
 
 import duckdb
 
@@ -35,11 +38,24 @@ CONSENT_COLUMNS = {
 }
 
 
+def _on(value: object) -> bool:
+    """True only for a real true: None, NaN and pd.NA (an unknown flag) never count."""
+    try:
+        return value is not None and bool(value == 1)
+    except TypeError:  # bool(pd.NA)
+        return False
+
+
 def merge_contact_permissions(records: Iterable[ContactPermissions | None]) -> ContactPermissions:
     """Most restrictive across duplicate CRM records (built from CONSENT_COLUMNS): a channel
     is allowed only if every record allows it. A None record (unknown consent) blocks every
     channel. No records -> all False."""
-    raise NotImplementedError("Track A")
+    permissions = list(records)
+    if not permissions or any(p is None for p in permissions):
+        return ContactPermissions()
+    return ContactPermissions(
+        **{ch: all(getattr(p, ch) for p in permissions) for ch in CONSENT_COLUMNS}  # type: ignore[union-attr]
+    )
 
 
 def derive_contact_flags(source_flags: Iterable[Mapping[str, bool | None]]) -> tuple[bool, bool]:
@@ -49,20 +65,92 @@ def derive_contact_flags(source_flags: Iterable[Mapping[str, bool | None]]) -> t
     collections_hold: any HARD_STOP_FLAGS column for COLLECTIONS_HOLD_STOPS true on any record.
     Null flags and missing keys are ignored (not treated as true). national_dncl_flag never counts.
     """
-    raise NotImplementedError("Track A")
+    records = list(source_flags)
+    hold_flags = [f for stop in COLLECTIONS_HOLD_STOPS for f in HARD_STOP_FLAGS[stop]]
+    return (
+        any(_on(r.get(f)) for r in records for f in DO_NOT_CONTACT_FLAGS),
+        any(_on(r.get(f)) for r in records for f in hold_flags),
+    )
 
 
 def hard_stop_flags(source_flags: Iterable[Mapping[str, bool | None]]) -> frozenset[HardStop]:
     """Which hard stops fired across all source records, using HARD_STOP_FLAGS."""
-    raise NotImplementedError("Track A")
+    records = list(source_flags)
+    return frozenset(
+        stop for stop, flags in HARD_STOP_FLAGS.items() if any(_on(r.get(f)) for r in records for f in flags)
+    )
 
 
-def build_gold(conn: duckdb.DuckDBPyConnection) -> None:
+DBT_DIR = Path(__file__).resolve().parents[3] / "dbt"
+# the models that turn silver + the crosswalk into the three gold tables (tests/data/test_gold_sql.py
+# checks this list against dbt/models)
+GOLD_MODELS = (
+    "int_golden_clusters",
+    "int_flag_events",
+    "int_source_flags",
+    "int_crm_current",
+    "int_account_delinquency",
+    "int_open_case",
+    "int_hardship",
+    "int_payroll",
+    "int_restricted",
+    "c360_customer",
+    "c360_restricted",
+    "identity_crosswalk",
+)
+
+
+def _warehouse_path(conn: duckdb.DuckDBPyConnection) -> str:
+    row = conn.execute(
+        "select path from duckdb_databases() where not internal and not readonly limit 1"
+    ).fetchone()
+    if row is None or row[0] is None:
+        raise ValueError("build_gold needs a connection to the warehouse file, not an in-memory database")
+    return str(row[0])
+
+
+def run_dbt(select: Iterable[str], *, warehouse: str) -> None:
+    """`dbt build --select ...` against `warehouse`. Raises RuntimeError if any model or test fails."""
+    from dbt.cli.main import dbtRunner
+
+    os.environ["KEPT_WAREHOUSE_PATH"] = warehouse
+    # --threads 1: four wide builds at once ran a 16 GB laptop out of memory
+    args = [
+        "build",
+        "--select",
+        *select,
+        "--threads",
+        "1",
+        "--profiles-dir",
+        str(DBT_DIR),
+        "--project-dir",
+        str(DBT_DIR),
+    ]
+    result = dbtRunner().invoke(args)
+    if not result.success:
+        raise RuntimeError(f"dbt build failed: {result.exception or 'see the dbt log above'}")
+
+
+def build_gold(conn: duckdb.DuckDBPyConnection, *, crosswalk: Path | None = None) -> None:
     """Materialise the three gold tables from silver + the current crosswalk.
-    Normally run through dbt; this wraps `dbt build --select gold`."""
-    raise NotImplementedError("Track A")
+    Normally run through dbt; this wraps `dbt build --select gold`.
+
+    Loads the newest crosswalk parquet (or `crosswalk`) into silver.int_crosswalk, then closes `conn`:
+    dbt needs the warehouse file to itself (K5, one writer)."""
+    from kept.config import EXPORT_DIR
+    from kept.data.identity.pipeline import latest_crosswalk, load_crosswalk
+
+    warehouse = _warehouse_path(conn)
+    load_crosswalk(conn, crosswalk or latest_crosswalk(EXPORT_DIR / "identity_crosswalk"))
+    conn.close()
+    run_dbt(GOLD_MODELS, warehouse=warehouse)
 
 
 def export_parquet(conn: duckdb.DuckDBPyConnection, *, as_of_date: str) -> None:
     """Write gold.c360_customer to data/exports/c360_customer/as_of_date=<date>/."""
-    raise NotImplementedError("Track A")
+    from kept.config import EXPORT_DIR
+
+    date.fromisoformat(as_of_date)  # a path component: only ever a real date
+    out = EXPORT_DIR / "c360_customer" / f"as_of_date={as_of_date}"
+    out.mkdir(parents=True, exist_ok=True)
+    conn.execute(f"copy (select * from gold.c360_customer) to '{out / 'part-000.parquet'}' (format parquet)")

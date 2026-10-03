@@ -1,18 +1,17 @@
--- Track A: the 12 protected attributes (data dictionary), compliance only.
--- Sources: customers (10), deposit_accounts.ccb_deposit_flag, voice_samples.customer_accent_region.
+-- The 12 protected attributes (data dictionary), compliance only. Built in silver.int_restricted.
 -- Never ref() this from features or ask models; the lineage CI test enforces it.
 select
-    cast(null as varchar) as golden_customer_id,
-    cast(null as varchar) as gender_code,
-    cast(null as varchar) as marital_status,
-    cast(null as varchar) as citizenship_status,
-    cast(null as integer) as household_size,
-    cast(null as integer) as dependants_count,
-    cast(null as boolean) as newcomer_program_flag,
-    cast(null as date) as newcomer_arrival_date,
-    cast(null as boolean) as accessibility_needs_flag,
-    cast(null as varchar) as accessibility_type,
-    cast(null as varchar) as vulnerability_type,
-    cast(null as boolean) as ccb_deposit_flag,
-    cast(null as varchar) as customer_accent_region
-where false
+    golden_customer_id as golden_customer_id,
+    gender_code as gender_code,
+    marital_status as marital_status,
+    citizenship_status as citizenship_status,
+    household_size as household_size,
+    dependants_count as dependants_count,
+    newcomer_program_flag as newcomer_program_flag,
+    newcomer_arrival_date as newcomer_arrival_date,
+    accessibility_needs_flag as accessibility_needs_flag,
+    accessibility_type as accessibility_type,
+    vulnerability_type as vulnerability_type,
+    ccb_deposit_flag as ccb_deposit_flag,
+    customer_accent_region as customer_accent_region
+from {{ ref('int_restricted') }}

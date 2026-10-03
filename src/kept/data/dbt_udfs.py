@@ -21,6 +21,7 @@ from kept.data.clean import (
     normalize_name,
     normalize_phone_e164,
     normalize_postal_code,
+    normalize_province,
     parse_date,
     parse_dob,
 )
@@ -51,6 +52,7 @@ FUNCTIONS: dict[str, tuple[Any, Any]] = {
     "kept_first_name_card": (lambda raw: match_first_name(raw, style="card"), T.VARCHAR),
     "kept_date": (lambda raw: parse_date(raw), T.DATE),  # any column typed DATE that arrives in mixed formats
     "kept_phone": (lambda raw: normalize_phone_e164(raw), T.VARCHAR),  # one argument: DuckDB counts them
+    "kept_province": (normalize_province, T.VARCHAR),
     "kept_postal": (normalize_postal_code, T.VARCHAR),
 }
 
