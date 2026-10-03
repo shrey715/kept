@@ -7,7 +7,7 @@ select
     x.source_id,
     x.case_id,
     case when n.note_id is not null then 'note' else 'transcript' end as source_type,
-    coalesce(n.note_ts_utc, try_cast(t.call_start_ts as timestamp)) as written_at,  -- calls: local time
+    coalesce(n.note_ts_utc, try_cast(t.call_start_ts as timestamp), x.extracted_at) as written_at,  -- calls: local; typed notes: extraction time
     x.hardship_signal_value                                             as hardship_signal,
     x.stated_reason_value                                               as stated_reason,
     x.promise_intent_value                                              as promise_intent,
