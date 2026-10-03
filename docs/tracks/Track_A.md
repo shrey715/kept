@@ -39,13 +39,22 @@ Settings: `kept.data.identity.probabilistic.build_settings()` (also in `run_summ
 - The release has `call_transcripts.csv` (call-level) plus separate JSON files; only the CSV lands in bronze. The `turns` JSON stays in `data/raw/files/transcripts/` for Track C. The `_source_file` column holds the absolute path on the machine that landed it.
 
 ## Open questions
-<!-- Each with what the docs say about it (file and section). -->
-- Ground-truth IDs: still to ask the organisers (TEAM_PLAN §9, by G1). Without them our precision claim is the national-ID check on CRM records plus the 98%-target eyeball; the 300-pair review is Phase 4.
-- Autopay/PAD accounts at other FIs: handled as "ignore" in `exact.py` (a payment source that is none of our deposit accounts links nothing); 110,942 deposit-loan and 40,335 card-deposit links use our own accounts. Needs the team's OK (§9).
-- For the quality report (Phase 5): 4,636 agent notes contain U+FFFD (lost characters, not recoverable); 384,422 card phone numbers are masked in the source (`519555xxx42`) and sit in `quarantine.card_accounts`; 4,936 CRM phones are truncated to 9 digits; `account_monthly_snapshot.month_end_date` drifts across 3 formats; 2,115 CRM records are deleted (CDC) and excluded from silver.
+None for G1. The open items from Phase 1-2 are decided below, on the data and docs we have (no new information from the organisers or the team); anyone who disagrees can say so before G1 closes.
+
+## Decisions taken (with the reason)
+- **Ground-truth IDs (TEAM_PLAN §9):** assume none exist. We do not claim a precision measured against labels we don't have. The evidence we report instead: (1) Splink re-finds 99.9% of the exact links; (2) no auto-linked cluster holds two national IDs, and the 329-340 clusters that would are held for review; (3) about 60 pairs eyeballed with no false auto-link; (4) the 300-pair human review in Phase 4 against the 98% target (`check_review_precision`). If the organisers answer, swap (4) for their labels.
+- **Autopay/PAD accounts at other FIs (§9):** ignore for linking (`exact.py` already does). A payment source that is none of our deposit accounts has nothing to link to, and quarantining those rows (hundreds of thousands) would bury the steward's queue. They stay in silver untouched; the quality report states how many there are.
+- **`exact:core_banking_cif`:** keep. The release README names the CIF as the shared core-banking key, and the data agrees 99.7-100% (name, DOB, postal code).
+- **DPD buckets (§9 "confirm bucket edges"):** keep the shared six-bucket enum (`121+`). Changing it is a breaking contract change (Q11) for no gain: D's rules and the dbt `dpd_bucket` macro already use it. Silver keeps the source `current_bucket` labels untouched; gold derives `121+` from `max_dpd` in Phase 3.
+- **`paid_14d` source (D + A, §9):** agree with D's proposal in `Track_D.md`. Silver already holds the columns it needs: `loan_instalments` (`paid_date`, `paid_amount`, `due_date`) for loans; `transactions` (`posting_date`, `amount`, `txn_type`; a customer sample only) where present, else `card_statements` (`payments_amount`, `first_payment_after_due_date`, `due_date`) for cards, so card `paid_14d` is approximate. Nothing more is needed from A.
+- **Agent-note mojibake:** not recoverable (U+FFFD replaced the characters). Listed for the quality report below; the notes are not "fixed".
+
+## Notes for the quality report (Phase 5)
+4,636 agent notes contain U+FFFD; 384,422 card phone numbers are masked in the source (`519555xxx42`) and sit in `quarantine.card_accounts`; 4,936 CRM phones are truncated to 9 digits; `account_monthly_snapshot.month_end_date` drifts across 3 formats; 2,115 CRM records are deleted (CDC) and excluded from silver.
 
 ## Log
 <!-- Newest first: time, what happened. -->
+- 2026-10-03: Open questions decided (see Decisions taken).
 - 2026-10-03: Phase 2 done; `dbt build --select silver` 38/38 on real data; stop message for G1 posted. G0 PR #10 merged with my pre-hook fix.
 - 2026-10-03: Phase 2 parallel tasks done; silver built on real data; Splink tuning on a 10% sample running.
 - 2026-10-03: Reviewed G0 PR #10 (found the `+pre-hook` moved from `features:` to `text:`).
