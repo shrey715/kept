@@ -81,6 +81,10 @@ def next_window(ctx: CaseContext, *, length: timedelta = WINDOW) -> tuple[dateti
         start = datetime.combine(day, ctx.permitted_call_start_local, tz)
         end = datetime.combine(day, ctx.permitted_call_end_local, tz)
         s = max(start, local)
+        if s > start:  # agents book round slots: start on the next half hour
+            s = s.replace(second=0, microsecond=0) + timedelta(
+                minutes=(30 - s.minute % 30) % 30 or (30 if s.second else 0)
+            )
         if s < end:
             return s.astimezone(UTC), min(s + length, end).astimezone(UTC)
     return None

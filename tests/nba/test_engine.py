@@ -213,3 +213,14 @@ def test_new_recommendation_supersedes_the_pending_one(make_ctx) -> None:  # typ
     b = eng.recommend(ctx.case_id, NOW).proposal
     assert a and b and store[a.proposal_id].status is ProposalStatus.CANCELLED
     assert store[b.proposal_id].status is ProposalStatus.PENDING
+
+
+def test_window_starts_on_a_half_hour(engine) -> None:  # type: ignore[no-untyped-def]
+    from zoneinfo import ZoneInfo
+
+    t = datetime(2026, 10, 2, 18, 7, 30, tzinfo=UTC)  # 14:07:30 Toronto
+    eng, _ = engine(now=t, features_as_of=t - timedelta(hours=3))
+    p = eng.recommend("C-118204", t).proposal
+    assert p is not None and p.window_start is not None
+    local = p.window_start.astimezone(ZoneInfo("America/Toronto"))
+    assert (local.hour, local.minute, local.second) == (14, 30, 0)
