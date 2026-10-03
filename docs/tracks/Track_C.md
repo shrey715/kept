@@ -29,6 +29,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - `make test-contract` green, `make lint` clean, track_c: 25 passed, rest stubbed for later phases.
 
 ## Decisions and changes from the plan
+- Cash-flow hardship enters gold at **G2** (Akshat, 3 Oct): `hardship.cashflow_observations` (C, PR #25) is one more branch of A's `int_hardship_observations` (PR #24). Merge order at G2: #25 first, then #24.
 - Promised amounts are scored within $1: notes write whole dollars ("$21") while labels hold the promise record's cents (21.03). Gold dates for "next payday" come from payroll data, not the text, so they stay misses.
 - The LLM returns dates as written (`MM-DD`, `day:N`, `weekday:x`, ISO); code resolves them against the note's local date. A month-day value whose quote names no month is read as a day of month.
 - Redactor v3 keeps a spaCy PERSON/LOCATION span only if it has a Titlecase non-month word: notes' typos, months and ALL-CAPS phrases were being redacted. Limit: an ALL-CAPS name passes (notes have almost none; transcripts use Titlecase).
@@ -49,6 +50,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 20:55 Cash-flow observations built (20,380 golden customers, matches the Python rule); moved into G2 with A's #24.
 - 20:30 Backfill done and verified; gate passed on this machine. Two power cuts (19:1x, 20:0x): labels file intact both times; git objects repaired after the first.
 - 17:50 Crosswalk v1 done (attempt 4). Phase 3 code PR #15.
 - 17:34, 17:38, 17:43 Splink full run OOM-killed (16 GB, 23 GB, 20 GB cap) — fixed step by step.
