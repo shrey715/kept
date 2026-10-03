@@ -21,6 +21,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 4: Kept sizing and ranking (`test_sizing_ranking_tiers.py` 45/45); explanations with a fixed sentence for every model feature + TreeSHAP contributions; `KeptEngine` stages 1-7 (`test_engine.py` 15/15).
 - Phase 5: `Releaser` + `cancel_pending` (`test_release.py` 34/34); `/cases/{id}/nba` and `/proposals/{id}/decision` with access checks (`tests/app` 8/8, `/ask` is B's); `kept serve --demo`.
 - Frontend: Next.js app in `web/` (case card + review/release, Ask, steward). Screenshot-checked on desktop and phone.
+- Product flows: persona sign-in (deep link `/signin?as=agent-7&next=/queue`), ranked queue, case card with what-if sizing and interactive probabilities, approvals inbox (Red two-step, Green batch), audit trail, guided demo (§7 script), scroll-driven 3D landing (light and dark). API routes `/queue`, `/approvals`, `/audit`, `/cases/{id}/customer`, `/demo/cases/{id}/notes`; `tests/app/test_demo_flows.py` 9/9.
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -47,12 +48,18 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **SHAP without the shap package:** LightGBM's own `pred_contrib`, converted to probability points per feature (leave-one-out; signs and sizes right, not exactly additive).
 - Port 8000 is taken by VS Code on Shreyas's machine; `kept serve --port` and `KEPT_API_URL` cover it. In dev, open `localhost:3000`, not `127.0.0.1` (Next 16 blocks dev resources cross-origin).
 
+- **Design system: Radix Themes, "Maple" theme** (sand neutrals, ruby accent, Source Serif headings); Red tier is plum so it never clashes with the accent. Motion for animation; three.js (R3F + drei + postprocessing) for the landing only. Shreyas's call.
+- **Red tier releases in two steps:** the specialist's approval moves a proposal to `APPROVED`; a different person (team lead, compliance or specialist) releases it after a fresh recheck. Uses the existing `ProposalStatus.APPROVED`, no contract change.
+- **Demo clock:** `kept serve --demo` runs on a business-hours clock (shown in the header) so releases can pass the real calling-hours check at any time of day.
+- **For B:** `/ask` is now a one-line pass-through to `services.ask` (it raised before even with a service injected). The demo Ask answers the kept-rate metric with real SQL over `data/raw`; everything else is B's.
+
 ## Open questions
 - **paid_14d source (§9, D + A):** dated payment events exist in `loan_instalments` (`paid_date`, `paid_amount`), `card_statements` (`payments_amount`, `first_payment_after_due_date`, per cycle), `transactions` (sample only) and `contact_history.payment_taken_flag`. Proposal for A: loans from `loan_instalments.paid_date`; cards from `transactions` where present, else `card_statements` (cycle-level, so `paid_14d` is approximate for cards). Needs A's silver.
 - **Still needs other tracks:** `kept train` (real features + labels, after G2), `kept score` and real `kept serve` (A's `DuckDBC360Reader`, G3/G4), `kept nightly` (every track's subcommands), hardship programmes on the banner (C's `eligible_programs`).
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
+- 3 Oct: Radix redesign, product flows, two-step Red release, 3D landing; all pushed to track-d / PR #2.
 - 3 Oct: Phases 3-5 parallel tasks done against fakes; Next.js frontend; demo server.
 - 3 Oct: dataset downloaded and laid out under data/; Phase 2 parallel tasks done; continuing into later phases against fakes.
 - 3 Oct: PR to main held until the other tracks finish Phase 1 (Shreyas's call).
