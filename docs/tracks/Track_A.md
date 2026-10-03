@@ -39,10 +39,18 @@ Settings: `kept.data.identity.probabilistic.build_settings()` (also in `run_summ
 - The release has `call_transcripts.csv` (call-level) plus separate JSON files; only the CSV lands in bronze. The `turns` JSON stays in `data/raw/files/transcripts/` for Track C. The `_source_file` column holds the absolute path on the machine that landed it.
 
 ## Open questions
-<!-- Each with what the docs say about it (file and section). -->
-- Ground-truth IDs: still to ask the organisers (TEAM_PLAN §9, by G1). Without them our precision claim is the national-ID check on CRM records plus the 98%-target eyeball; the 300-pair review is Phase 4.
-- Autopay/PAD accounts at other FIs: handled as "ignore" in `exact.py` (a payment source that is none of our deposit accounts links nothing); 110,942 deposit-loan and 40,335 card-deposit links use our own accounts. Needs the team's OK (§9).
-- For the quality report (Phase 5): 4,636 agent notes contain U+FFFD (lost characters, not recoverable); 384,422 card phone numbers are masked in the source (`519555xxx42`) and sit in `quarantine.card_accounts`; 4,936 CRM phones are truncated to 9 digits; `account_monthly_snapshot.month_end_date` drifts across 3 formats; 2,115 CRM records are deleted (CDC) and excluded from silver.
+None blocking Phase 3. The earlier open items are decided below, on the data and docs we have (no new information from the organisers or the team).
+
+## Decisions taken (with the reason)
+- **Ground-truth IDs (TEAM_PLAN §9):** assume none exist. We do not claim a precision measured against labels we don't have. The evidence we report instead: (1) Splink re-finds 99.9% of the exact links; (2) no auto-linked cluster holds two national IDs, and the 329-340 that would are held for review; (3) about 60 pairs eyeballed with no false auto-link; (4) the 300-pair human review in Phase 4 against the 98% target (`check_review_precision`). If the organisers answer, swap (4) for their labels.
+- **Autopay/PAD accounts at other FIs:** ignore for linking. A payment source that is none of our deposit accounts has nothing to link to, and quarantining those rows (hundreds of thousands) would bury the steward's queue. They stay in silver untouched, and the quality report states how many there are.
+- **`exact:core_banking_cif`:** keep (see above); the release README names the CIF as the shared core-banking key, and the data agrees 99.7-100%.
+- **DPD buckets:** keep the shared six-bucket enum (`121+`): changing it is a breaking contract change (Q11) for no gain, since D's rules and the dbt macro already use it. Silver keeps the source `current_bucket` labels untouched; gold derives `121+` from `max_dpd`.
+- **Q5 row count:** WARN, not BLOCK, outside +-10% of the last load (the docstring's default): a night's real customer growth can exceed 10%, while freshness (26h warn, 48h block) is the check that stops a stale publish.
+- **`paid_14d` source (D + A, §9):** agree with D's proposal in `Track_D.md`. Silver already holds the columns it needs: `loan_instalments` (`paid_date`, `paid_amount`, `due_date`) for loans; `transactions` (`posting_date`, `amount`, `txn_type`; a customer sample only) where present, else `card_statements` (`payments_amount`, `first_payment_after_due_date`, `due_date`) for cards, so card `paid_14d` is approximate. Nothing more is needed from A.
+- **Hardship until G2:** `hardship_status` comes from agent and account sources only (`silver.int_hardship`): an agent-coded case flag or an account hardship programme is confirmed; a customer-form or model flag, or a hardship mention in the last 30 days, is possible. C's text and the cash-flow rule join at G2 through `kept.hardship.combine`.
+- **Account-key linkage (Q2):** an account key counts as linked when its golden ID also holds a CRM record.
+- **Agent-note mojibake:** not recoverable (U+FFFD replaced the characters); listed in the quality report, not "fixed".
 
 ## Log
 <!-- Newest first: time, what happened. -->
