@@ -6,10 +6,11 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { CustomerPanel } from "@/components/customer-panel";
+import { ExtractionPanel } from "@/components/extraction-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
-import { ApiError, api, type AuditEvent, type Customer, type NBACard } from "@/lib/api";
+import { ApiError, api, type AuditEvent, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
 import { useSession } from "@/lib/session";
 
@@ -26,9 +27,13 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   const [noting, setNoting] = useState(false);
   const [preset, setPreset] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState("review");
+  const [notes, setNotes] = useState<NoteExtraction[]>([]);
 
   const loadAudit = useCallback(() => {
     if (me) api.audit(me, { caseId }).then(setEvents, () => {});
+  }, [me, caseId]);
+  const loadNotes = useCallback(() => {
+    if (me) api.extractions(caseId, me).then(setNotes, () => setNotes([]));
   }, [me, caseId]);
 
   useEffect(() => {
@@ -41,6 +46,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         setCustomer(cu);
         setError(null);
         loadAudit();
+        loadNotes();
       },
       (e: Error) => {
         if (!live) return;
@@ -51,7 +57,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
     return () => {
       live = false;
     };
-  }, [caseId, me, nonce, loadAudit]);
+  }, [caseId, me, nonce, loadAudit, loadNotes]);
 
   async function addNote() {
     if (!me || !note.trim()) return;
@@ -61,6 +67,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
       setCustomer(await api.customer(caseId, me));
       setNote("");
       loadAudit();
+      loadNotes();
     } finally {
       setNoting(false);
     }
@@ -132,6 +139,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                 </Flex>
               </Card>
             )}
+            <ExtractionPanel items={notes} agentId={me.userId} demo={!!health?.demo} onSaved={() => setNonce((n) => n + 1)} />
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>

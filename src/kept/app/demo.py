@@ -10,17 +10,21 @@ tracks' services and aren't faked here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+import re
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from functools import cache
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import duckdb
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, ValidationError
 
-from kept.app.api import Services, create_app
+from kept.app.api import ExtractionConfirmIn, Services, create_app
 from kept.common.audit import DuckDBAuditLog, new_event_id
 from kept.config import RAW_DIR
 from kept.contracts.ask import (
@@ -42,11 +46,13 @@ from kept.contracts.enums import (
     HardStop,
     MatchReviewStatus,
     PayrollFrequency,
+    Role,
     SourceSystem,
 )
-from kept.contracts.features import FeatureVector
+from kept.contracts.features import FeatureVector, StatedReason, TextExtraction
 from kept.contracts.identity import ContactPermissions, GoldenCustomer, SourceKey
 from kept.contracts.nba import CaseContext, Proposal
+from kept.governance.access import can_view_case
 from kept.nba.engine import KeptEngine
 from kept.nba.release import Releaser
 
@@ -250,6 +256,126 @@ HARDSHIP_WORDS = (
 CEASE_WORDS = ("stop calling", "stop contacting", "don't call", "do not call")
 
 
+PRODUCTS = {  # each demo case's primary product, for hardship programmes
+    "CS-2026-118204": "personal_loan",
+    "CS-2026-302680": "card",
+    "CS-2026-344961": "card",
+    "CS-2026-451121": "card",
+    "CS-2026-520077": "personal_loan",
+    "CS-2026-612390": "auto_loan",
+    "CS-2026-700145": "card",
+    "CS-2026-781002": "loc",
+    "CS-2026-803311": "card",
+    "CS-2026-870420": "mortgage",
+    "CS-2026-904518": "card",
+    "CS-2026-955003": "personal_loan",
+}
+EXTRACTED_FIELDS = (
+    "hardship_signal",
+    "stated_reason",
+    "promise_intent",
+    "promised_date",
+    "promised_amount",
+    "dispute",
+    "cease_request",
+    "third_party_present",
+)
+JOB_LOSS = r"\b(lost (?:my |his |her |their )?job|laid off|unemployed|no income)\b"
+REDUCED = (
+    r"(lost (?:\w+ )?(?:shifts|hours)|shifts? (?:were |was )?cut|reduced hours"
+    r"|hours (?:were |got )?cut|cut (?:my |his |her )?hours)"
+)
+MEDICAL = r"\b(medical|surgery|hospital|sick)\b"
+AFFORD = r"(can'?t afford|cannot afford)"
+PROMISE = r"\b(can pay|will pay|promised? to pay|able to pay)\b"
+DISPUTE = r"(not my debt|never (?:had|opened)|dispute|already paid)"
+CEASE = r"(stop calling|stop contacting|don'?t call|do not call)"
+THIRD = r"\b(wife|husband|partner|son|daughter|mother|father|lawyer|on the line)\b"
+_RULES: list[tuple[str, str, Any, str]] = [  # (field, regex, value, stated reason)
+    ("hardship_signal", JOB_LOSS, HardshipSignal.CLEAR, "job_loss"),
+    ("hardship_signal", REDUCED, HardshipSignal.POSSIBLE, "reduced_income"),
+    ("hardship_signal", MEDICAL, HardshipSignal.POSSIBLE, "medical"),
+    ("hardship_signal", AFFORD, HardshipSignal.POSSIBLE, "other"),
+    ("promise_intent", PROMISE, True, ""),
+    ("dispute", DISPUTE, True, ""),
+    ("cease_request", CEASE, True, ""),
+    ("third_party_present", THIRD, True, ""),
+]
+_EMPTY: dict[str, Any] = {
+    "hardship_signal": HardshipSignal.NONE,
+    "stated_reason": StatedReason.NONE,
+    "promise_intent": False,
+    "promised_date": None,
+    "promised_amount": None,
+    "dispute": False,
+    "cease_request": False,
+    "third_party_present": False,
+}
+
+
+def _ev(note_id: str, text: str, m: re.Match[str], group: int = 0) -> dict[str, Any]:
+    a, b = m.span(group)
+    return {"quote": text[a:b], "source_id": note_id, "char_start": a, "char_end": b}
+
+
+def _val(value: Any, evidence: dict[str, Any] | None, confidence: float) -> dict[str, Any]:
+    return {"value": value, "evidence": evidence, "confidence": confidence}
+
+
+def demo_extract(note_id: str, case_id: str, text: str, at: datetime) -> TextExtraction:
+    """Rule-based stand-in for C's LLMExtractor: every value carries its quote and offsets."""
+    vals: dict[str, dict[str, Any]] = {
+        f: {"value": v, "evidence": None, "confidence": 0.6} for f, v in _EMPTY.items()
+    }
+    for field_, pattern, value, reason in _RULES:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m and vals[field_]["evidence"] is None:
+            vals[field_] = {"value": value, "evidence": _ev(note_id, text, m), "confidence": 0.85}
+            if reason:
+                vals["stated_reason"] = {
+                    "value": StatedReason(reason),
+                    "evidence": _ev(note_id, text, m),
+                    "confidence": 0.8,
+                }
+    amount = re.search(r"pay\s+\$?(\d{2,6}(?:\.\d{2})?)", text, re.IGNORECASE)
+    if amount:
+        vals["promised_amount"] = {
+            "value": Decimal(amount.group(1)).quantize(Decimal("0.01")),
+            "evidence": _ev(note_id, text, amount, 1),  # the number itself, not "pay 140"
+            "confidence": 0.85,
+        }
+    day = re.search(r"on the (\d{1,2})(?:st|nd|rd|th)\b", text, re.IGNORECASE)
+    if day and 1 <= int(day.group(1)) <= 31:
+        d, n = at.date(), int(day.group(1))
+        while True:  # next date with that day of month, on or after the note
+            try:
+                cand = d.replace(day=n)
+                if cand >= at.date():
+                    break
+            except ValueError:
+                pass
+            d = (d.replace(day=1) + timedelta(days=32)).replace(day=1)
+        vals["promised_date"] = _val(cand, _ev(note_id, text, day), 0.85)
+    return TextExtraction.model_validate(
+        {"source_id": note_id, "case_id": case_id, **vals, "extractor": "llm:demo-rules", "extracted_at": at}
+    )
+
+
+@cache
+def _programs() -> list[tuple[str, str, str, list[str], str, int]]:
+    """Current rows of data/raw/hardship_programs.csv (empty if the dataset isn't here)."""
+    path = RAW_DIR / "hardship_programs.csv"
+    if not path.exists():
+        return []
+    with duckdb.connect() as c:
+        rows = c.execute(
+            "select program_id, version, program_name, product_types, min_hardship_level, max_dpd"
+            " from read_csv_auto(?, all_varchar=true) where effective_to >= '2026-09-28' order by program_id",
+            [str(path)],
+        ).fetchall()
+    return [(a, b, n, json.loads(pt), lvl, int(dpd)) for a, b, n, pt, lvl, dpd in rows]
+
+
 def _bucket(dpd: int) -> DpdBucket:
     for edge, b in (
         (0, DpdBucket.CURRENT),
@@ -306,6 +432,9 @@ class DemoWorld:
     vectors: dict[str, FeatureVector]
     customers: dict[str, GoldenCustomer]
     log: DuckDBAuditLog
+    base: dict[str, tuple[HardshipStatus, bool]] = field(default_factory=dict)  # before any note
+    notes: dict[str, list[tuple[str, str, datetime]]] = field(default_factory=dict)  # case -> (id, text, at)
+    extractions: dict[str, TextExtraction] = field(default_factory=dict)  # note id -> extraction
 
     # CaseContextBuilder
     def build(self, case_id: str, now: datetime) -> CaseContext:
@@ -334,37 +463,89 @@ class DemoWorld:
         raise KeyError(case_id)
 
     def add_note(self, case_id: str, text: str, user_id: str, now: datetime) -> None:
-        """Stand-in for live extraction (Track C): keyword rules on the note."""
-        t = f" {text.lower()} "
+        """Stand-in for live extraction (Track C): rule-based extraction on the note, then the
+        same effect a real extraction has on the case."""
+        self.customer_for_case(case_id)  # unknown case -> KeyError
+        note_id = f"N-{case_id[-6:]}-{len(self.notes.get(case_id, [])) + 1}"
+        self.notes.setdefault(case_id, []).append((note_id, text, now))
+        self.extractions[note_id] = demo_extract(note_id, case_id, text, now)
+        self._apply(case_id, user_id, now)
+
+    def case_extractions(self, case_id: str) -> list[tuple[str, TextExtraction]]:
+        """(note text, extraction) per note, newest first."""
+        return [(t, self.extractions[n]) for n, t, _ in reversed(self.notes.get(case_id, []))]
+
+    def confirm(self, source_id: str, agent_id: str, edits: dict[str, Any], now: datetime) -> TextExtraction:
+        """Agent confirms or edits at wrap-up: edited values get confidence 1 (C's confirm contract)."""
+        ex = self.extractions[source_id]  # unknown -> KeyError
+        update: dict[str, Any] = {"confirmed_by_agent_id": agent_id}
+        for name, value in edits.items():
+            if name not in EXTRACTED_FIELDS:
+                raise ValueError(f"unknown field {name}")
+            current = getattr(ex, name)
+            update[name] = current.model_validate(
+                {"value": value, "evidence": current.evidence, "confidence": 1.0}
+            )
+        self.extractions[source_id] = TextExtraction.model_validate({**ex.model_dump(), **update})
+        self._apply(ex.case_id, agent_id, now)
+        return self.extractions[source_id]
+
+    def _apply(self, case_id: str, actor: str, now: datetime) -> None:
+        """Case hardship and cease from the base case plus every note's extraction, the way
+        hardship.combine would: a text signal is POSSIBLE until a person confirms it."""
+        order = [HardshipStatus.NONE, HardshipStatus.POSSIBLE, HardshipStatus.CONFIRMED]
+        status, cease = self.base[case_id]
+        for n, _, _ in self.notes.get(case_id, []):
+            ex = self.extractions[n]
+            if ex.hardship_signal.value is not HardshipSignal.NONE:
+                found = HardshipStatus.CONFIRMED if ex.confirmed_by_agent_id else HardshipStatus.POSSIBLE
+                status = max(status, found, key=order.index)
+            cease = cease or ex.cease_request.value
         ctx = self.contexts[case_id]
-        if any(w in t for w in CEASE_WORDS):
-            self.contexts[case_id] = ctx.model_copy(
-                update={"hard_stop_flags": ctx.hard_stop_flags | {HardStop.CEASE}}
-            )
-        elif any(w in t for w in HARDSHIP_WORDS) and ctx.hardship_status is HardshipStatus.NONE:
-            self.contexts[case_id] = ctx.model_copy(update={"hardship_status": HardshipStatus.POSSIBLE})
-            c = self.customer_for_case(case_id)
-            self.customers[c.golden_customer_id] = c.model_copy(
-                update={"hardship_status": HardshipStatus.POSSIBLE}
-            )
-            self.vectors[case_id] = self.vectors[case_id].model_copy(
-                update={"hardship_signal": HardshipSignal.POSSIBLE}
-            )
+        before = ctx.hardship_status
+        stops = (ctx.hard_stop_flags - {HardStop.CEASE}) | ({HardStop.CEASE} if cease else set())
+        self.contexts[case_id] = ctx.model_copy(
+            update={"hardship_status": status, "hard_stop_flags": frozenset(stops)}
+        )
+        c = self.customer_for_case(case_id)
+        self.customers[c.golden_customer_id] = c.model_copy(update={"hardship_status": status})
+        signal = HardshipSignal.NONE if status is HardshipStatus.NONE else HardshipSignal.POSSIBLE
+        self.vectors[case_id] = self.vectors[case_id].model_copy(
+            update={"hardship_signal": signal, "cease_request_flag": cease}
+        )
+        if status is not before:
             self.log.append(
                 AuditEvent(
                     event_id=new_event_id(),
                     at=now,
                     kind=AuditKind.HARDSHIP_CHANGE,
-                    actor_id=user_id,
+                    actor_id=actor,
                     subject_id=case_id,
                     payload={
                         "case_id": case_id,
-                        "from": "none",
-                        "to": "possible",
+                        "from": before.value,
+                        "to": status.value,
                         "source": "agent note (demo rules)",
                     },
                 )
             )
+
+    def programs(self, ctx: CaseContext) -> list[str]:
+        """Current hardship_programs rows for the case's product and hardship level (demo rule;
+        C's eligible_programs replaces it at G3)."""
+        product = PRODUCTS.get(ctx.case_id)
+        level = {HardshipStatus.NONE: 0, HardshipStatus.POSSIBLE: 1, HardshipStatus.CONFIRMED: 2}[
+            ctx.hardship_status
+        ]
+        if ctx.vulnerable:
+            level = max(level, 1)
+        dpd = self.customer_for_case(ctx.case_id).max_dpd
+        need = {"none": 0, "possible": 1, "clear": 2}
+        return [
+            f"{name} ({pid} {ver})"
+            for pid, ver, name, products, lvl, max_dpd in _programs()
+            if product in products and 0 < need[lvl] <= level and dpd <= max_dpd
+        ]
 
 
 class DemoAsk:
@@ -513,9 +694,17 @@ def demo_services() -> Services:
         )
     log = DuckDBAuditLog()
     world = DemoWorld(contexts, vectors, customers, log)
+    world.base = {
+        c: (ctx.hardship_status, HardStop.CEASE in ctx.hard_stop_flags) for c, ctx in contexts.items()
+    }
     proposals: dict[str, Proposal] = {}
     engine = KeptEngine(
-        context=world, features=world, scorer=DemoScorer(), audit_log=log, proposals=proposals
+        context=world,
+        features=world,
+        scorer=DemoScorer(),
+        audit_log=log,
+        proposals=proposals,
+        programs=world.programs,
     )
     return Services(
         engine=engine,
@@ -530,6 +719,36 @@ def demo_services() -> Services:
     )
 
 
+class NoteExtraction(BaseModel):
+    note: str
+    extraction: TextExtraction
+
+
 def demo_app() -> FastAPI:
-    """App factory for `kept serve --demo --reload` (uvicorn re-imports it on every code change)."""
-    return create_app(demo_services())
+    """App factory for `kept serve --demo [--reload]`. Adds two demo-only routes for the
+    extraction panel; outside the demo the panel uses C's extraction store (G0) and route."""
+    services = demo_services()
+    app = create_app(services)
+    world = services.c360
+    assert isinstance(world, DemoWorld)
+
+    @app.get("/demo/cases/{case_id}/extractions", response_model=list[NoteExtraction])
+    def demo_extractions(case_id: str, user_id: str, role: Role) -> list[NoteExtraction]:
+        try:
+            c = world.customer_for_case(case_id)
+        except KeyError:
+            raise HTTPException(404, f"unknown case {case_id}") from None
+        if not can_view_case(role=role, user_id=user_id, assigned_agent_id=c.assigned_agent_id):
+            raise HTTPException(403, "not your case")
+        return [NoteExtraction(note=t, extraction=e) for t, e in world.case_extractions(case_id)]
+
+    @app.post("/demo/extractions/{source_id}/confirm", response_model=TextExtraction)
+    def demo_confirm(source_id: str, body: ExtractionConfirmIn) -> TextExtraction:
+        try:
+            return world.confirm(source_id, body.agent_id, dict(body.edits), services.clock())
+        except KeyError:
+            raise HTTPException(404, f"unknown extraction {source_id}") from None
+        except (ValueError, ValidationError) as e:
+            raise HTTPException(422, str(e)) from None
+
+    return app

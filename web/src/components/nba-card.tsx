@@ -47,7 +47,17 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
               <Callout.Icon>
                 <ExclamationTriangleIcon />
               </Callout.Icon>
-              <Callout.Text>{card.hardship_banner}</Callout.Text>
+              <Callout.Text>{card.hardship_banner.split(" Eligible programmes: ")[0]}</Callout.Text>
+              {card.hardship_banner.includes(" Eligible programmes: ") && (
+                <Flex gap="2" wrap="wrap" mt="1">
+                  <Text size="1" weight="bold" style={{ color: "var(--amber-11)" }}>ELIGIBLE PROGRAMMES</Text>
+                  {card.hardship_banner.split(" Eligible programmes: ")[1].replace(/\.$/, "").split("; ").map((name, i) => (
+                    <motion.span key={name} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.1 + i * 0.06 }}>
+                      <Badge color="amber" variant="surface" radius="full">{name}</Badge>
+                    </motion.span>
+                  ))}
+                </Flex>
+              )}
             </Callout.Root>
           </motion.div>
         )}

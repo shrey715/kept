@@ -5,7 +5,7 @@ with keys as (
 ),
 closed as (
     select primary_product, {{ dpd_bucket('entry_dpd') }} as entry_bucket, outcome_date, cure_flag, case_id
-    from {{ source('silver', 'collections_cases') }}
+    from {{ ref('collections_cases') }}
     where outcome_date is not null
 ),
 recovery as (
@@ -24,8 +24,8 @@ promises as (
     from keys k
     left join (
         select p.ptp_id, p.ptp_status, p.status_ts, c.primary_product, {{ dpd_bucket('c.entry_dpd') }} as entry_bucket
-        from {{ source('silver', 'promises_to_pay') }} p
-        join {{ source('silver', 'collections_cases') }} c using (case_id)
+        from {{ ref('promises_to_pay') }} p
+        join {{ ref('collections_cases') }} c using (case_id)
         where p.ptp_status in ('kept', 'partially_kept', 'broken')
     ) p
         on p.primary_product = k.primary_product

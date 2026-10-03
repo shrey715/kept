@@ -151,7 +151,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name, help_text in COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         if name == "serve":
-            p.add_argument("--demo", action="store_true", help="three in-memory cases, no warehouse needed")
+            p.add_argument(
+                "--demo", action="store_true", help="twelve in-memory demo cases, no warehouse needed"
+            )
             p.add_argument("--host", default="127.0.0.1")
             p.add_argument("--port", type=int, default=8000)
             p.add_argument("--reload", action="store_true", help="restart when code under src/ changes")

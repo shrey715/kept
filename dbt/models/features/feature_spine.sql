@@ -13,7 +13,7 @@ select
     c.primary_product,
     {{ dpd_bucket('c.entry_dpd') }} as entry_bucket,
     a.as_of
-from {{ source('silver', 'collections_cases') }} c
+from {{ ref('collections_cases') }} c
 join as_of a
     on c.case_open_date <= cast(a.as_of as date)
     and (c.outcome_date is null or c.outcome_date > cast(a.as_of as date))

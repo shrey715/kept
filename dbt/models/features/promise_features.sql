@@ -11,7 +11,7 @@ select
         / nullif(count(*) filter (where p.ptp_status in ('kept', 'partially_kept', 'broken')), 0)
         as kept_promise_ratio
 from {{ ref('feature_spine') }} s
-left join {{ source('silver', 'promises_to_pay') }} p
+left join {{ ref('promises_to_pay') }} p
     on p.crm_customer_id = s.crm_customer_id
     and p.status_ts <= s.as_of
 group by all

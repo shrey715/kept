@@ -1,7 +1,7 @@
 -- kept.features.definitions.contacts_last_7d / answer_rate, point in time.
 -- Attempts are our outbound contacts: inbound calls and internal system events don't use the cap.
 with attempts as (
-    select * from {{ source('silver', 'contact_history') }}
+    select * from {{ ref('contact_history') }}
     where direction = 'outbound'
 ),
 per_customer as (
