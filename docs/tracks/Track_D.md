@@ -24,4 +24,5 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - None blocking Phase 1. For G0: random-assignment values and legacy code lists (§9) need `code_lookups` from the real data.
 
 ## Log
+- 3 Oct: PR to main held until the other tracks finish Phase 1 (Shreyas's call).
 - 3 Oct: Phase 1 parallel tasks done; rebased onto force-pushed main (4b21af6).
