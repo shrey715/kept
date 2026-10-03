@@ -54,7 +54,15 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **For B:** `/ask` is now a one-line pass-through to `services.ask` (it raised before even with a service injected). The demo Ask answers the kept-rate metric with real SQL over `data/raw`; everything else is B's.
 
 ## Open questions
-- **paid_14d source (§9, D + A):** dated payment events exist in `loan_instalments` (`paid_date`, `paid_amount`), `card_statements` (`payments_amount`, `first_payment_after_due_date`, per cycle), `transactions` (sample only) and `contact_history.payment_taken_flag`. Proposal for A: loans from `loan_instalments.paid_date`; cards from `transactions` where present, else `card_statements` (cycle-level, so `paid_14d` is approximate for cards). Needs A's silver.
+- **paid_14d source (§9, D + A, by G2). Proposal for Satvik, from counts on the raw data (3 Oct):**
+  `paid_14d` = any dated payment in (decision, decision + 14 days], from the union of:
+  1. `contact_history` at the contact's time: `payment_taken_flag` (20,072), `link_payment_flag` (26,581), `app_payment_after_contact_flag` (38,084). All products.
+  2. `promises_to_pay.paid_date` for `kept` / `partially_kept` (117,549 dated). All products.
+  3. `loan_instalments.paid_date` (14.2M dated; `partially_paid` rows have no date). Personal, auto, LOC, mortgage.
+  4. `transactions` debits with `txn_type` `card_payment` / `loan_payment` and a `target_account_id` (≈1.17M; customer sample only): confirms a payment, never denies one.
+  5. `card_statements.first_payment_after_due_date` where set (136K): late card payments only.
+  Gaps: on-time card payments outside the transactions sample have only cycle-level `payments_amount`; overdraft has monthly snapshots only. Proposed: label those rows only when a source above fires, mark the rest `paid_14d_known = false`, and leave them out of training rather than guess.
+  **Ask for A:** keep these five tables in silver with their dates, and the three `contact_history` flags.
 - **Still needs other tracks:** `kept train` (real features + labels, after G2), `kept score` and real `kept serve` (A's `DuckDBC360Reader`, G3/G4), `kept nightly` (every track's subcommands), hardship programmes on the banner (C's `eligible_programs`).
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
