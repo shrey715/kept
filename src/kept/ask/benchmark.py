@@ -194,6 +194,14 @@ def _matches(cell: object, g: str, tol: float, pts: bool) -> bool:
     return abs(got - want) <= slack + 1e-9 or (pts and abs(got * 100 - want) <= tol + 1e-9)
 
 
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
 def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse) -> bool | None:
     """None when the answer can't be checked automatically (a tolerance we can't parse, or a refusal).
     Tables: every gold row must appear in the result, each gold number within the tolerance (a ratio
@@ -218,13 +226,17 @@ def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse)
     want = list(csv.reader(io.StringIO(gold["gold_answer"])))[1:]
     if not want:
         return None
-    return all(
-        any(
-            all(any(_matches(c, g, tol, unit == "pts") for c in row) for g in want_row)
-            for row in response.rows
-        )
-        for want_row in want
-    )
+    pts = unit == "pts"
+
+    def row_matches(want_row: list[str]) -> bool:
+        return any(all(any(_matches(c, g, tol, pts) for c in row) for g in want_row) for row in response.rows)
+
+    if all(row_matches(w) for w in want):
+        return True
+    # a wide answer (one row, a column per period) has no row for the gold's period labels: match by number
+    numbers = [g for w in want for g in w if _is_number(g)]
+    cells = [c for row in response.rows for c in row]
+    return bool(numbers) and all(any(_matches(c, g, tol, pts) for c in cells) for g in numbers)
 
 
 def run_benchmark(

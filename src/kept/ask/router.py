@@ -11,7 +11,16 @@ from kept.contracts.ask import Intent, IntentKind
 from kept.contracts.features import RedactedText
 from kept.contracts.interfaces import LLMGateway
 
-INTENT_JSON_SCHEMA: Mapping[str, Any] = Intent.model_json_schema()
+
+def _lenient_schema() -> dict[str, Any]:
+    """Intent's JSON schema, but a filter may be null: smaller models write {"queue": null} for "no filter".
+    route() drops those before the Intent is validated."""
+    schema = Intent.model_json_schema()
+    schema["properties"]["filters"]["additionalProperties"]["anyOf"].append({"type": "null"})
+    return schema
+
+
+INTENT_JSON_SCHEMA: Mapping[str, Any] = _lenient_schema()
 
 
 _SYSTEM = """You turn a collections analyst's question into a JSON intent.
@@ -55,7 +64,11 @@ def route(
     )
     if reply.parsed is None:
         raise ValueError("router reply is not a JSON object")
-    intent = Intent.model_validate(reply.parsed)  # pydantic's ValidationError is a ValueError
+    parsed = {
+        **reply.parsed,
+        "filters": {k: v for k, v in (reply.parsed.get("filters") or {}).items() if v is not None},
+    }
+    intent = Intent.model_validate(parsed)  # pydantic's ValidationError is a ValueError
     if intent.kind is IntentKind.METRIC and intent.metric_id not in known_metric_ids:
         raise ValueError(f"unknown metric {intent.metric_id!r}")
     return intent

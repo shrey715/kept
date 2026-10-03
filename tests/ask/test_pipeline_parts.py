@@ -522,3 +522,22 @@ def test_long_sections_split_into_paragraphs_and_faq_answers_get_their_number() 
 def test_a_document_without_headings_is_one_chunk() -> None:
     (c,) = chunk_document("D", "Just text.", effective_from=date(2026, 1, 1), effective_to=None)
     assert c.section == "D" and c.text == "Just text."
+
+
+def test_router_ignores_null_filters() -> None:
+    """Smaller models write {"queue": null} for "no filter": that is not a reason to refuse."""
+    llm = PurposeLLM(
+        {
+            Purpose.ASK_ROUTE: [
+                {
+                    "kind": "metric",
+                    "metric_id": "promise_kept_rate",
+                    "filters": {"queue": None, "product": "card"},
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    )
+    q = PassThroughRedactor().redact("kept rate for card")
+    i = route(q, llm, known_metric_ids=frozenset({"promise_kept_rate"}), actor_id="u1")
+    assert i.filters == {"product": "card"}
