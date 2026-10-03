@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 2 (started early against fakes, your call; G0 integration still waits on the other tracks)
-- Working on: nothing, Phase 2 parallel tasks are done
-- Waiting on: gate G0 (Phase 1 of A, C, D) and then G1
+- Phase: 3 (parallel tasks against fakes, approved in docs/NEXT_STEPS.md)
+- Working on: nothing, Phase 3 parallel tasks are done except the G0 PR lines (free Ask model)
+- Waiting on: user's pick of the free Ask model; then G1 (A's real silver) for the guard on 10 real questions
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -16,7 +16,14 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 - Phase 2: `rule_check`, `check_scope`, `refusal_for`, `make_classifier` (S5) in `kept/ask/scope.py`; `route` in `kept/ask/router.py`; `guard_sql`, `execute_guarded` in `kept/ask/sql_guard.py`; `suppress_small_groups` in `kept/ask/privacy.py`. 153 Track B tests pass; CI command (`pytest --allow-stubs -m "not integration and not perf"`) 249 passed; ruff and mypy clean on Track B files.
 
+- Phase 3: `kept/ask/lookup.py` (`generate_candidates`, `normalize_result`, `majority_result`), `kept/ask/grounding.py`, `kept/ask/service.py` (`CollectionsAsk.ask`). 198 Ask tests pass; metric SQL also passes the guard on the 8-table Ask list. `/ask` route and its test were already on main (D). PR: https://github.com/shrey715/kept/pull/9
+
 ## Decisions and changes from the plan
+- `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
+- Refusal labels for the hidden questions: the local scorecard only covers the dev split. A dev case's `should_refuse` is "gold_answer starts with `Refuse`" (BQ-018, BQ-024, BQ-031). Test-split questions can't be scored here; `kept benchmark` still answers them and writes the CSV, and the organisers grade it.
+- Tolerances the scorer can't parse ("direction of effect", "exact count, ±1 CAD"): `parse_tolerance` keeps raising `ValueError`; the scorer will catch it and mark the case manual (not counted in accuracy) instead of guessing. Proposed rule: "direction of effect" = same sign as the gold answer; "exact count, ±1 CAD" = count equal and amount within 1.
+- The service sends metric SQL through `guard_sql` as well as lookup SQL, so one rule covers every query that runs.
+- Policy questions refuse politely (`DATA_UNAVAILABLE`) until Phase 4 builds `PolicyIndex`.
 - `SqlPolicy` gained an optional `table_columns` (additive shared-contract change, agreed in chat): a star is refused over a table with a blocked column or with unlisted columns. Nobody else imports `SqlPolicy`.
 - Test changes: `tests/ask/conftest.py` policy fixture now passes `table_columns`; one `test_allowed_queries` row used `GOLD.COLLECTIONS_CASES`, which is not an allowed table, so it is now `SILVER.COLLECTIONS_CASES` (the row tests case-insensitivity).
 - `route` takes an optional `as_of` date for relative dates.
@@ -25,12 +32,15 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - The gateway generates its own event ids (uuid4) so it doesn't depend on Track D's `new_event_id` stub.
 
 ## Open questions
+- Agents are only checked for case ids named in the question. A lookup like "average DPD by queue" is not filtered to `own_case_ids`, so an agent sees aggregates over every case. Decide at G1 whether agent lookups get a row filter (needs `assigned_agent_id` in the allowed columns) or are limited to metrics.
 - Which silver tables does the Ask table list (G0) include? Certified SQL reads collections_cases, promises_to_pay, agents, contact_history, account_monthly_snapshot, card_accounts, loan_accounts, deposit_accounts.
 - Refusal labels: only dev answers say "Refuse: …" (BQ-018, BQ-024, BQ-031). The scorecard needs a rule for the hidden ones. The docs say nothing (release README: "deciding which is part of the challenge").
 - `parse_tolerance` raises on "direction of effect" and "exact count, ±1 CAD" (test questions). Decide how the scorer treats them.
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 15:55: Phase 3 parallel tasks done (PR #9); free Ask model research done, waiting on the pick.
+- 2026-10-03 15:20: pulled main (all Phase 1 PRs merged), started Phase 3 per docs/NEXT_STEPS.md.
 - 2026-10-03 14:56: Phase 2 parallel tasks done; CI command green (249 passed).
 - 2026-10-03 14:36: Phase 2 started early (user's call) while waiting on G0.
 - 2026-10-03 14:35: `ask` extra installed; gateway and certified-SQL parse tests pass (42 Track B passed, contract 92 passed, lint clean). Phase 1 done; waiting on G0.
