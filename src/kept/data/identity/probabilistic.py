@@ -155,9 +155,13 @@ def score_pairs(
         linker.training.estimate_parameters_using_expectation_maximisation(block_on(*block))
     if train_sample_mod:
         linker = Linker(db.register(people), linker.misc.save_model_to_json())
-    scored = linker.inference.predict(
-        threshold_match_probability=STEWARD_REVIEW_THRESHOLD
-    ).as_pandas_dataframe()  # type: ignore[no-untyped-call]
+    predictions = linker.inference.predict(threshold_match_probability=STEWARD_REVIEW_THRESHOLD)
+    # Only the five columns we use: the full prediction table (every comparison column) for the
+    # full run didn't fit in RAM as pandas.
+    scored = con.execute(
+        "select source_system_l, source_key_l, source_system_r, source_key_r, match_probability "
+        f"from {predictions.physical_name}"
+    ).df()
 
     out = pd.DataFrame(
         {
