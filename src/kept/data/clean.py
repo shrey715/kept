@@ -73,6 +73,64 @@ def name_match_key(raw: str | None) -> str | None:
     return " ".join(letters.split()) or None
 
 
+def _letters(text: str) -> str:
+    """Lower case, accents removed, letters only: "St-Laurent" -> "stlaurent"."""
+    stripped = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", text))
+    return "".join(c for c in stripped.lower() if c.isalpha())
+
+
+def _initial(token: str) -> str:
+    return _letters(token)[:1]
+
+
+def match_name(raw: str | None, *, style: str) -> str | None:
+    """Cross-system matching key "<surname> <first initial>" ("kaufman j") from one system's
+    name format (data dictionary examples): the systems disagree on order and on initials.
+
+    style "first_last":          "Marie Schwartz", "Kellie B Jacobs"  (CRM, loans)
+          "last_first_initials": "DUVAL G T", "SHAH M"               (deposits)
+          "last_comma_first":     "DOE, JANE MARY"                   (bureau)
+          "card":                 "J. KAUFMAN", "STOUT/MCKENZIE" (Last/First) or "TRACIE HARPER"
+    Returns None when no surname or no initial can be read."""
+    if raw is None:
+        return None
+    text = normalize_name(raw)
+    if text is None:
+        return None
+    if style == "card":
+        if "/" in text:
+            style, text = "last_slash_first", text
+        elif re.match(r"^\w\.? ", text):
+            style, text = "initial_last", text
+        else:
+            style = "first_last"
+    tokens = text.replace(",", " ").replace(".", " ").split()
+    if style == "last_slash_first":
+        surname, _, first = text.partition("/")
+        return _key(surname, first)
+    if style == "last_comma_first":
+        surname, _, first = text.partition(",")
+        return _key(surname, first)
+    if style == "last_first_initials":
+        return _key(tokens[0], tokens[1]) if len(tokens) > 1 else None
+    if style == "initial_last":
+        return _key(" ".join(tokens[1:]), tokens[0]) if len(tokens) > 1 else None
+    if style == "first_last":
+        return _key(tokens[-1], tokens[0]) if len(tokens) > 1 else None
+    raise ValueError(f"unknown name style {style!r}")
+
+
+def _key(surname: str, first: str) -> str | None:
+    first_token = first.replace(".", " ").split()[:1]
+    surname_letters, initial = _letters(surname), _initial(first_token[0]) if first_token else ""
+    return f"{surname_letters} {initial}" if surname_letters and initial else None
+
+
+def match_name_parts(first: str | None, last: str | None) -> str | None:
+    """The same "<surname> <first initial>" key from separate first and last name columns (CRM)."""
+    return _key(last or "", first or "")
+
+
 def _dob_parts(text: str, day_first: bool | None) -> tuple[int, int, int] | None:
     """(year, month, day) for the first matching format, or None."""
     for pattern, kind in _DOB:
@@ -94,18 +152,24 @@ def _dob_parts(text: str, day_first: bool | None) -> tuple[int, int, int] | None
     return None
 
 
-def parse_dob(raw: str | None, *, today: date, day_first: bool | None = None) -> date | None:
-    """Parse the mixed date-of-birth formats. Accept ISO (YYYY-MM-DD), YYYY/MM/DD, YYYYMMDD,
-    DD-Mon-YYYY, Mon DD YYYY, and numeric A/B/YYYY or A-B-YYYY only when unambiguous (one part
-    > 12, or both equal). `day_first` is for a source whose format the data dictionary fixes
-    (cards: DD-MM-YYYY): it settles the ambiguous case; the default None never guesses.
-    Ambiguous (03/04/1990), impossible (1990-02-30), future, or older than 120
-    years -> None (quarantine)."""
+def parse_date(raw: str | None, *, day_first: bool | None = None) -> date | None:
+    """Parse a date written in any of the formats below; None when it can't be read or is ambiguous.
+    Accepts ISO (YYYY-MM-DD), YYYY/MM/DD, YYYYMMDD, DD-Mon-YYYY, Mon DD YYYY, and numeric A/B/YYYY
+    or A-B-YYYY only when unambiguous (one part > 12, or both equal). `day_first` is for a source
+    whose format the data dictionary fixes (cards: DD-MM-YYYY): it settles the ambiguous case;
+    the default None never guesses."""
     if raw is None or (parts := _dob_parts(raw.strip(), day_first)) is None:
         return None
     try:
-        born = date(*parts)
+        return date(*parts)
     except ValueError:
+        return None
+
+
+def parse_dob(raw: str | None, *, today: date, day_first: bool | None = None) -> date | None:
+    """parse_date for a date of birth: a future date, or one older than 120 years, is a typo
+    -> None (quarantine). Ambiguous (03/04/1990) and impossible (1990-02-30) dates -> None too."""
+    if (born := parse_date(raw, day_first=day_first)) is None:
         return None
     try:
         oldest = today.replace(year=today.year - 120)

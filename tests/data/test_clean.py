@@ -9,10 +9,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from kept.data.clean import (
+    match_name,
+    match_name_parts,
     name_match_key,
     normalize_name,
     normalize_phone_e164,
     normalize_postal_code,
+    parse_date,
     parse_dob,
 )
 
@@ -96,6 +99,22 @@ def test_parse_dob_rejects_to_quarantine(raw: str | None) -> None:
     assert parse_dob(raw, today=TODAY) is None
 
 
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("2023-12-31", date(2023, 12, 31)),
+        ("31/12/2023", date(2023, 12, 31)),  # account_monthly_snapshot.month_end_date drifts between formats
+        ("20231231", date(2023, 12, 31)),
+        ("03/04/2023", None),  # ambiguous
+        ("2023-02-30", None),
+        (None, None),
+    ],
+)
+def test_parse_date_has_no_age_limits(raw: str | None, expected: date | None) -> None:
+    assert parse_date(raw) == expected
+    assert parse_date("1850-01-01") == date(1850, 1, 1)  # unlike a DOB, nothing is "too old"
+
+
 def test_parse_dob_leap_day() -> None:
     assert parse_dob("2000-02-29", today=TODAY) == date(2000, 2, 29)
     assert parse_dob("1900-02-29", today=TODAY) is None
@@ -163,3 +182,35 @@ def test_postal_code_normalises(raw: str, expected: str) -> None:
 )
 def test_invalid_postal_codes_are_none(raw: str | None) -> None:
     assert normalize_postal_code(raw) is None
+
+
+# ----------------------------------------------------------------- cross-system match key
+@pytest.mark.parametrize(
+    "raw,style,expected",
+    [
+        ("Kellie B Jacobs", "first_last", "jacobs k"),
+        ("Dorothée Béland", "first_last", "beland d"),
+        ("DUVAL G T", "last_first_initials", "duval g"),
+        ("ST-PIERRE G G", "last_first_initials", "stpierre g"),
+        ("DOE, JANE MARY", "last_comma_first", "doe j"),
+        ("J. KAUFMAN", "card", "kaufman j"),
+        ("TRACIE HARPER", "card", "harper t"),
+        ("STOUT/MCKENZIE", "card", "stout m"),
+        ("M. ST-LAURENT", "card", "stlaurent m"),
+        ("Madonna", "first_last", None),
+        (None, "card", None),
+    ],
+)
+def test_match_name_agrees_across_formats(raw: str | None, style: str, expected: str | None) -> None:
+    assert match_name(raw, style=style) == expected
+
+
+def test_same_person_gets_the_same_key_in_every_system() -> None:
+    keys = {
+        match_name_parts("Jane", "Kaufman"),  # CRM first_name / last_name
+        match_name("Jane Kaufman", style="first_last"),  # loans
+        match_name("KAUFMAN J", style="last_first_initials"),  # deposits
+        match_name("J. KAUFMAN", style="card"),
+        match_name("Kaufman, Jane", style="last_comma_first"),  # bureau
+    }
+    assert keys == {"kaufman j"}

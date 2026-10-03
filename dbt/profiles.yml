@@ -6,3 +6,5 @@ kept:
       type: duckdb
       path: "{{ env_var('KEPT_WAREHOUSE_PATH', 'data/warehouse/kept.duckdb') }}"
       threads: 4
+      plugins:
+        - module: kept.data.dbt_udfs  # kept_name, kept_dob, kept_phone, ... (silver cleaning rules)
