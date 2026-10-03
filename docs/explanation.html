@@ -276,7 +276,7 @@ footer { margin: 72px 0 40px; color: var(--muted); font-size: 14px; border-top: 
   </div></li>
   <li><span class="num">4</span><div class="step">
     <h4>SQL is built, guarded, and run</h4>
-    <p>Here it is a certified metric, so reviewed SQL is used (the AI doesn't write it). For lookups the AI writes <b>three</b> SQL drafts and we keep the answer at least two agree on. Every query goes through a guard: SELECT only, 16 approved tables, no personal-data columns, a row limit, a 10-second timeout.</p>
+    <p>Here it is a certified metric, so reviewed SQL is used (the AI doesn't write it). For lookups the AI writes <b>three</b> SQL drafts and we keep the answer at least two agree on. Every query goes through a guard: SELECT only, 17 approved tables, no personal-data columns, a row limit, a 10-second timeout.</p>
   </div></li>
   <li><span class="num">5</span><div class="step">
     <h4>Final output: an answer with its working</h4>
@@ -660,7 +660,7 @@ footer { margin: 72px 0 40px; color: var(--muted); font-size: 14px; border-top: 
   <ul>
     <li><b>Metric questions</b> use one of 15 certified metrics with reviewed SQL. The AI only picks the metric and filters; it doesn't write that SQL.</li>
     <li><b>Lookup questions:</b> the AI writes three SQL drafts; we run the ones the guard allows and keep the result the majority agrees on. If they disagree, it asks a clarifying question instead of guessing.</li>
-    <li><b>Policy questions:</b> search over the current versions of the policy documents, answering with the document and section cited, e.g. <i>(POL-COLL-001 §5.2)</i>. A policy beats an FAQ or a call script when they disagree.</li>
+    <li><b>Policy and "why did this happen" questions:</b> search over the current versions of the policy documents, incident reports and operations events (e.g. "why did call volume drop on 23–24 Sep?" → the dialer outage, IR-2026-0923), answering with the document and section cited, e.g. <i>(POL-COLL-001 §5.2)</i>. A policy beats an FAQ or a call script when they disagree.</li>
     <li><b>Call summaries:</b> "summarise the most recent call on case X" uses the redacted transcript (layer 2).</li>
     <li><b>Refusals</b> say why: protected attribute, bulk personal data, write action, someone else's case, or data we don't have.</li>
   </ul>
@@ -669,9 +669,10 @@ footer { margin: 72px 0 40px; color: var(--muted); font-size: 14px; border-top: 
   <table>
     <tr><th>Piece</th><th>Tool</th><th>In plain words</th></tr>
     <tr><td>LLM</td><td>Gemini Flash-Lite, free tier, through LiteLLM</td><td>A hosted model, but it only ever sees redacted questions, table descriptions and result rows.</td></tr>
-    <tr><td>SQL guard</td><td>sqlglot</td><td>Parses the SQL into a tree and checks it: SELECT only, one statement, 16 approved tables, no blocked columns, row limit, 10 s timeout.</td></tr>
-    <tr><td>Policy search</td><td>LanceDB + BM25 keyword search</td><td>Finds the right section of the right (current) document.</td></tr>
-    <tr><td>Grounding check</td><td>Python</td><td>Every number in the answer must appear in the result rows; otherwise a plain fallback sentence is used.</td></tr>
+    <tr><td>SQL guard</td><td>sqlglot</td><td>Parses the SQL into a tree and checks it: SELECT only, one statement, 17 approved tables, no blocked columns, row limit, 10 s timeout.</td></tr>
+    <tr><td>Policy search</td><td>LanceDB + BM25 keyword search</td><td>Finds the right section of the right (current) document. Policies, procedures, regulations, FAQs, scripts, incident reports and the operations-events log are all indexed.</td></tr>
+    <tr><td>Grounding check</td><td>Python</td><td>Every number in the answer must appear in the result rows. If the AI used a number that isn't there, it gets one retry and is told which; after that a plain fallback sentence is used.</td></tr>
+    <tr><td>Call summaries</td><td><code>kept.text.calls</code> (layer 2)</td><td>Reads the case's newest redacted transcript; the AI fills in the facts, fixed code writes the sentence.</td></tr>
     <tr><td>Privacy</td><td>Python</td><td>Analysts never see a group smaller than 10 people.</td></tr>
   </table>
 </div>
@@ -684,15 +685,16 @@ footer { margin: 72px 0 40px; color: var(--muted); font-size: 14px; border-top: 
 </div>
 <div class="panel" hidden>
   <div class="grid g3">
-    <div class="card stat"><b>83%</b><span>accuracy on the organisers' dev questions (target 80%)</span></div>
+    <div class="card stat"><b>94%</b><span>accuracy on the organisers' dev questions: 17 of 18 (target 80%)</span></div>
     <div class="card stat"><b>100%</b><span>refusal recall: every question that must be refused was (target 95%)</span></div>
-    <div class="card stat"><b>16</b><span>approved tables; nothing else can be queried</span></div>
+    <div class="card stat"><b>30 + 5</b><span>full 35-question rehearsal: 30 answered, 5 refused, every refusal correct</span></div>
   </div>
-  <p class="muted">Dev split, <code>docs/benchmark_scorecard.md</code>. The test split is answered by the final run on 4 Oct.</p>
+  <p class="muted">Dev split, <code>docs/benchmark_scorecard.md</code> (4 Oct). The one dev miss is BQ-006, where "late-fee disputes" can be read two ways. The hidden test split is scored by the organisers on the final run (4 Oct, 19:00).</p>
 </div>
 <div class="panel" hidden><dl class="qa">
   <dt>What stops the AI writing a dangerous query?</dt><dd>The SQL guard parses it before it runs. Anything but a single SELECT on approved tables and allowed columns is refused, with a row limit and a timeout.</dd>
   <dt>What stops it inventing numbers?</dt><dd>The grounding check: if a number in the sentence isn't in the result, we don't show that sentence.</dd>
+  <dt>Isn't a call transcript personal data?</dt><dd>The Ask only reads the <i>redacted</i> transcripts (names, numbers and addresses already removed), and only summarises one case at a time. Bulk exports and other agents' cases are still refused by the rules, before any AI runs.</dd>
   <dt>Why three SQL drafts?</dt><dd>A single AI draft can be subtly wrong. Two of three agreeing on the same result is a cheap, strong check; disagreement becomes a clarifying question.</dd>
 </dl></div>
 </div>
