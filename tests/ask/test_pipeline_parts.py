@@ -495,3 +495,9 @@ def test_write_answers_matches_the_release_template(tmp_path) -> None:  # type: 
     assert lines[0] == "question_id,answer,sql_or_sources,refused"
     assert lines[1] == "BQ-018,Refuse: outside scope,,true"
     assert list(csv.DictReader(out.open()))[1]["answer"] == "queue,avg\na,1"
+
+
+def test_bucket_labels_and_negatives_are_grounded() -> None:
+    assert is_grounded("Cases in the 31-60 bucket: 25,389.", [("31-60", 25389)])
+    assert is_grounded("The rate fell by -3.5 points.", [(-3.5,)])
+    assert not is_grounded("The 61-90 bucket has 25,389 cases.", [("31-60", 25389)])

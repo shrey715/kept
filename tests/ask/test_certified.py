@@ -9,7 +9,8 @@ import pytest
 
 from kept.ask.certified import CERTIFIED_QUERIES
 from kept.ask.metrics import MetricDefinition, compile_metric
-from kept.contracts import Intent, IntentKind
+from kept.ask.sql_guard import guard_sql
+from kept.contracts import Intent, IntentKind, SqlPolicy
 
 pytestmark = pytest.mark.track_b
 
@@ -38,3 +39,30 @@ def test_compiles_and_parses_with_every_filter_group_and_date(metric_id: str) ->
 
 def test_no_certified_query_for_write_off_rate() -> None:
     assert "write_off_rate" not in CERTIFIED_QUERIES
+
+
+_ASK_TABLES = frozenset(
+    f"silver.{t}"
+    for t in (
+        "collections_cases",
+        "promises_to_pay",
+        "agents",
+        "contact_history",
+        "account_monthly_snapshot",
+        "card_accounts",
+        "loan_accounts",
+        "deposit_accounts",
+    )
+)
+
+
+@pytest.mark.parametrize("metric_id", sorted(CERTIFIED_QUERIES))
+def test_certified_sql_passes_the_guard_on_the_ask_table_list(metric_id: str) -> None:
+    """The service sends compiled metric SQL through guard_sql too: it must be allowed."""
+    pytest.importorskip("sqlglot")
+    policy = SqlPolicy(
+        allowed_tables=_ASK_TABLES, blocked_columns=frozenset({"gender_code", "age", "postal_code"})
+    )
+    sql, _ = _compile(metric_id)
+    g = guard_sql(sql, policy)
+    assert g.allowed, g.reason

@@ -177,3 +177,49 @@ def test_every_call_is_audited(build, audit_log: InMemoryAuditLog) -> None:  # t
     svc.ask(_req("kept rate by gender_code"))
     svc.ask(_req("anything"))
     assert len(audit_log.read(kind=AuditKind.ASK_QUERY)) == 2
+
+
+def test_ungrounded_narrative_is_replaced_not_returned(build) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [GOOD_SQL],
+            Purpose.ASK_NARRATE: ["There are 31 card cases and 29 loan cases."],  # the rows say 30 and 30
+        }
+    )
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and "31" not in a.narrative and is_grounded(a.narrative, a.rows)
+
+
+def test_grounded_narrative_is_kept(build) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [GOOD_SQL],
+            Purpose.ASK_NARRATE: ["There are 30 card cases and 30 loan cases."],
+        }
+    )
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and a.narrative == "There are 30 card cases and 30 loan cases."
+
+
+def test_low_router_confidence_clarifies_without_running_sql(build) -> None:  # type: ignore[no-untyped-def]
+    svc, llm = build({Purpose.ASK_ROUTE: [{"kind": "lookup", "confidence": 0.2}]})
+    assert isinstance(svc.ask(_req("hmm")), Clarification)
+    assert Purpose.ASK_SQL not in llm.purposes()
+
+
+def test_policy_question_without_an_index_is_refused_politely(build) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build({Purpose.ASK_ROUTE: [{"kind": "policy", "confidence": 0.9}]})
+    r = svc.ask(_req("what does the hardship policy say?"))
+    assert isinstance(r, Refusal) and r.reason is RefusalReason.DATA_UNAVAILABLE
+
+
+def test_audit_payload_holds_the_redacted_question_only(build, audit_log: InMemoryAuditLog) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build({Purpose.ASK_ROUTE: [RuntimeError("down")]})
+    svc.ask(_req("anything"))
+    (event,) = audit_log.read(kind=AuditKind.ASK_QUERY)
+    assert event.payload["question"] == "anything" and event.payload["response"] in {
+        "clarification",
+        "refusal",
+    }
