@@ -35,7 +35,7 @@ from kept.contracts.interfaces import (
     ReleaseGate,
 )
 from kept.contracts.nba import NBACard, Proposal, ProposalStatus, ReleaseDecision, ReleaseResult
-from kept.data.identity.steward import StewardQueue
+from kept.data.identity.steward import StewardQueue, StewardVerdict
 from kept.governance.access import can_view_case, masked_view
 from kept.text.extract import confirm
 
@@ -300,11 +300,46 @@ def create_app(services: Services) -> FastAPI:
 
     @app.get("/steward/queue", response_model=list[StewardItemOut])
     def steward_queue() -> list[StewardItemOut]:
-        raise NotImplementedError("Track A")
+        if services.steward is None:
+            raise HTTPException(503, "steward queue not configured")
+        return [
+            StewardItemOut(
+                item_id=i.item_id,
+                left_key=f"{i.decision.pair.left.system.value}:{i.decision.pair.left.key}",
+                right_key=f"{i.decision.pair.right.system.value}:{i.decision.pair.right.key}",
+                score=i.decision.pair.score,
+                reasons=list(i.reasons),
+            )
+            for i in services.steward.pending()
+        ]
 
     @app.post("/steward/items/{item_id}")
     def steward_resolve(item_id: str, body: StewardVerdictIn) -> dict[str, str]:
-        raise NotImplementedError("Track A")
+        if services.steward is None:
+            raise HTTPException(503, "steward queue not configured")
+        try:
+            verdict = StewardVerdict(body.verdict)
+        except ValueError:
+            raise HTTPException(422, f"verdict must be one of {[v.value for v in StewardVerdict]}") from None
+        now = services.clock()
+        try:
+            services.steward.resolve(item_id, verdict, steward_id=body.steward_id, at=now)
+        except KeyError:
+            raise HTTPException(404, f"unknown item {item_id}") from None
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        services.audit_log.append(
+            AuditEvent(
+                event_id=new_event_id(),
+                at=now,
+                kind=AuditKind.STEWARD_DECISION,
+                actor_id=body.steward_id,
+                actor_role=Role.DATA_STEWARD,
+                subject_id=item_id,
+                payload={"verdict": verdict.value},
+            )
+        )
+        return {"status": "pending" if verdict is StewardVerdict.UNSURE else "resolved"}
 
     @app.post("/extractions/{source_id}/confirm", response_model=TextExtraction)
     def confirm_extraction(source_id: str, body: ExtractionConfirmIn) -> TextExtraction:

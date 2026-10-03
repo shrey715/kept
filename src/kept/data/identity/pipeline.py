@@ -29,6 +29,7 @@ from kept.contracts.identity import SourceKey
 from kept.data.identity.clustering import Cluster, GoldenIdRegistry
 from kept.data.identity.exact import exact_link_pairs
 from kept.data.identity.probabilistic import build_settings, score_pairs, train_model
+from kept.data.identity.steward import read_verdicts
 
 PAIR = ["left_system", "left_key", "right_system", "right_key"]
 GOLDEN_ID_FORMAT = "G-{:06d}"
@@ -88,10 +89,14 @@ def run_matching(
     sample_mod: int | None = None,
     train_sample_mod: int | None = None,
     previous: pd.DataFrame | None = None,
+    verdicts: pd.DataFrame | None = None,
     at: datetime | None = None,
 ) -> MatchRun:
     """sample_mod=N keeps the records whose hash(dob) % N == 0, so both sides of a true match
-    (same DOB) land in the sample together. `previous` is an earlier crosswalk: its golden IDs are kept."""
+    (same DOB) land in the sample together. `previous` is an earlier crosswalk: its golden IDs are kept.
+    `verdicts` are the stewards' resolved items (default: steward.verdicts in the warehouse): "same_person"
+    links the pair (match_review_status steward_approved) and releases a member of a held cluster;
+    "different_people" cuts the direct link, and holds the cluster if the two are still joined."""
     at = at or datetime.now(UTC)
     sample = f"where dob is not null and hash(dob) % {int(sample_mod)} = 0" if sample_mod else ""
     records = conn.execute(f"select * from silver.int_identity_records {sample}").df()
@@ -122,8 +127,34 @@ def run_matching(
     pairs = pd.concat([exact, splink], ignore_index=True)
     li, ri = positions(pairs, "left_system", "left_key"), positions(pairs, "right_system", "right_key")
     is_exact = pairs["rule"].str.startswith("exact:").to_numpy()
+    rules = pairs["rule"].to_numpy(dtype=object)
     score = pairs["score"].to_numpy()
     auto = is_exact | (score >= AUTO_LINK_THRESHOLD)
+
+    # the stewards' verdicts: a same-person pair is one more link, a different-people pair is cut
+    verdicts = read_verdicts(conn) if verdicts is None else verdicts
+    approved: set[tuple[int, int]] = set()
+    cannot: set[tuple[int, int]] = set()
+    if len(verdicts):
+        vl, vr = (
+            positions(verdicts, "left_system", "left_key"),
+            positions(verdicts, "right_system", "right_key"),
+        )
+        known = (vl >= 0) & (vr >= 0)
+        lo, hi = np.minimum(vl, vr), np.maximum(vl, vr)
+        for verdict, target in (("same_person", approved), ("different_people", cannot)):
+            pick = known & (verdicts["verdict"] == verdict).to_numpy()
+            target.update(zip(lo[pick].tolist(), hi[pick].tolist(), strict=True))
+    if cannot:
+        edge = pd.MultiIndex.from_arrays([np.minimum(li, ri), np.maximum(li, ri)])
+        auto &= ~edge.isin(list(cannot))
+    if approved:
+        a_left, a_right = (np.array(side) for side in zip(*sorted(approved), strict=True))
+        li, ri = np.concatenate([li, a_left]), np.concatenate([ri, a_right])
+        is_exact = np.concatenate([is_exact, np.zeros(len(a_left), dtype=bool)])
+        score = np.concatenate([score, np.ones(len(a_left))])
+        rules = np.concatenate([rules, np.full(len(a_left), "steward:same_person", dtype=object)])
+        auto = np.concatenate([auto, np.ones(len(a_left), dtype=bool)])
 
     # clusters, and the ones that must not be auto-linked
     root = _roots(n, li[auto], ri[auto])
@@ -133,9 +164,19 @@ def run_matching(
     two_ids = np.zeros(n, dtype=bool)
     two_ids[distinct_ids[distinct_ids > 1].index.to_numpy()] = True
     too_big = size > MAX_KEYS_PER_CLUSTER
-    held_root = two_ids | too_big
+    still_joined = np.zeros(
+        n, dtype=bool
+    )  # a steward said "different people" but other links keep them together
+    still_joined[[root[a] for a, b in cannot if root[a] == root[b]]] = True
+    held_root = two_ids | too_big | still_joined
     held = held_root[root]  # never auto-link: these keys stay apart until a steward looks
-    group = np.where(held, np.arange(n), root)
+    # a "same person" verdict inside a held cluster brings that member back to the anchor, unless the
+    # cluster holds two national IDs: Q3 forbids that whatever a steward says
+    released = np.zeros(n, dtype=bool)
+    for a, b in approved:
+        if held[a] and root[a] == root[b] and not two_ids[root[a]]:
+            released[[a, b]] = True
+    group = np.where(held & ~released, np.arange(n), root)
 
     if previous is not None and len(previous):
         number = _assign_with_registry(keys, group, previous, at)
@@ -149,19 +190,21 @@ def run_matching(
             "pos": np.concatenate([li[auto], ri[auto]]),
             "exact": np.tile(is_exact[auto], 2),
             "score": np.tile(score[auto], 2),
-            "rule": np.tile(pairs["rule"].to_numpy()[auto], 2),
+            "rule": np.tile(rules[auto], 2),
         }
     )
     best = ends.sort_values(["exact", "score"], ascending=False).drop_duplicates("pos").set_index("pos")
     linked = np.zeros(n, dtype=bool)
     linked[best.index.to_numpy()] = True
-    linked &= ~held
+    linked = (linked & ~held) | released
     rule = np.full(n, "singleton", dtype=object)
     match_score = np.full(n, np.nan)
     rule[best.index.to_numpy()] = best["rule"].to_numpy()
     match_score[best.index.to_numpy()] = np.where(best["exact"], np.nan, best["score"])
+    rule[released] = "steward:same_person"
     rule[~linked] = "singleton"
     match_score[~linked] = np.nan
+    steward_approved = linked & pd.Series(rule).str.startswith("steward:").to_numpy()
     crosswalk = pd.DataFrame(
         {
             "golden_customer_id": golden,
@@ -170,7 +213,9 @@ def run_matching(
             "match_score": match_score,
             "match_rule": rule,
             "match_review_status": np.where(
-                linked, MatchReviewStatus.AUTO.value, MatchReviewStatus.UNLINKED.value
+                steward_approved,
+                MatchReviewStatus.STEWARD_APPROVED.value,
+                np.where(linked, MatchReviewStatus.AUTO.value, MatchReviewStatus.UNLINKED.value),
             ),
             "linked_at": at,
             "valid_to": pd.NaT,
@@ -180,10 +225,11 @@ def run_matching(
     steward = pairs[(pairs.rule == "splink") & (pairs.score < AUTO_LINK_THRESHOLD)].assign(
         reason=f"score_{STEWARD_REVIEW_THRESHOLD:.2f}_{AUTO_LINK_THRESHOLD:.2f}"
     )
-    held_rows = pd.DataFrame({"pos": np.flatnonzero(held)})
+    weakest = pd.Series(score[auto]).groupby(root[li[auto]]).min()  # per cluster root: its weakest link
+    held_rows = pd.DataFrame({"pos": np.flatnonzero(held & ~released)})
     held_rows["root"] = root[held_rows["pos"]]
     held_rows = held_rows[held_rows["pos"] != held_rows["root"]]  # the root key is the anchor
-    reasons = np.where(two_ids, "two_national_ids", "too_many_keys")
+    reasons = np.where(two_ids, "two_national_ids", np.where(too_big, "too_many_keys", "steward_cannot_link"))
     held_pairs = pd.DataFrame(
         {
             "left_system": keys.get_level_values(0)[held_rows["pos"]],
@@ -191,7 +237,7 @@ def run_matching(
             "right_system": keys.get_level_values(0)[held_rows["root"]],
             "right_key": keys.get_level_values(1)[held_rows["root"]],
             "rule": "held_cluster",
-            "score": np.nan,
+            "score": weakest.reindex(held_rows["root"]).to_numpy(),
             "reason": reasons[held_rows["root"]],
         }
     )
@@ -206,12 +252,15 @@ def run_matching(
         "multi_key_clusters": int((sizes > 1).sum()),
         "largest_cluster": int(sizes.max()),
         "exact_pairs": len(exact),
+        "steward_links": len(approved),
+        "steward_cuts": len(cannot),
         "splink_pairs_auto": int((splink.score >= AUTO_LINK_THRESHOLD).sum()),
         "splink_pairs_review": int((splink.score < AUTO_LINK_THRESHOLD).sum()),
         "held_clusters": int(held_root[np.unique(root[held])].sum()) if held.any() else 0,
         "held_reasons": {
             "two_national_ids": int(two_ids[np.unique(root[held])].sum()) if held.any() else 0,
             "too_many_keys": int(too_big[np.unique(root[held])].sum()) if held.any() else 0,
+            "steward_cannot_link": int(still_joined[np.unique(root[held])].sum()) if held.any() else 0,
         },
         "splink_settings": build_settings(),
     }
