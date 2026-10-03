@@ -22,7 +22,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from kept.contracts import HardshipSignal, StatedReason
+from kept.contracts import HardshipSignal, StatedReason, TextExtraction
+from kept.text.evaluate import GateResult, text_feature_gate
 
 # The release has finer hardship reasons than StatedReason; fold them in.
 REASON_MAP: dict[str, StatedReason] = {
@@ -96,3 +97,44 @@ def _row(r: dict[str, str], source_id: str) -> dict[str, Any]:
 def is_holdout(source_id: str) -> bool:
     """Stable split by id hash, so every run and every machine holds out the same labels."""
     return int(hashlib.sha256(source_id.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF < HOLDOUT_SHARE
+
+
+# Gate features (FeatureVector text features) -> how a label row and a prediction binarise.
+def _has(v: Any) -> bool:
+    return v is not None
+
+
+GATE_FEATURES = (
+    "hardship_signal",
+    "promise_intent",
+    "promised_date",
+    "promised_amount",
+    "dispute",
+    "cease_request",
+    "third_party_present",
+)
+
+
+def gate_report(preds: dict[str, TextExtraction], labels: list[dict[str, Any]]) -> list[GateResult]:
+    """text_feature_gate per feature over the labelled rows that have a prediction.
+    Hardship: positive = POSSIBLE or CLEAR. Date/amount: positive = a value; a predicted value
+    counts only if it matches the label's. Amounts match within $1: notes write whole dollars
+    ("$21") while the labels carry the promise record's cents (21.03)."""
+    rows = [(r, preds[r["source_id"]]) for r in labels if r["source_id"] in preds]
+    out = []
+    for f in GATE_FEATURES:
+        y_true, y_pred = [], []
+        for r, x in rows:
+            gold, got = r[f], getattr(x, f).value
+            if f == "hardship_signal":
+                y_true.append(gold is not HardshipSignal.NONE)
+                y_pred.append(got is not HardshipSignal.NONE)
+            elif f in ("promised_date", "promised_amount"):
+                y_true.append(_has(gold))
+                same = got == gold if f == "promised_date" else _has(got) and abs(got - gold) < 1
+                y_pred.append(_has(got) and (gold is None or same))
+            else:
+                y_true.append(bool(gold))
+                y_pred.append(bool(got))
+        out.append(text_feature_gate(f, y_true, y_pred))
+    return out
