@@ -13,4 +13,10 @@ SCHEMAS = ("bronze", "silver", "gold", "features", "quarantine", "steward")
 
 def connect(path: Path | str = WAREHOUSE_PATH, *, read_only: bool = False) -> duckdb.DuckDBPyConnection:
     """Open the warehouse and make sure every schema in SCHEMAS exists (unless read_only)."""
-    raise NotImplementedError("Track A")
+    if read_only:
+        return duckdb.connect(str(path), read_only=True)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(path))
+    for schema in SCHEMAS:
+        conn.execute(f"create schema if not exists {schema}")
+    return conn
