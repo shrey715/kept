@@ -4,11 +4,11 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: 1
-- Working on: running the gateway tests (installing the `ask` extra), then the Phase 1 stop report
-- Waiting on: nothing
+- Working on: nothing, Phase 1 parallel tasks are done
+- Waiting on: gate G0 (all four tracks' Phase 1)
 
 ## Done
-- `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test. Tests need `litellm`, not yet run.
+- `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
 - `load_metric_definitions`, `compile_metric` (`kept/ask/metrics.py`): tests pass.
 - `kept/ask/certified.py`: reviewed SQL for 14 of 15 metrics. Run on the real release tables; promise-kept (BQ-034), average DPD (BQ-004), hardship (BQ-032), broken-rate by site (BQ-007), delinquency (BQ-012) and RPC by hour (BQ-011) match the dev gold answers. Roll rate matches for card; other products differ by a few accounts because the gold SQL drops `MM/DD/YYYY` rows (silver cleaning).
 - `load_benchmark`, `parse_tolerance`, `score`, `write_answers` (`kept/ask/benchmark.py`): tests pass; CSV columns match the release template.
@@ -26,7 +26,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
-- 2026-10-03 14:04: waiting on the `ask` extra install to run the gateway tests.
+- 2026-10-03 14:35: `ask` extra installed; gateway and certified-SQL parse tests pass (42 Track B passed, contract 92 passed, lint clean). Phase 1 done; waiting on G0.
 - 2026-10-03 14:03: certified SQL test and this file committed and pushed.
 - 2026-10-03 14:01: lint clean; draft PR #3 opened.
 - 2026-10-03 13:58: gateway, metrics, certified SQL and benchmark code committed; branch `track-b` pushed.
