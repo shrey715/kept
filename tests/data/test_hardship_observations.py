@@ -74,6 +74,12 @@ def conn() -> duckdb.DuckDBPyConnection:
             "confirmed_by_agent_id) values (?, ?, ?, 'llm:test', timestamptz '2026-09-25 12:00:00+00', ?)",
             [sid, case, signal, agent],
         )
+    # Track C's cash-flow model, as it would be built: one 'possible' row per customer whose payroll fired
+    c.execute(
+        """create table silver.cashflow_observations as select * from (values
+            ('G-10', 'cash_flow', 'possible', timestamp '2026-09-25', null::varchar, null::varchar))
+            t(golden_customer_id, source, signal, observed_at, confirmed_by, cleared_by)"""
+    )
     c.execute(f"create table silver.int_hardship_observations as {_render()}")
     return c
 
@@ -91,5 +97,6 @@ def test_each_source_sets_the_expected_status(conn: duckdb.DuckDBPyConnection) -
         "G-6": ("confirmed", "agent"),  # agent-coded case flag
         "G-7": ("possible", "llm"),  # a new note flips it to possible; the LLM alone cannot confirm
         "G-8": ("confirmed", "llm"),  # the agent confirmed the note
+        "G-10": ("possible", "cash_flow"),  # late payroll (Track C's rule): protects, never confirms
     }
     # not present: G-2 (programme ended), G-4 (mention older than 30 days), G-5 (nothing), G-9 (note on a closed case)

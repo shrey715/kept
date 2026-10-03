@@ -1,7 +1,8 @@
 {# Every hardship signal about a golden ID, one row each: the input of kept.hardship.combine (run in SQL #}
 {# by kept_combine_hardship, which tests/data/test_hardship_sql.py checks against the Python rules). #}
 {# Sources: the open case's flags, account hardship programmes, hardship mentioned to an agent in the #}
-{# last 30 days, and Track C's text extractions of the open case's notes. Cash-flow (C) joins at G2. #}
+{# last 30 days, Track C's text extractions of the open case's notes, and C's cash-flow rule #}
+{# (hardship.cashflow_observations, Track C's PR #25: merge it before this one). #}
 select golden_customer_id,
        case hardship_source when 'agent_coded' then 'agent' else hardship_source end as source,
        case when hardship_source = 'agent_coded' then 'clear' else 'possible' end as signal,
@@ -43,3 +44,8 @@ select oc.golden_customer_id, 'llm', e.hardship_signal_value, timezone('UTC', e.
 from {{ text_extractions() }} e
 join {{ ref('int_open_case') }} oc on oc.open_case_id = e.case_id
 where e.hardship_signal_value is not null
+
+union all
+-- cash flow (Track C): a late or lower payroll, or new EI deposits. Always 'possible': it only protects.
+select golden_customer_id, source, signal, observed_at, confirmed_by, cleared_by
+from {{ ref('cashflow_observations') }}

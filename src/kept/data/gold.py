@@ -91,6 +91,7 @@ GOLD_MODELS = (
     "int_crm_current",
     "int_account_delinquency",
     "int_open_case",
+    "cashflow_observations",  # Track C (dbt/models/hardship/), PR #25
     "int_hardship_observations",
     "int_hardship",
     "int_payroll",
