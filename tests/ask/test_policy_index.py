@@ -94,3 +94,38 @@ def test_build_policy_index_follows_superseded_by(tmp_path: Path) -> None:
     assert build_policy_index(idx, docs, tmp_path) == 2
     assert [h.document_id for h in idx.search("calls a week", as_of=date(2026, 9, 28))] == ["P"]
     assert [h.document_id for h in idx.search("calls a week", as_of=date(2025, 6, 1))] == ["P-V1"]
+
+
+def test_an_ops_event_answers_why_a_number_changed(tmp_path: Path) -> None:
+    pytest.importorskip("lancedb")
+    from kept.ask.policy import ops_event_chunks
+
+    idx = PolicyIndex(tmp_path / "lance")
+    policy = PolicyChunk(
+        "POL-COLL-001",
+        "§5.2 Contact frequency",
+        "A maximum of 3 outbound call attempts in any rolling 7 days.",
+        date(2026, 1, 1),
+        None,
+        "policy",
+    )
+    outage = {
+        "event_id": "INC-0923",
+        "event_type": "dialer_outage",
+        "system": "Predictive dialer",
+        "start_ts": "2026-09-23 08:00:00",
+        "end_ts": "2026-09-24 21:00:00",
+        "severity": "sev2",
+        "description": "Outbound dialer degraded; call capacity down about 60%",
+        "affected_customers_est": "35000",
+        "reference_doc_id": "IR-2026-0923",
+    }
+    idx.add([policy, *ops_event_chunks([outage])])
+    hits = idx.search(
+        "Why did outbound call volume drop on 23-24 September 2026?", as_of=date(2026, 9, 28), k=2
+    )
+    assert hits[0].document_id == "IR-2026-0923" and "60%" in hits[0].snippet
+    assert (
+        idx.search("why did outbound call volume drop", as_of=date(2026, 9, 1), k=2)[0].document_id
+        == "POL-COLL-001"
+    )  # before the event

@@ -53,6 +53,18 @@ def _matches(cell: Decimal, number: Decimal, *, percent: bool) -> bool:
     return any(f.quantize(places, rounding=ROUND_HALF_UP) == number for f in forms)
 
 
+def ungrounded_numbers(
+    narrative: str, rows: Sequence[Sequence[Any]], *, allow: frozenset[Decimal] = frozenset()
+) -> list[Decimal]:
+    """The numbers in the narrative that no cell (and nothing in `allow`) accounts for."""
+    cells = _cells(rows)
+    return [
+        n
+        for n, pct in _numbers(narrative)
+        if n not in allow and not any(_matches(c, n, percent=pct) for c in cells)
+    ]
+
+
 def is_grounded(
     narrative: str, rows: Sequence[Sequence[Any]], *, allow: frozenset[Decimal] = frozenset()
 ) -> bool:
@@ -61,10 +73,7 @@ def is_grounded(
     written decimal places, or (for percentages) the cell x 100 does. `allow` holds
     numbers that came from the question itself (e.g. "30 days").
     Numbers inside text cells ("31-60") also count: narratives name buckets and case ids."""
-    cells = _cells(rows)
-    return all(
-        n in allow or any(_matches(c, n, percent=pct) for c in cells) for n, pct in _numbers(narrative)
-    )
+    return not ungrounded_numbers(narrative, rows, allow=allow)
 
 
 def needs_clarification(

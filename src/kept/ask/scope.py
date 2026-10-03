@@ -127,8 +127,10 @@ def refusal_for(decision: ScopeDecision, *, suggestion: str | None) -> Refusal:
 _CLASSIFIER_SYSTEM = """You decide whether a question can be answered by Maple Bank's collections Ask.
 In scope: metrics and counts over cases, promises to pay, contacts, accounts and agents; how collections
 practice works (contact limits, calling hours, consent, the National Do Not Call List, hardship programmes,
-promises, disputes, complaints, escalation, regulatory rules for collectors), answered from the policy and
-procedure documents; questions about how a metric behaves. When unsure, answer in_scope true: later checks
+promises, disputes, complaints, escalation, regulatory rules for collectors, whether collectors may take
+legal action), answered from the policy and procedure documents or by saying the documents do not say;
+what happened on a day (outages, incidents, releases); contact costs and channel capacity; questions about
+how a metric behaves. When unsure, answer in_scope true: later checks
 catch missing data.
 Answer in_scope false with a reason only when the question is: about something else entirely
 (data_unavailable, e.g. weather, sports, other banks); asks for protected attributes such as gender, marital

@@ -115,10 +115,20 @@ FROM b WHERE 1=1 {{where}} {{group_by}}""",
             frozenset({"product_type", "dpd_bucket"}),
             "month_end_date",
         ),
-        _cases(
+        # Cases joined to their agent, so the rate can be compared between vulnerable-certified agents and
+        # the rest, within randomised or hardship cases (the randomised pilot question).
+        CertifiedQuery(
             "cure_rate",
-            "avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate",
+            """SELECT {group_by_select} avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate, count(*) AS n
+FROM (SELECT k.primary_product, k.queue, k.province_code, k.current_bucket, k.assignment_method,
+        k.hardship_flag, k.cure_flag, k.case_open_date, k.insolvency_hold_flag, k.deceased_hold_flag,
+        a.vulnerable_customer_certified AS agent_vulnerable_certified
+      FROM silver.collections_cases k
+      LEFT JOIN silver.agents a ON a.agent_id = k.assigned_agent_id) t
+WHERE 1=1 {where} {group_by}""",
             _HOLDS,
+            _CASE_COLS | {"assignment_method", "hardship_flag", "agent_vulnerable_certified"},
+            _CASE_COLS | {"assignment_method", "hardship_flag", "agent_vulnerable_certified"},
             "case_open_date",
         ),
         _ptp("promise_kept_rate", "avg(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate"),

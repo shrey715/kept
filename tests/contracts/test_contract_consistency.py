@@ -115,7 +115,8 @@ def test_restricted_table_holds_every_protected_attribute(contract_yaml: dict[st
 
 def test_ask_tables_never_include_protected_sources(contract_yaml: dict[str, Any]) -> None:
     allowed = set(_custom(contract_yaml, "askAllowedTables"))
-    assert all(t.startswith(("silver.", "gold.")) for t in allowed)
+    # text.redacted_notes (Presidio-redacted notes and call transcripts) is the one table outside silver and gold
+    assert all(t.startswith(("silver.", "gold.")) or t == "text.redacted_notes" for t in allowed)
     assert "silver.voice_samples" not in allowed and "silver.customers" not in allowed
 
 

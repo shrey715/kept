@@ -68,6 +68,31 @@ def build(
     return _build
 
 
+@pytest.fixture
+def build_with_calls(  # type: ignore[no-untyped-def]
+    ask_db, ask_contract, metrics, certified_queries, audit_log
+):
+    """A service whose call summariser is a fake (Track C's lives in kept.text.calls)."""
+
+    def _build(summarise):  # type: ignore[no-untyped-def]
+        llm = PurposeLLM({})
+        svc = CollectionsAsk(
+            conn=ask_db,
+            contract=ask_contract,
+            llm=llm,
+            redactor=PassThroughRedactor(),
+            classifier=_ok,
+            metrics=metrics,
+            certified_queries=certified_queries,
+            policy_index=None,
+            audit_log=audit_log,
+            summarise_call=summarise,
+        )
+        return svc, llm
+
+    return _build
+
+
 def _req(q: str, *, role: Role = Role.ANALYST, round_: int = 0) -> AskRequest:
     return AskRequest(question=q, user_id="u1", role=role, clarification_round=round_)
 
@@ -302,3 +327,74 @@ def test_a_draft_that_will_not_run_is_repaired_once_with_the_error(build) -> Non
     assert isinstance(a, AskAnswer) and a.rows == (("credit_card", 30), ("personal_loan", 30))
     repair = [c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL][-1]
     assert "failed with" in repair["user"].text and "nope" in repair["user"].text
+
+
+# ----------------------------------------------------------------- "summarise the most recent call on case X"
+CALL_Q = (
+    "Summarise the most recent recorded call on case CS-2026-614370: what did the customer say and agree to?"
+)
+
+
+class _Summary:
+    def __init__(self) -> None:
+        self.transcript_id = "5010384"
+        self.call_start = "2026-09-20 10:15:00"
+        self.summary = "Customer reports illness; promised $95 on 14 Oct; next step: hardship review."
+
+
+def test_call_summary_is_answered_before_the_scope_check(build_with_calls) -> None:  # type: ignore[no-untyped-def]
+    seen: list[str] = []
+
+    def summarise(case_id: str, **kw: object) -> _Summary:
+        seen.append(case_id)
+        assert kw["conn"] is not None and kw["actor_id"] == "u1"  # the Ask's connection and the asker
+        return _Summary()
+
+    svc, llm = build_with_calls(summarise)
+    a = svc.ask(_req(CALL_Q))
+    assert isinstance(a, AskAnswer) and seen == ["CS-2026-614370"]
+    assert a.narrative.startswith("Customer reports illness; promised $95")
+    assert (
+        a.citations[0].document_id == "text.redacted_notes" and a.citations[0].section == "transcript 5010384"
+    )
+    assert llm.calls == []  # no router or scope call: the transcript summary is the whole answer
+
+
+def test_call_summary_with_no_recorded_call_is_an_answer_not_a_refusal(build_with_calls) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build_with_calls(lambda case_id, **kw: None)
+    a = svc.ask(_req(CALL_Q))
+    assert isinstance(a, AskAnswer) and a.narrative == "There is no recorded call on case CS-2026-614370."
+
+
+def test_an_agent_cannot_summarise_a_call_on_someone_elses_case(build_with_calls) -> None:  # type: ignore[no-untyped-def]
+    called: list[str] = []
+    svc, _ = build_with_calls(lambda case_id, **kw: called.append(case_id))
+    req = AskRequest(question=CALL_Q, user_id="a1", role=Role.AGENT, own_case_ids=frozenset({"CS-1"}))
+    r = svc.ask(req)
+    assert isinstance(r, Refusal) and r.reason is RefusalReason.OTHER_PEOPLES_CASES and called == []
+
+
+def test_a_failing_summariser_is_a_polite_refusal_not_a_crash(build_with_calls) -> None:  # type: ignore[no-untyped-def]
+    def boom(case_id: str, **kw: object) -> None:
+        raise RuntimeError("transcript store down")
+
+    svc, _ = build_with_calls(boom)
+    assert isinstance(svc.ask(_req(CALL_Q)), Refusal)
+
+
+def test_a_narration_with_an_invented_number_gets_one_retry(build) -> None:  # type: ignore[no-untyped-def]
+    """The first narration states a difference that is not in the rows; told so, the second does not."""
+    svc, llm = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [GOOD_SQL],
+            Purpose.ASK_NARRATE: [
+                "Card has 30 cases, 12 more than nothing at all.",
+                "Both products have 30 cases each.",
+            ],
+        }
+    )
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and a.narrative == "Both products have 30 cases each."
+    second = [c for c in llm.calls if c["purpose"] == Purpose.ASK_NARRATE][1]
+    assert "not in the data: 12" in second["user"].text
