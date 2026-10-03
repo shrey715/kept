@@ -4,6 +4,17 @@ Four people build this in parallel tracks. Before writing code, read `docs/TEAM_
 §0 (rules for agents), §3 (what can't be parallelized), §3a (conventions every track follows)
 and your track's phase in §5.
 
+## Phase 6 (after G4, 4 Oct): read this first
+
+G0–G4 have passed and every track's code is on `main`. The track and phase rules below are history:
+don't ask which track or phase, and don't work on `track-a/b/c/d`. Follow `docs/NEXT_STEPS.md`:
+- Branch off `main` for each change, named by purpose (`docs/...`, `fix/...`, `bench/...`); PR to `main`,
+  CI green, merge commit (never squash or rebase), the owner merges.
+- Code freeze: only demo blockers, docs and deliverables. No new features or refactors.
+- After 19:00 IST, don't change anything under `kept/ask/` (the benchmark runs on the system as it is).
+  Nothing is pushed after 21:00 IST.
+- Commit messages: one plain line, no AI attribution trailers.
+
 ## Track and phase discipline
 
 - Ask the user which track (A–D) and phase (1–5) you're on if they haven't said.

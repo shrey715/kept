@@ -3,11 +3,12 @@
 Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G3 passed on C's machine → Phase 5 (deck)
-- Working on: G3 report; next Phase 5 (deck) once Akshat confirms G3
-- Waiting on: G4 (D `kept nightly`; B full benchmark + fairness)
+- Phase: 6 (G4 passed). Track C is finished; `track-c` is retired (kept for history). New work branches off `main` (`docs/NEXT_STEPS.md`).
+- Working on: deck PDF and final architecture diagram; Akshat's machine is the demo machine
+- Waiting on: Satvik's video script for the dry runs
 
 ## Done
+- **G4 passed (4 Oct, C's machine):** full `kept nightly` with match (D's #44, `--train-sample-mod 5`): land 108 s, silver 96 s, match 63 s (golden IDs 1,052,300, 0 merged / 0 split vs crosswalk v1), gold 13 s, gate PASS, extract 7 s, features 29 s, parity PASS (0 of 56,000), score 81 s (96,000 cards: red 38,115, green 31,539, amber 3,288, no action 23,058). No OOM under a 22 GB cap. Fairness report (B, #43) on these cards. Benchmark dev 83% / refusal recall 100%. CI green.
 - **G3 passed (4 Oct, C's machine):** D's #38 `kept score`: 96,000 cards = every open case (80 s): red 38,115 (40%), green 31,539, no action 23,058, amber 3,288. Demo flip on real `kept serve`: CS-2026-820205 "Send an app reminder" (push, Green) → "Call to start a hardship review" (hardship_review, Red) after the note. Parity PASS. Tests green.
 - **G3 integration (3 Oct, C's machine):** merged #34 (851c8b6, D: real serve, live notes, cease confirm, 30/90 rule, Qini vs legacy) → #26 (7bb1cee, A: steward routes) → #32 (66071ec, A: quality report, frozen contract); #33 (B, draft) left. Rebuild: gold 1,052,300 (40/40), gate PASS, features 96,000 (as_of 3 Oct), `kept train` model vs legacy Qini: call 0.0073 vs 0.0017 (noise 0.0003), any contact 0.0008 vs −0.0009. **"New note flips hardship" works on real `kept serve`:** CS-2026-820205 went from push/Green to "Possible hardship: only protective actions; a hardship specialist reviews first" after "lost shifts at the plant since Aug, can only pay 50 on the 15th" (15.4 s first call, quote kept as evidence; test note removed). `kept parity` PASS (0 of 56,000 cells, 0.0000%). Tests: 1,149 passed, 0 failed.
 - **G2 integration (3 Oct, C's machine):** merged #25 (6fac669) → #24 (9791576) → #28 (e6389db) → #27 (4220553); #26 left for G3. #25 went before #24 because #24 refs our `cashflow_observations`. No conflicts (cli.py auto-merged with every handler; `text:` keeps D's UTC pre-hook). Rebuild: gold 1,052,300 rows (40/40), `kept gate` PASS incl. hardship-text (11,464 golden IDs rest on text), `scripts/g2_hardship_check.py` 3/3 PASS, `text_signals.written_at` = `note_ts_utc` for all 760,594 notes (0 mismatches in UTC), features 96,000 cases in Feast, training rows 323,560, `kept train` Qini call 0.077 / sms 0.051 / email 0.051 / push 0.018 (all > 0 vs WAIT). Feast: real case → FeatureVector, unknown id → KeyError. Tests: 1,109 passed, 10 failed = A's parity (7) and steward (3) stubs.
@@ -49,7 +50,7 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Proposed local extraction model for G0: `ollama/gemma3:12b-it-qat` (already on the machine, ~10.6 GB VRAM).
 
 ## Open questions
-- (D) `kept nightly` has no handler yet (G4). Red is 40% of cards after #38 (hardship review for protected cases): heavy specialist load.
+- (Team) Red is 40% of cards (hardship review for protected cases): heavy specialist load; D asks whether customers already on a hardship plan need a rule.
 - (All) `KEPT_HOLDOUT_SALT`: C uses `.env.example`'s value; every machine must use the same salt.
 - (D, decided) Hardship load: a SetFit threshold doesn't help (probabilities saturate: notes flagged 36.9% at t=0.5 vs 35.6% at 0.95; held-out precision 0.78→0.81, recall 0.977 either way). Open cases with a text hardship note in 90 days: 41% (39,398); ≥1 in 30 d **and** ≥2 in 90 d: 19% (18,301). Gold status of open cases is 32% CONFIRMED (agent-coded source data), 19% POSSIBLE, so most Red reviews come from confirmed hardship, not text. **Decided (Akshat): text-only POSSIBLE needs ≥1 flagged note in the last 30 days and ≥2 in 90 days** (D implements in the context builder / text features). Confirmed hardship and agent-confirmed notes are unchanged.
 - (D) Online features: account/deposit features (max_dpd, days_in_bucket, balance_at_risk, payroll, spare cash, trends) are 0% filled for 500 random open cases; promise_* 0%.
@@ -59,6 +60,8 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 02:45 Phase 6 rules written (`docs/NEXT_STEPS.md`, `CLAUDE.md`); track branches retired.
+- 02:30 G4 passed: full nightly with match on C's machine; #44 merged.
 - 00:40 G3 passed: kept score 96,000 cards; demo flip gives a hardship review.
 - 23:50 G3 integration: 3 PRs merged; new-note flip and parity pass; `kept score` missing (D).
 - 22:30 Decisions 1-3 done; extractions file to Satvik (sha256 670ce9f1…).
