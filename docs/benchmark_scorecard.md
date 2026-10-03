@@ -50,3 +50,4 @@ Where the reference answers use a shortcut, the benchmark matches them: BQ-003 g
 
 - Hardship questions use the agent-coded `hardship_flag` (matches the dev gold). The text-derived `hardship_status` in gold is shown in the demo, not scored.
 - Free-tier limit: 500 requests per day per Google project per model (shared by every key in the project). A full run is about 100 calls.
+- Other models tried on the same questions (local runs, 3 Oct 23:36 to 23:40, Mistral free tier; not adopted): `ministral-14b-latest` dev accuracy 44%, `codestral-latest` 39%, both with refusal recall 100%. The larger Mistral models (`mistral-small`, `mistral-medium`, `mistral-large`) are not available on that key's tier (0 requests per minute or tier-blocked). The smaller models' scope classifier often refuses plain metric questions, and the router ignores filter hints, so the prompts tuned on Gemini do not carry over.

@@ -34,6 +34,8 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - G3 prep (23:30): updated gold (3 Oct 20:41, with the SetFit backfill) loaded; silver rebuilt; "match the key" decided with the user: BQ-003 groups 3+ prior broken promises, BQ-035 groups by the stored `current_bucket`. Full 35-question run: dev **78% (14 of 18)**, refusal recall 100%, 103 calls. Scorecard: `docs/benchmark_scorecard.md`. BQ-017 can't be matched from the Ask side (silver keeps no raw date format: needs one column from A); BQ-016 and BQ-022 (transcripts) skipped by decision; BQ-006 is an ambiguous reading.
 - **Free-tier quota finding:** Gemini's free tier is 500 requests per day **per Google project per model** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), shared by every key in the project, and resets about 6 hours after the limit is hit. Today's tuning used it up (resets about 05:30 IST on 4 Oct). A second key from the same project does not help; a key from a different project, a different model, or a different provider does. For 4 Oct: keep about 250 calls for the 19:00 run.
 
+- Mistral trial (23:40, user's key, local only, not adopted): `ministral-14b-latest` 44%, `codestral-latest` 39% on the dev split (refusal recall 100%); `mistral-small/medium/large` unavailable on that tier. Kept: the router now accepts null filters (`{"queue": null}`) and drops them, which smaller models need and Gemini does not mind. The Ask stays on Gemini; Mistral is only a last-resort fallback for 4 Oct.
+
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
 - Refusal labels for the hidden questions: the local scorecard only covers the dev split. A dev case's `should_refuse` is "gold_answer starts with `Refuse`" (BQ-018, BQ-024, BQ-031). Test-split questions can't be scored here; `kept benchmark` still answers them and writes the CSV, and the organisers grade it.
@@ -62,6 +64,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 23:40: Mistral key tested (14B 44%, codestral 39% vs Gemini 78%); router accepts null filters; Ask stays on Gemini.
 - 2026-10-03 23:30: Gemini free quota exhausted (500 per day per project per model); stopped the benchmark run; scorecard from the 23:11 run committed; waiting for a Mistral key.
 - 2026-10-03 23:11: full 35-question run, dev 78% / recall 100%.
 - 2026-10-03 23:02: pulled main, updated gold (20:41), rebuilt silver; matched the key on BQ-003 and BQ-035.
