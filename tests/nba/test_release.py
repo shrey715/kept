@@ -16,6 +16,7 @@ from kept.contracts import (
     CaseContext,
     Channel,
     ContactPermissions,
+    HardshipStatus,
     HardStop,
     Proposal,
     ProposalStatus,
@@ -258,3 +259,56 @@ def test_payment_or_cease_cancels_pending() -> None:
         and proposals["P-3"].status is ProposalStatus.PENDING
     )
     assert [e.kind for e in log.read()] == [AuditKind.PROPOSAL_CANCELLED]
+
+
+# ----------------------------------------------------------------- edits, alternatives, reject
+def _sized(amount: str = "140.00") -> Proposal:
+    from datetime import date
+    from decimal import Decimal
+
+    from kept.contracts.nba import PromiseSizing
+
+    sizing = PromiseSizing(
+        amount=Decimal(amount),
+        due_date=date(2026, 10, 3),
+        installments=3,
+        spare_cash_estimate=Decimal("160.00"),
+        payday=date(2026, 10, 2),
+        rationale="r",
+    )
+    return _proposal(action=Action.PAYMENT_PLAN, sizing=sizing)
+
+
+def test_edit_must_stay_within_spare_cash(world) -> None:  # type: ignore[no-untyped-def]
+    from decimal import Decimal
+
+    rel, proposals, _, _ = world(_sized())
+    assert not rel.release(
+        _decide(decision=ReviewDecision.EDIT, edited_amount=Decimal("200.00")), LATER
+    ).released
+    ok = rel.release(_decide(decision=ReviewDecision.EDIT, edited_amount=Decimal("150.00")), LATER)
+    assert ok.released and proposals["P-1"].sizing.amount == Decimal("150.00")
+
+
+def test_hardship_since_the_proposal_raises_the_tier(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, _, _ = world(hardship_status=HardshipStatus.POSSIBLE)
+    r = rel.release(_decide(), LATER)  # Amber call, but hardship now applies: Red, agent can't
+    assert not r.released and proposals["P-1"].status is ProposalStatus.PENDING
+
+
+def test_alternative_is_rechecked_and_released(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, _, _ = world()
+    r = rel.release(
+        _decide(decision=ReviewDecision.ALTERNATIVE, alternative_action=Action.SMS_PAYMENT_LINK), LATER
+    )
+    assert (
+        r.released
+        and proposals["P-1"].action is Action.SMS_PAYMENT_LINK
+        and proposals["P-1"].channel is Channel.SMS
+    )
+
+
+def test_reject(world) -> None:  # type: ignore[no-untyped-def]
+    rel, proposals, log, _ = world()
+    r = rel.release(_decide(decision=ReviewDecision.REJECT), LATER)
+    assert not r.released and proposals["P-1"].status is ProposalStatus.REJECTED and len(log.read()) == 1
