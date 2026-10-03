@@ -112,8 +112,9 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
     res = dbtRunner().invoke(
         [
             "build",
-            "--select",
-            "+case_features",
+            "--select",  # the feature models over the fixture silver, not A's silver models
+            "path:models/features",
+            "identity_crosswalk",
             "--project-dir",
             str(DBT),
             "--profiles-dir",
