@@ -38,7 +38,7 @@ class PresidioRedactor:
     Money amounts and ordinary dates (e.g. "3 Oct", "$140") are kept: extraction needs them.
     """
 
-    version: str = "presidio-v6"
+    version: str = "presidio-v7"
 
     def __init__(self, *, models: dict[str, str] | None = None) -> None:
         from presidio_analyzer import AnalyzerEngine
@@ -76,6 +76,7 @@ class PresidioRedactor:
             for r in results
             if not any(r.start < e and s < r.end for s, e in kept_spans)
             and (r.entity_type not in _NER_ENTITIES or _looks_like_name(text[r.start : r.end]))
+            and not _inside_decimal(text, r.start, r.end)
         ]
         if not results:
             return RedactedText(text=text, redactor_version=self.version)
@@ -209,6 +210,17 @@ _MONTH_WORDS = frozenset(
         "décembre",
     ]
 )
+
+
+def _inside_decimal(text: str, start: int, end: int) -> bool:
+    """Digits right after "3." or right before ".5" are part of a number, not a card or phone: the Ask's
+    result rows carry unrounded decimals (0.42059724349157736 read as a 17-digit card number)."""
+    before = start >= 2 and text[start - 1] == "." and text[start - 2].isdigit()
+    after = end + 1 < len(text) and text[end] == "." and text[end + 1].isdigit()
+    # "0.4206 26120" read as a phone: a span that opens like a decimal (1-2 digits, ".", a digit) is a
+    # number; dotted phones (416.555.0123) have 3 digits before the first dot
+    opens_decimal = re.match(r"\d{1,2}\.\d", text[start:end]) is not None
+    return before or after or opens_decimal
 
 
 def _looks_like_name(span: str) -> bool:
