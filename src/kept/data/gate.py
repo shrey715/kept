@@ -35,6 +35,34 @@ def write_soda_checks(path: Path = SODA_CHECKS) -> Path:
     return path
 
 
+_ANSWERS = {
+    "true": True,
+    "yes": True,
+    "y": True,
+    "1": True,
+    "false": False,
+    "no": False,
+    "n": False,
+    "0": False,
+}
+
+
+def review_result(path: Path) -> QualityResult:
+    """Q3 weekly precision from the steward's file (scripts/review_sample.py). Rows still blank, or not
+    readable as true/false, are not counted; the detail says how many of the sample have been reviewed."""
+    sample = pd.read_csv(path, dtype=str)
+    answer = sample["is_true_match"].str.strip().str.lower().map(_ANSWERS)
+    reviewed = sample[answer.notna()].assign(is_true_match=answer[answer.notna()], predicted_link=True)
+    unreadable = int((sample["is_true_match"].notna() & answer.isna()).sum())
+    note = f"{len(reviewed)} of {len(sample)} pairs reviewed" + (
+        f", {unreadable} unreadable" if unreadable else ""
+    )
+    if reviewed.empty:
+        return QualityResult("Q3-review-precision", Status.WARN, f"no pair reviewed yet ({note})")
+    result = check_review_precision(reviewed)
+    return QualityResult(result.rule, result.status, f"{result.detail}; {note}")
+
+
 def gather_results(
     conn: duckdb.DuckDBPyConnection, *, published_at: datetime | None = None
 ) -> list[QualityResult]:
@@ -128,7 +156,7 @@ def gather_results(
     ]
     results.append(hardship)
     if REVIEWED_PAIRS.exists():
-        results.append(check_review_precision(pd.read_csv(REVIEWED_PAIRS)))
+        results.append(review_result(REVIEWED_PAIRS))
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({"c360_rows": len(c360), "at": datetime.now(UTC).isoformat()}))
     return results

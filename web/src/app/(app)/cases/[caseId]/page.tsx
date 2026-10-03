@@ -32,9 +32,23 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   const loadAudit = useCallback(() => {
     if (me) api.audit(me, { caseId }).then(setEvents, () => {});
   }, [me, caseId]);
+  const demo = !!health?.demo;
   const loadNotes = useCallback(() => {
-    if (me) api.extractions(caseId, me).then(setNotes, () => setNotes([]));
-  }, [me, caseId]);
+    if (me && health) api.extractions(caseId, me, demo).then(setNotes, () => setNotes([]));
+  }, [me, caseId, health, demo]);
+  // C: a cease the model suggested stops nothing until the agent confirms it
+  const ceaseToConfirm = notes.find((n) => n.extraction.cease_request.value && !n.extraction.confirmed_by_agent_id);
+  const [confirming, setConfirming] = useState(false);
+  const confirmCease = async (sourceId: string) => {
+    if (!me) return;
+    setConfirming(true);
+    try {
+      await api.confirmExtraction(sourceId, me.userId, {}, demo);
+      setNonce((n) => n + 1);
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   useEffect(() => {
     if (!me) return;
@@ -121,15 +135,43 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                 }}
               />
             )}
-            {health?.demo && (
+            {ceaseToConfirm && (
+              <Callout.Root color="red" variant="surface">
+                <Callout.Text>
+                  <Flex align="center" justify="between" gap="3" wrap="wrap">
+                    <span>
+                      Possible cease request in a note: &ldquo;
+                      {ceaseToConfirm.extraction.cease_request.evidence?.quote ?? ceaseToConfirm.note.slice(0, 80)}
+                      &rdquo;. Contact stops once you confirm it.
+                    </span>
+                    <Button
+                      size="1"
+                      color="red"
+                      loading={confirming}
+                      disabled={me.userId !== customer?.assigned_agent_id}
+                      onClick={() => void confirmCease(ceaseToConfirm.extraction.source_id)}
+                    >
+                      Confirm cease request
+                    </Button>
+                  </Flex>
+                </Callout.Text>
+              </Callout.Root>
+            )}
+            {health && (
               <Card size="3">
                 <Flex align="center" gap="2" mb="2">
                   <ChatBubbleIcon />
                   <Heading size="4">Add an agent note</Heading>
                 </Flex>
                 <Text as="p" size="2" color="gray" mb="3">
-                  In production a note goes through redaction and text extraction (Track C). The demo reads it with simple
-                  rules: try &ldquo;customer says shifts were cut at the plant&rdquo;.
+                  {demo ? (
+                    <>
+                      In production a note goes through redaction and text extraction (Track C). The demo reads it with
+                      simple rules: try &ldquo;customer says shifts were cut at the plant&rdquo;.
+                    </>
+                  ) : (
+                    <>The note is redacted, then read by the extraction model (a few seconds); the card re-checks after.</>
+                  )}
                 </Text>
                 <TextArea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did the customer say?" />
                 <Flex justify="end" mt="3">
@@ -139,7 +181,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                 </Flex>
               </Card>
             )}
-            <ExtractionPanel items={notes} agentId={me.userId} demo={!!health?.demo} onSaved={() => setNonce((n) => n + 1)} />
+            <ExtractionPanel items={notes} agentId={me.userId} demo={demo} onSaved={() => setNonce((n) => n + 1)} />
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>

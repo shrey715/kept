@@ -29,6 +29,7 @@ def _rows(n: int = 6_000, seed: int = 0) -> pd.DataFrame:
         decision_at=[datetime(2026, 1, 1) + timedelta(hours=i) for i in range(n)],
         action=action,
         paid_14d=rng.uniform(0, 1, n) < base,
+        nba_recommendation_last=rng.choice(["call_evening", "sms_payment_link", None], n),  # untargeted
     )
 
 
@@ -39,6 +40,9 @@ def test_train_learns_uplift_and_splits_on_time() -> None:
     model, m = train(rows, cutoff=cutoff)
     assert (m["rows_train"], m["rows_test"]) == (4_200, 1_800)
     assert all(m[f"qini_{a.value}"] > 0 for a in ACTIONS[1:])
+    # the plan's check: the model targets better than the legacy strategy, beyond noise
+    assert m["qini_call"] - m["qini_legacy_call"] > 2 * m["noise_call"]
+    assert m["qini_any_contact"] > m["qini_legacy_any_contact"]
     # a FeatureVector-style row: object columns with None, bools, an enum string
     serving = pd.DataFrame(
         [
