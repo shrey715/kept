@@ -239,6 +239,65 @@ def extract(args: argparse.Namespace) -> int:
     return 1 if errors and not ok else 0
 
 
+def features(args: argparse.Namespace) -> int:
+    """Track D: dbt feature models, then the Feast export + apply + materialize.
+    --training builds the per-decision spine into features_train instead (for `kept train`)."""
+    import json
+    import subprocess
+    import sys
+    from datetime import timedelta
+
+    import duckdb
+    from dbt.cli.main import dbtRunner
+
+    from kept.data.gold import DBT_DIR
+    from kept.features.store import export_features
+
+    os.environ["KEPT_WAREHOUSE_PATH"] = str(WAREHOUSE_PATH)
+    dbt_vars: dict[str, object] = {"features_as_of": str(args.as_of)}
+    if args.training:
+        dbt_vars = {"training_spine": True}
+    res = dbtRunner().invoke(
+        ["build", "--select", "path:models/features", "--threads", "1", "--vars", json.dumps(dbt_vars),
+         "--profiles-dir", str(DBT_DIR), "--project-dir", str(DBT_DIR)]
+    )  # fmt: skip
+    if not res.success:
+        print(f"kept features: dbt build failed: {res.exception or 'see the dbt log above'}")
+        return 1
+    if args.training:
+        return 0
+    conn = duckdb.connect(str(WAREHOUSE_PATH))  # not read_only: dbt's connection in this process is open
+    try:
+        n = export_features(conn, EXPORT_DIR / "features" / "case_features.parquet")
+    finally:
+        conn.close()
+    feast = [str(Path(sys.executable).parent / "feast")]
+    repo = Path(__file__).resolve().parents[2] / "feature_repo"
+    start, end = args.as_of - timedelta(days=1), args.as_of + timedelta(seconds=1)
+    subprocess.run([*feast, "apply"], cwd=repo, check=True)
+    subprocess.run([*feast, "materialize", start.isoformat(), end.isoformat()], cwd=repo, check=True)
+    print(f"{n:,} cases -> Feast online store (as_of {args.as_of})")
+    return 0
+
+
+def train(args: argparse.Namespace) -> int:
+    """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
+    import duckdb
+
+    from kept.nba.train import run
+
+    conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
+    conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
+    try:
+        result = run(conn, cutoff=args.cutoff, out=args.out, seed=args.seed)
+    finally:
+        conn.close()
+    for k, v in result.items():
+        print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
+    print(f"model -> {args.out}")
+    return 0
+
+
 # Each track adds its own handler here when its step works (plan K9).
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
@@ -248,6 +307,8 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "gate": gate,
     "benchmark": benchmark,
     "extract": extract,
+    "train": train,
+    "features": features,
 }
 
 
@@ -293,6 +354,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--only", nargs="+", default=None, metavar="ID", help="ask only these question ids"
             )
+        if name == "features":
+            p.add_argument(
+                "--as-of",
+                type=datetime.fromisoformat,
+                default=datetime(2026, 9, 28, 6),
+                help="serving as_of, naive UTC (06:00 UTC = the nightly run)",
+            )
+            p.add_argument("--training", action="store_true", help="per-decision spine for kept train")
+        if name == "train":
+            p.add_argument(
+                "--cutoff",
+                type=datetime.fromisoformat,
+                default=datetime(2026, 8, 15),
+                help="fit on decisions before this (naive UTC), Qini on the rest (default: about 70/30)",
+            )
+            p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
+            p.add_argument("--seed", type=int, default=0)
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "extract":
