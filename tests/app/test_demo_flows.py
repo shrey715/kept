@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from kept.app.api import create_app
-from kept.config import RAW_DIR
 from kept.app.demo import demo_services
+from kept.config import RAW_DIR
 
 pytestmark = pytest.mark.track_d
 CASE = "CS-2026-118204"  # agent-7, plain Amber call
