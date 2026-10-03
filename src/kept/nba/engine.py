@@ -132,15 +132,18 @@ class KeptEngine:
             card = self._card(ctx)
         except Exception as e:  # never raise after the context: no action, and say why
             card = self._no_action(ctx, f"No action: the recommendation failed ({type(e).__name__}).")
+        # one live proposal per case: a fresh recommendation retires the older pending one, and so does a
+        # "no action" card (a cease or hold that just landed), so it leaves the approvals inbox too
+        cancel_pending(
+            case_id,
+            reason="superseded by a newer recommendation"
+            if card.proposal is not None
+            else (card.no_action_reason or "no action now"),
+            proposals=self._proposals,
+            audit_log=self._log,
+            now=now,
+        )
         if card.proposal is not None:
-            # one live proposal per case: a fresh recommendation retires the older pending one
-            cancel_pending(
-                case_id,
-                reason="superseded by a newer recommendation",
-                proposals=self._proposals,
-                audit_log=self._log,
-                now=now,
-            )
             self._proposals[card.proposal.proposal_id] = card.proposal
         self._log.append(
             AuditEvent(
