@@ -91,7 +91,6 @@ GOLD_MODELS = (
     "int_crm_current",
     "int_account_delinquency",
     "int_open_case",
-    "int_hardship_observations",
     "int_hardship",
     "int_payroll",
     "int_restricted",
@@ -132,49 +131,17 @@ def run_dbt(select: Iterable[str], *, warehouse: str) -> None:
         raise RuntimeError(f"dbt build failed: {result.exception or 'see the dbt log above'}")
 
 
-def find_extractions(directory: Path) -> list[Path]:
-    """Track C's text.extractions parquet files (the SetFit backfill, then live runs), oldest first."""
-    found = [p for d in ("extractions", "text_extractions") for p in (directory / d).glob("*.parquet")]
-    return sorted(found, key=lambda p: p.stat().st_mtime)
-
-
-def load_extractions(conn: duckdb.DuckDBPyConnection, files: Iterable[Path]) -> int:
-    """Load extraction parquet files into text.extractions, oldest first, so a re-extraction of the same
-    source_id replaces the older row. The table keeps C's DDL (primary key on source_id): the live
-    extractor upserts into it. Returns the row count."""
-    from kept.text.store import DDL
-
-    conn.execute("create schema if not exists text")
-    conn.execute(DDL)
-    for path in files:
-        conn.execute(
-            "insert or replace into text.extractions by name select * from read_parquet(?)", [str(path)]
-        )
-    row = conn.execute("select count(*) from text.extractions").fetchone()
-    assert row is not None
-    return int(row[0])
-
-
-def build_gold(
-    conn: duckdb.DuckDBPyConnection,
-    *,
-    crosswalk: Path | None = None,
-    extractions: Iterable[Path] | None = None,
-) -> None:
+def build_gold(conn: duckdb.DuckDBPyConnection, *, crosswalk: Path | None = None) -> None:
     """Materialise the three gold tables from silver + the current crosswalk.
     Normally run through dbt; this wraps `dbt build --select gold`.
 
-    Loads the newest crosswalk parquet (or `crosswalk`) into silver.int_crosswalk and Track C's extractions
-    (`extractions`, else the files under data/exports/extractions/, if any) into text.extractions, then
-    closes `conn`: dbt needs the warehouse file to itself (K5, one writer)."""
+    Loads the newest crosswalk parquet (or `crosswalk`) into silver.int_crosswalk, then closes `conn`:
+    dbt needs the warehouse file to itself (K5, one writer)."""
     from kept.config import EXPORT_DIR
     from kept.data.identity.pipeline import latest_crosswalk, load_crosswalk
 
     warehouse = _warehouse_path(conn)
     load_crosswalk(conn, crosswalk or latest_crosswalk(EXPORT_DIR / "identity_crosswalk"))
-    files = list(extractions) if extractions is not None else find_extractions(EXPORT_DIR)
-    if files:
-        load_extractions(conn, files)
     conn.close()
     run_dbt(GOLD_MODELS, warehouse=warehouse)
 

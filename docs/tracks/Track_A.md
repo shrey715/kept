@@ -4,8 +4,8 @@ Person: Satvik Rao · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: 3 (parallel tasks done, stopped at G2)
-- Working on: G2 prep done on my side (hardship from text extractions, ready for C's files); not starting Phase 4 (steward queue, routes, `draft_mapping`) before G2
-- Waiting on: G2: C's extractions parquet (backfill and live) in `data/exports/extractions/`, then `kept build --gold-only`; D (dbt features on real gold, Feast), B (Ask on 10 real questions)
+- Working on: nothing; not starting Phase 4 (steward queue, routes, `draft_mapping`) before G2
+- Waiting on: G2: C (extractions into gold `hardship_status`), D (dbt features on real gold, Feast), B (Ask on 10 real questions)
 
 ## Done
 <!-- One line per finished task: what, which tests pass, PR/commit. -->
@@ -32,8 +32,6 @@ Settings: `kept.data.identity.probabilistic.build_settings()` (also in `run_summ
 - `kept gate` on real gold: Q1 unique IDs, Q2 linkage (98.66% of account keys, every open case resolves), Q3 match safety and Q4 contact safety all PASS; Q5 row count PASS. **Q5 freshness BLOCKs** on this static dataset: the source extract is stamped 28 Sep and gold was built days later. A nightly run lands fresh (`kept land` stamps now), so `kept nightly` will pass; to see a pass today, re-land with `--extracted-at <now>`.
 
 - Phase 3 gaps closed after review: the generated Soda checks now run (`soda scan`, 21/21 pass on real gold; `tests/data/test_soda_scan.py` shows each kind of break fails its own rule; setuptools added to the `data` extra because soda-core needs distutils); `build_gold`, `export_parquet` and the gate have unit tests (`tests/data/test_gold_build.py`); `kept build` ran end to end from silver (47/47) through gold (38/38) in 4 min; dbt contract enforcement is on for the gold models (types in `schema.yml`; a wrong type fails the build); `c360_restricted` has one row per golden ID (nulls where there is no CRM record).
-
-- G2 prep (A side of Q6): gold `hardship_status` now runs `kept.hardship.combine` in SQL (`kept_combine_hardship`, `silver.int_hardship_observations`) over the open case's flags, account programmes, agent mentions and C's `text.extractions` (notes on the open case; an agent's `confirmed_by_agent_id` confirms). `tests/data/test_hardship_sql.py` checks the SQL equals the Python `combine` on 300 random cases; `test_hardship_observations.py` covers each source. Gold still builds with no `text.extractions` (a macro falls back to empty), and `kept gate` warns (`hardship-text`) until the table is loaded. `kept build` loads parquet from `data/exports/extractions/` (or `--extractions FILE...`) into `text.extractions`, oldest first, keeping C's primary key. Tried end to end on real gold with 3 synthetic extractions (LLM possible -> possible; LLM clear -> still possible; agent-confirmed -> confirmed), then removed them. Not done: C's cash-flow rule as an observation source (needs C's output).
 
 ## Decisions and changes from the plan
 - Real-data finding in gold: `customers.province_code` has spellings the contract rejects (`Ont.`, `B.C.`, `Alta.`, `Quebec`, `PQ`: 1% of rows). New cleaning rule `normalize_province`, silver column `province_code_clean`, gold uses it; none is left unreadable.
@@ -67,7 +65,6 @@ None. The open items from Phase 1-3 are decided below, on the data and docs we h
 
 ## Log
 <!-- Newest first: time, what happened. -->
-- 2026-10-03: Hardship from text extractions wired into gold (SQL combine, loader, gate check); waiting for C's extractions files.
 - 2026-10-03: Phase 3 parallel tasks done; gold built on crosswalk v1; stop message for G2.
 - 2026-10-03: G1 integrated; merged main (C's PR #14, #15) into track-a.
 - 2026-10-03: Open questions decided (see Decisions taken).

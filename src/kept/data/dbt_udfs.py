@@ -12,7 +12,6 @@ from typing import Any
 import duckdb
 from duckdb import sqltypes as T
 
-from kept.data import hardship_sql
 from kept.data.clean import (
     first_name_key,
     match_first_name,
@@ -59,7 +58,6 @@ FUNCTIONS: dict[str, tuple[Any, Any]] = {
 
 
 def register(conn: duckdb.DuckDBPyConnection) -> None:
-    hardship_sql.register(conn)
     conn.create_function(
         "kept_match_name_parts",
         match_name_parts,
