@@ -78,6 +78,7 @@ def _gate_warehouse(*, ceased_flag_reaches_gold: bool, auto_score: float = 0.99)
             ('G-2', false, false, timestamptz '2026-10-03 04:00:00+00'))
             t(golden_customer_id, do_not_contact, collections_hold, refreshed_at)"""
     )
+    conn.execute("alter table gold.c360_customer add column hardship_source varchar")
     conn.execute(
         f"""create table gold.identity_crosswalk as select * from (values
             ('G-1', 'crm', 'C1', null::double, 'exact:case_crm_ref', 'auto', null::timestamptz),
@@ -122,10 +123,19 @@ def test_gate_runs_every_rule_and_reports_partial_linkage() -> None:
         "Q4-contact-safety",
         "Q5-freshness",
         "Q5-row-count",
+        "hardship-text",
     }
     # linkage: the card key's golden ID holds a CRM record, the loan and deposit keys have no golden ID
     assert results["Q4-contact-safety"] is Status.PASS and results["Q1-unique-ids"] is Status.PASS
     assert results["Q2-linkage"] is Status.BLOCK  # 1 of 3 account keys linked: 33%
+
+
+def test_gate_warns_until_text_extractions_exist_then_passes() -> None:
+    conn = _gate_warehouse(ceased_flag_reaches_gold=True)
+    assert _by_rule(conn)["hardship-text"] is Status.WARN
+    conn.execute("create schema text")
+    conn.execute("create table text.extractions as select 'N-1' as source_id")
+    assert _by_rule(conn)["hardship-text"] is Status.PASS
 
 
 def test_gate_blocks_a_ceased_customer_that_gold_still_contacts() -> None:
@@ -143,6 +153,52 @@ def test_gate_remembers_the_row_count_between_runs() -> None:
     conn = _gate_warehouse(ceased_flag_reaches_gold=True)
     assert _by_rule(conn)["Q5-row-count"] is Status.PASS  # first load
     conn.execute(
-        "insert into gold.c360_customer values ('G-3', false, false, now()), ('G-4', false, false, now())"
+        "insert into gold.c360_customer (golden_customer_id, do_not_contact, collections_hold, refreshed_at) "
+        "values ('G-3', false, false, now()), ('G-4', false, false, now())"
     )
     assert _by_rule(conn)["Q5-row-count"] is Status.WARN  # 2 -> 4 rows
+
+
+# ----------------------------------------------------------------- loading Track C's extractions
+def _extractions_parquet(path: Path, rows: list[tuple[str, str, str]]) -> Path:
+    from kept.text.store import COLUMNS
+
+    conn = duckdb.connect()
+    values = ", ".join(f"('{sid}', 'CS-1', '{signal}', 'llm:{tag}')" for sid, signal, tag in rows)
+    conn.execute(
+        f"copy (select source_id, case_id, hardship_signal_value, extractor, timestamptz '2026-09-25 12:00:00+00' "
+        f"as extracted_at from (values {values}) t(source_id, case_id, hardship_signal_value, extractor)) "
+        f"to '{path}' (format parquet)"
+    )
+    assert "extracted_at" in COLUMNS
+    return path
+
+
+def test_load_extractions_keeps_the_primary_key_and_newer_files_replace_older(tmp_path: Path) -> None:
+    old = _extractions_parquet(
+        tmp_path / "backfill.parquet", [("N-1", "none", "setfit-old"), ("N-2", "possible", "x")]
+    )
+    new = _extractions_parquet(tmp_path / "live.parquet", [("N-1", "possible", "llm-new")])
+    conn = duckdb.connect()
+    assert gold.load_extractions(conn, [old, new]) == 2
+    assert conn.execute(
+        "select hardship_signal_value, extractor from text.extractions where source_id = 'N-1'"
+    ).fetchone() == (
+        "possible",
+        "llm:llm-new",
+    )
+    conn.execute(
+        "insert or replace into text.extractions (source_id, case_id, extractor, extracted_at) values ('N-3', 'CS-1', 'llm:x', now())"
+    )  # C's live upsert still works
+
+
+def test_find_extractions_lists_both_folder_names_oldest_first(tmp_path: Path) -> None:
+    import os
+
+    for folder, name, mtime in (("extractions", "b.parquet", 200), ("text_extractions", "a.parquet", 100)):
+        (tmp_path / folder).mkdir(exist_ok=True)
+        f = tmp_path / folder / name
+        f.write_bytes(b"x")
+        os.utime(f, (mtime, mtime))
+    assert [p.name for p in gold.find_extractions(tmp_path)] == ["a.parquet", "b.parquet"]
+    assert gold.find_extractions(tmp_path / "missing") == []
