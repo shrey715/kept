@@ -5,6 +5,7 @@ select
     c.assigned_agent_id,
     c.hardship_flag,
     c.hardship_source,
+    cast(coalesce(c.case_status_date, c.case_open_date) as timestamp) as observed_at,
     coalesce(c.vulnerable_customer_flag, false) as vulnerable_customer_flag
 from {{ ref('collections_cases') }} c
 join {{ source('identity', 'int_crosswalk') }} x
