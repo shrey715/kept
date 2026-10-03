@@ -24,7 +24,7 @@ from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric, l
 from kept.ask.policy import chunk_document, effective_windows
 from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
-from kept.ask.scope import check_scope, refusal_for, rule_check
+from kept.ask.scope import check_scope, make_classifier, refusal_for, rule_check
 from kept.common.llm import Purpose
 from kept.contracts import AskRequest, Intent, IntentKind, RefusalReason, Role, ScopeDecision
 from kept.contracts.data_contract import DataContract
@@ -85,6 +85,8 @@ def test_agent_cannot_ask_about_other_peoples_cases(ask_contract: DataContract) 
         "How many cases entered at 1-30 DPD this week?",
         "What does the hardship policy say about payment reductions?",
         "Average overdue balance by product",
+        "Is CASL express consent needed to send a collections payment reminder by email?",
+        "What was the change in roll rate versus last month?",
     ],
 )
 def test_rules_pass_ordinary_questions(ask_contract: DataContract, q: str) -> None:
@@ -116,6 +118,25 @@ def test_classifier_can_refuse_what_rules_miss(ask_contract: DataContract) -> No
 
     d = check_scope(_req("What's the weather in Toronto?"), ask_contract, classifier)
     assert d.reason is RefusalReason.DATA_UNAVAILABLE
+
+
+def test_llm_classifier_decides_and_redacts_first(ask_contract: DataContract) -> None:
+    llm = PurposeLLM(
+        {
+            Purpose.ASK_SCOPE: [
+                {"in_scope": False, "reason": "data_unavailable"},
+                {"in_scope": True, "reason": None},
+                "not json",
+            ]
+        }
+    )
+    classify = make_classifier(llm, PassThroughRedactor(), actor_id="u1")
+    d = check_scope(_req("What will the weather be in Toronto tomorrow?"), ask_contract, classify)
+    assert not d.in_scope and d.reason is RefusalReason.DATA_UNAVAILABLE and d.decided_by == "classifier"
+    assert check_scope(_req("Average overdue balance by product"), ask_contract, classify).in_scope
+    bad = check_scope(_req("Average overdue balance by product"), ask_contract, classify)  # reply is not JSON
+    assert not bad.in_scope and bad.reason is RefusalReason.LOW_CONFIDENCE
+    assert llm.purposes() == [Purpose.ASK_SCOPE] * 3
 
 
 def test_refusal_message_says_why_and_suggests() -> None:
