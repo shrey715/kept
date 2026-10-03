@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --ink: #16191d;
+  --muted: #5b6470;
+  --line: #e1e4e8;
+  --soft: #eef1f5;
+  --accent: #1d5fd1;
+  --accent-ink: #ffffff;
+  --green: #18794e;
+  --amber: #9a5b00;
+  --red: #b42318;
+  --green-soft: #e7f5ee;
+  --amber-soft: #fdf3e2;
+  --red-soft: #fdecea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1114;
+    --panel: #171a1f;
+    --ink: #e7e9ec;
+    --muted: #98a1ad;
+    --line: #2a2f37;
+    --soft: #20242b;
+    --accent: #79a6f5;
+    --accent-ink: #0f1114;
+    --green: #5bc48c;
+    --amber: #f0a84b;
+    --red: #f2867c;
+    --green-soft: #15291f;
+    --amber-soft: #2c2312;
+    --red-soft: #2e1715;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-soft: var(--soft);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-good: var(--green);
+  --color-warn: var(--amber);
+  --color-bad: var(--red);
+  --color-good-soft: var(--green-soft);
+  --color-warn-soft: var(--amber-soft);
+  --color-bad-soft: var(--red-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
