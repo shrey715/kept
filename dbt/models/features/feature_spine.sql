@@ -19,6 +19,7 @@ select
     c.coll_customer_ref as crm_customer_id,
     c.primary_product,
     {{ dpd_bucket('c.entry_dpd') }} as entry_bucket,
+    c.total_overdue,  -- the latest balance: balance_at_risk is for sizing and ranking, never a model input
     a.as_of
 from {{ ref('collections_cases') }} c
 {% if var('training_spine', false) %}

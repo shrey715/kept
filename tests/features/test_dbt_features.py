@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -20,6 +21,7 @@ from kept.features.definitions import (
     broken_promises_90d,
     cohort_rate,
     contacts_last_7d,
+    days_to_next_payroll,
     kept_promise_ratio,
 )
 
@@ -51,6 +53,7 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "primary_product": rng.choice(PRODUCTS),
                 "entry_dpd": rng.choice([1, 5, 20, 40]),
                 "cure_flag": closed is not None and rng.random() < 0.7,
+                "total_overdue": round(rng.uniform(50, 5000), 2),
             }
         )
     for i in range(900):
@@ -100,7 +103,63 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "third_party_present_flag": rng.random() < 0.2,
             }
         )
+    cards, loans, deposits, customers, golden = [], [], [], [], []
+    freqs = ["weekly", "biweekly", "semi_monthly", "monthly", None]
+    for i in range(60):  # one golden customer per CRM id: a card, a loan for half, payroll for most
+        snap = date(2026, 9, 28) if i % 10 else date(2026, 3, 31)  # some accounts closed earlier
+        cards.append(
+            {
+                "card_account_id": f"C-{i}",
+                "src_customer_ref": f"CK-{i}",
+                "snapshot_date": snap,
+                "dpd": rng.choice([0, 0, 12, 35, 70]),
+                "utilisation": round(rng.uniform(0, 1.2), 4),
+                **{f"dpd_m{k:02d}": rng.choice([0, 0, 5, 31, 64]) for k in range(1, 13)},
+                **{f"utilisation_m{k:02d}": round(rng.uniform(0, 1.2), 4) for k in range(1, 13)},
+            }
+        )
+        if i % 2:
+            loans.append(
+                {
+                    "loan_id": f"L-{i}",
+                    "src_customer_ref": f"LK-{i}",
+                    "snapshot_date": snap,
+                    "dpd": rng.choice([0, 3, 45]),
+                    **{f"dpd_m{k:02d}": rng.choice([0, 0, 30, 61]) for k in range(1, 13)},
+                }
+            )
+        freq = freqs[i % 5]
+        deposits.append(
+            {
+                "deposit_account_id": f"D-{i}",
+                "src_customer_ref": f"DK-{i}",
+                "snapshot_date": snap,
+                "last_payroll_date": date(2026, 9, 20) if freq else None,
+                "expected_next_payroll_date": date(2026, 9, rng.randrange(20, 30)) if freq else None,
+                "payroll_frequency_detected": freq,
+                "payroll_delay_days": rng.choice([0, 0, 4]) if freq else None,
+                "payroll_avg_amount_3m": round(rng.uniform(800, 3000), 2) if freq else None,
+                "payroll_amount_change_pct": round(rng.uniform(-0.3, 0.1), 4) if freq else None,
+                "essential_spend_amount_mtd": round(rng.uniform(200, 900), 2),
+                "other_lender_payment_amount_mtd": round(rng.uniform(0, 300), 2),
+                **{f"net_cash_flow_m{k:02d}": round(rng.uniform(-900, 600), 2) for k in range(1, 13)},
+            }
+        )
+        customers.append(
+            {"crm_customer_id": f"CRM-{i}", "monthly_housing_cost": rng.choice([None, 900.0, 1500.0])}
+        )
+        golden.append(
+            {
+                "golden_customer_id": f"G-{i}",
+                "time_zone": rng.choice(["America/Toronto", "America/Vancouver", None]),
+            }
+        )
     return {
+        "card_accounts": pd.DataFrame(cards),
+        "loan_accounts": pd.DataFrame(loans),
+        "deposit_accounts": pd.DataFrame(deposits),
+        "customers": pd.DataFrame(customers),
+        "c360_customer": pd.DataFrame(golden),
         "collections_cases": pd.DataFrame(cases),
         "promises_to_pay": pd.DataFrame(promises),
         "contact_history": pd.DataFrame(contacts),
@@ -117,17 +176,20 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
     db = tmp / "kept.duckdb"
     silver = _fixture()
     with duckdb.connect(str(db)) as c:
-        c.execute("create schema silver")
-        c.execute("create schema text")
+        for schema in ("silver", "text", "gold"):
+            c.execute(f"create schema {schema}")
         for name, df in silver.items():
             c.register("df", df)
-            schema = "text" if name == "text_signals" else "silver"  # C's model lives in text
+            # C's model lives in text; A's gold model stands in with the one column features read
+            schema = {"text_signals": "text", "c360_customer": "gold"}.get(name, "silver")
             c.execute(f"create table {schema}.{name} as select * from df")
             c.unregister("df")
         # A's real crosswalk needs the match step's output; the features only join these columns
-        c.execute("create schema gold")
-        c.execute("""create table gold.identity_crosswalk (golden_customer_id varchar, source_system varchar,
-                     source_key varchar, valid_to timestamptz)""")
+        c.execute("""create table gold.identity_crosswalk as
+                     select 'G-' || i as golden_customer_id, s.system as source_system,
+                            s.prefix || i as source_key, null::timestamptz as valid_to
+                     from range(60) t(i), (values ('collections', 'CRM-'), ('crm', 'CRM-'), ('card', 'CK-'),
+                                                  ('loan', 'LK-'), ('deposit', 'DK-')) s(system, prefix)""")
 
     import os
 
@@ -156,6 +218,7 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
     assert res.success, res.exception
     with duckdb.connect(str(db)) as c:  # dbt keeps its in-process connection open
         out = c.sql("select * from features.case_features").df()
+        out = out.assign(golden_customer_id=out.golden_customer_id)
     return out, silver
 
 
@@ -254,5 +317,93 @@ def test_text_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.D
             assert pd.isna(row.promised_amount)
         else:
             assert float(row.promised_amount) == pytest.approx(p.iloc[-1].promised_amount)
+        checked += 1
+    assert checked > 30
+
+
+def _points(acct: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """The snapshot row plus its twelve month-ends (m{k} = month-end k months before the snapshot's month)."""
+    rows = []
+    for a in acct.itertuples():
+        rows.append({"date": a.snapshot_date, "month_end": False, **{c: getattr(a, c, None) for c in cols}})
+        for k in range(1, 13):
+            end = (pd.Timestamp(a.snapshot_date) - pd.DateOffset(months=k) + pd.offsets.MonthEnd(0)).date()
+            rows.append({"date": end, "month_end": True, **{c: getattr(a, f"{c}_m{k:02d}") for c in cols}})
+    return pd.DataFrame(rows)
+
+
+def _slope(monthly: pd.Series) -> float | None:
+    if monthly.notna().sum() < 3:
+        return None
+    x = np.array([d.year * 12 + d.month for d in monthly.index], dtype=float)
+    return float(np.polyfit(x, monthly.to_numpy(dtype=float), 1)[0])
+
+
+def test_account_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.DataFrame]]) -> None:
+    """Latest dpd per account (aged within a month), 30+ dpd month-ends in 12 months, days in
+    bucket, trend slopes over 12 months, next payday projected on the schedule, spare cash."""
+    out, src = built
+    period = {"weekly": 7, "biweekly": 14, "semi_monthly": 15}
+    checked = 0
+    for r in out.itertuples():
+        i = int(r.golden_customer_id[2:])
+        d = pd.Timestamp(r.as_of).date()
+        year_ago = (pd.Timestamp(d) - pd.DateOffset(months=12)).date()
+        card = _points(
+            src["card_accounts"][src["card_accounts"].src_customer_ref == f"CK-{i}"], ["dpd", "utilisation"]
+        )
+        loan = _points(src["loan_accounts"][src["loan_accounts"].src_customer_ref == f"LK-{i}"], ["dpd"])
+        dep = _points(
+            src["deposit_accounts"][src["deposit_accounts"].src_customer_ref == f"DK-{i}"], ["net_cash_flow"]
+        )
+        latest = []
+        for acct in (card, loan):
+            k = acct[acct.date <= d] if len(acct) else acct
+            if len(k):
+                top = k.sort_values("date").iloc[-1]
+                age = (d - top.date).days
+                latest.append(top.dpd + (age if top.dpd > 0 and age <= 31 else 0))
+        want = max(latest) if latest else None
+        assert pd.isna(r.max_dpd) if want is None else r.max_dpd == want, (r.case_id, r.as_of)
+        if want is not None:
+            ends = pd.concat([card, loan])
+            ends = ends[ends.month_end & (ends.dpd >= 30) & (ends.date > year_ago) & (ends.date <= d)]
+            assert r.times_30plus_dpd_12m == ends.date.nunique()
+            floor = next(
+                f
+                for top, f in ((0, None), (30, 1), (60, 31), (90, 61), (120, 91), (10**9, 121))
+                if want <= top
+            )
+            assert pd.isna(r.days_in_bucket) if floor is None else r.days_in_bucket == want - floor
+        dep_12m = dep[dep.month_end & (dep.date > year_ago) & (dep.date <= d)]
+        card_12m = card[card.month_end & (card.date > year_ago) & (card.date <= d)]
+        assert _same(r.cash_flow_trend, _slope(dep_12m.groupby("date").net_cash_flow.sum()))
+        assert _same(r.card_utilisation_trend, _slope(card_12m.groupby("date").utilisation.mean()))
+        dp = src["deposit_accounts"].iloc[i]
+        tz = src["c360_customer"].time_zone.iloc[i] or "America/Toronto"
+        if dp.payroll_frequency_detected is None:
+            assert pd.isna(r.days_to_next_payroll) and pd.isna(r.estimated_monthly_spare_cash)
+            continue
+        e = dp.expected_next_payroll_date
+        ref = days_to_next_payroll(e, as_of=pd.Timestamp(r.as_of).tz_localize("UTC").to_pydatetime(), tz=tz)
+        p = period.get(dp.payroll_frequency_detected)
+        if ref < 0 or (p and ref < p):  # overdue, or the expected date is the next payday
+            assert r.days_to_next_payroll == ref
+        elif p:  # projected back along the schedule: a payday on the same cycle
+            assert 0 <= r.days_to_next_payroll < p and (ref - r.days_to_next_payroll) % p == 0
+        known = dp.snapshot_date <= d
+        assert pd.isna(r.payroll_delay_days) is not known
+        if known:
+            per_month = {"weekly": 52 / 12, "biweekly": 26 / 12, "semi_monthly": 2, "monthly": 1}[
+                dp.payroll_frequency_detected
+            ]
+            housing = src["customers"].monthly_housing_cost.iloc[i]
+            spare = (
+                dp.payroll_avg_amount_3m * per_month
+                - dp.essential_spend_amount_mtd
+                - dp.other_lender_payment_amount_mtd
+                - (0 if pd.isna(housing) else housing)
+            )
+            assert float(r.estimated_monthly_spare_cash) == pytest.approx(spare, abs=0.01)
         checked += 1
     assert checked > 30
