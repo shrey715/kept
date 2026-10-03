@@ -9,6 +9,7 @@ Reads silver.int_identity_evidence and silver.int_identity_records, writes parqu
 
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -39,6 +40,7 @@ class MatchRun:
     summary: dict[str, object]
 
 
+@functools.cache  # one SourceKey per source key, not two new objects per pair (full run: millions)
 def _key(system: str, key: str) -> SourceKey:
     return SourceKey(system=SourceSystem(system), key=key)
 
@@ -87,7 +89,10 @@ def run_matching(
     splink = score_pairs(records, exclude_pairs=exact, train_sample_mod=train_sample_mod)
     pairs = pd.concat([exact, splink], ignore_index=True)
 
-    links = _candidates(pairs)
+    # connected_components only uses AUTO_LINK pairs; building objects for the rest didn't fit in RAM.
+    links = _candidates(
+        pairs[(pairs.rule != "splink") | (pairs.score >= AUTO_LINK_THRESHOLD)].drop_duplicates(subset=PAIR)
+    )
     clusters = connected_components([_key(s, k) for s, k in all_keys], links)
     national_ids = (
         records.dropna(subset=["national_id_hash"])
