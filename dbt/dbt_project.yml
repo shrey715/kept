@@ -1,0 +1,27 @@
+name: kept
+version: "0.1.0"
+config-version: 2
+profile: kept
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: target
+clean-targets: [target, dbt_packages]
+
+models:
+  kept:
+    bronze:
+      +schema: bronze
+      +materialized: view
+    silver:
+      +schema: silver
+      +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table
+      +contract:
+        enforced: false   # flip to true once gold models are real (Track A)
+    features:
+      +schema: features
+      +materialized: table

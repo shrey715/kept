@@ -1,0 +1,4 @@
+# Soda Core data source for the local warehouse (Track A).
+data_source kept:
+  type: duckdb
+  path: data/warehouse/kept.duckdb

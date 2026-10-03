@@ -1,0 +1,47 @@
+# Track A: the 31 source tables from the data dictionary land here unchanged (kept.data.ingest).
+# Snapshot 28 Sep 2026; history Oct 2016 - Sep 2026; ~1M customers, ~1.84M accounts.
+version: 2
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      # --- Core
+      - name: customers               # CRM; SCD2 + CDC (effective_to_ts 9999-12-31 = current); 10 protected attrs
+      - name: card_accounts           # per snapshot_date; cycles_delinquent counts CYCLES, use dpd
+      - name: loan_accounts           # per snapshot_date; pad_source_account -> deposit_accounts
+      - name: deposit_accounts        # per snapshot_date; payroll fields; ccb_deposit_flag is protected
+      - name: collections_cases       # one row per case, LATEST state; outcomes dpd_at_day_*; test_cell
+      - name: contact_history         # one row per attempt; channel renamed channel_v2 on 26 Sep
+      - name: promises_to_pay         # ptp_status open/kept/partially_kept/broken/cancelled
+      # --- Unstructured
+      - name: agent_notes             # note_text is Direct PII
+      - name: call_transcripts        # JSON, nested turns; pii_redaction_applied covers DOB/national ID only
+      - name: voice_samples           # WAV metadata; customer_accent_region protected, voice features proxies
+      # --- External
+      - name: external                # bureau pulls; bank_subject_ref (Splink); risk_score_model scales differ
+      # --- History (Parquet by year)
+      - name: loan_instalments
+      - name: transactions            # last 13 months, customer SAMPLE only: missing stays missing
+      - name: card_statements
+      - name: account_monthly_snapshot
+      - name: bureau_history          # every April and October; stale_score_flag
+      - name: salary_credit_history
+      # --- Decisioning
+      - name: model_scores
+      - name: offers
+      # --- Semantic
+      - name: metric_definitions      # certified metrics; formula is pseudo-SQL
+      - name: benchmark_questions     # Layer 2 benchmark; should_refuse, tolerance
+      # --- Policy
+      - name: reference_documents     # superseded_by keeps old versions on purpose
+      - name: hardship_programs
+      - name: qa_checklist
+      # --- Operations
+      - name: agents
+      - name: case_assignment_history
+      - name: agent_shifts
+      - name: channel_capacity        # daily capacity, usage and cost by time band
+      - name: ops_events              # outages: affected tables and time windows
+      # --- Reference
+      - name: geo_reference           # FSA -> province, time zone (fsa_income_index is a proxy)
+      - name: code_lookups            # outcome codes, reasons, test cells ...

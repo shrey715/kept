@@ -1,0 +1,72 @@
+# ---------------------------------------------------------------------------
+# Data: customer data never goes into git. Only READMEs and .gitkeep files do.
+# ---------------------------------------------------------------------------
+data/**
+!data/
+!data/*/
+!data/README.md
+!data/**/.gitkeep
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.csv
+!tests/fixtures/**/*.csv
+*.jsonl
+!tests/fixtures/**/*.jsonl
+*.lance/
+
+# Model artefacts and experiment tracking
+mlruns/
+mlartifacts/
+*.lgb
+*.pkl
+*.joblib
+feature_repo/data/
+feature_repo/registry.db
+feature_repo/online_store.db
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
+
+# Soda
+soda/.soda/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Notebooks
+.ipynb_checkpoints/
+notebooks/**/*.ipynb_checkpoints
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs (audit log in dev is local; prod is append-only storage)
+logs/
+*.log

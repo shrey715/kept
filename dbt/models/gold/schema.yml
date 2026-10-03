@@ -1,0 +1,104 @@
+# Must match contracts/c360_customer.odcs.yaml column for column
+# (tests/contracts/test_contract_consistency.py checks it).
+version: 2
+
+models:
+  - name: c360_customer
+    description: Golden customer record, one row per golden_customer_id.
+    columns:
+      - name: golden_customer_id
+        data_tests: [unique, not_null]
+      - name: source_keys
+        data_tests: [not_null]
+      - name: match_confidence_min
+      - name: match_review_status
+        data_tests:
+          - not_null
+          - accepted_values: {values: [auto, steward_approved, unlinked]}
+      - name: display_name
+      - name: primary_phone_e164
+      - name: email
+      - name: province_code
+      - name: time_zone
+      - name: preferred_language
+      - name: total_overdue
+        data_tests: [not_null]
+      - name: max_dpd
+        data_tests: [not_null]
+      - name: current_bucket
+        data_tests:
+          - not_null
+          - accepted_values: {values: [current, "1-30", "31-60", "61-90", "91-120", "121+"]}
+      - name: open_case_id
+      - name: assigned_agent_id
+      - name: contact_permissions
+        data_tests: [not_null]
+      - name: permitted_call_start_local
+      - name: permitted_call_end_local
+      - name: sunday_contact_permitted
+      - name: do_not_contact
+        data_tests: [not_null]
+      - name: collections_hold
+        data_tests: [not_null]
+      - name: hardship_status
+        data_tests:
+          - not_null
+          - accepted_values: {values: [none, possible, confirmed]}
+      - name: hardship_source
+      - name: vulnerability_flag
+      - name: expected_next_payroll_date
+      - name: payroll_frequency_detected
+        data_tests: [not_null]
+      - name: as_of_date
+        data_tests: [not_null]
+      - name: refreshed_at
+        data_tests: [not_null]
+      - name: display_name_source
+      - name: primary_phone_e164_source
+      - name: email_source
+      - name: province_code_source
+      - name: time_zone_source
+      - name: preferred_language_source
+      - name: total_overdue_source
+      - name: contact_permissions_source
+      - name: do_not_contact_source
+      - name: collections_hold_source
+      - name: expected_next_payroll_date_source
+
+  - name: identity_crosswalk
+    description: One row per (source_system, source_key) link.
+    columns:
+      - name: golden_customer_id
+        data_tests: [not_null]
+      - name: source_system
+        data_tests:
+          - not_null
+          - accepted_values: {values: [crm, card, loan, deposit, collections, bureau]}
+      - name: source_key
+        data_tests: [not_null]
+      - name: match_score
+      - name: match_rule
+        data_tests: [not_null]
+      - name: match_review_status
+        data_tests: [not_null]
+      - name: linked_at
+        data_tests: [not_null]
+      - name: valid_to
+
+  - name: c360_restricted
+    description: Protected attributes. Compliance only. Never joined into features.
+    columns:
+      - name: golden_customer_id
+        data_tests: [unique, not_null]
+      - name: gender_code
+      - name: marital_status
+      - name: citizenship_status
+      - name: household_size
+      - name: dependants_count
+      - name: newcomer_program_flag
+      - name: newcomer_arrival_date
+      - name: accessibility_needs_flag
+      - name: accessibility_type
+      - name: vulnerability_type
+      - name: ccb_deposit_flag
+      - name: customer_accent_region

@@ -1,0 +1,11 @@
+# Feast repo (Track D). Offline: DuckDB/Parquet written by dbt features models.
+# Online: SQLite locally; Redis in production (design §8).
+project: kept
+provider: local
+registry: registry.db
+offline_store:
+  type: duckdb
+online_store:
+  type: sqlite
+  path: online_store.db
+entity_key_serialization_version: 3

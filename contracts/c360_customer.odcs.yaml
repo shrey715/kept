@@ -1,0 +1,311 @@
+# Data contract: the golden customer record.
+# Open Data Contract Standard (ODCS) v3. CI lints this file; Layers 2 and 3 read
+# their allow-lists and permitted features from it (kept.contracts.data_contract).
+#
+# tests/contracts/test_contract_consistency.py checks that every column below
+# matches kept.contracts.identity.GoldenCustomer and dbt/models/gold/schema.yml.
+# Items marked TBC must be resolved on build day 1 (see docs/TEAM_PLAN.md).
+
+apiVersion: v3.0.2
+kind: DataContract
+id: kept-c360-customer
+name: Golden Customer Record
+version: 1.0.0
+status: draft
+domain: collections
+dataProduct: c360
+tenant: cibc-collections
+
+description:
+  purpose: >
+    One row per golden_customer_id joining CRM, card, loan, deposit,
+    collections and bureau keys, for collections servicing and the Kept NBA.
+  usage: >
+    Collections servicing and contact; the NBA and other collections models
+    (with human release); Collections Ask (masked, aggregated for analysts);
+    hardship identification; regulatory and complaint reporting; model monitoring.
+  limitations: >
+    Not for marketing or cross-sell (DNCL, CASL and marketing opt-outs apply),
+    credit or pricing decisions, any decision using protected attributes, bulk
+    export of personal data, sharing outside the bank, or joining to
+    c360_restricted outside compliance.
+
+team:
+  - role: owner-business
+    name: Head of Collections Strategy
+  - role: owner-technical
+    name: Collections Data Engineering
+  - role: data-steward
+    name: Collections Data Steward (identity review)
+
+servers:
+  - server: local
+    type: duckdb
+    database: data/warehouse/kept.duckdb
+    schema: gold
+  - server: export
+    type: local
+    format: parquet
+    location: data/exports/c360_customer/as_of_date={as_of_date}/
+
+slaProperties:
+  - property: frequency
+    value: 1
+    unit: d
+  - property: publishDeadline
+    value: "06:00 America/Toronto"
+  - property: latency
+    value: 15
+    unit: m
+    description: consent, cease and hold changes land through the online store
+  - property: breakingChangeNotice
+    value: 14
+    unit: d
+
+schema:
+  - name: c360_customer
+    physicalName: gold.c360_customer
+    physicalType: table
+    description: One row per golden_customer_id.
+    properties:
+      - {name: golden_customer_id, logicalType: string, required: true, unique: true, primaryKey: true, classification: internal, description: "Permanent ID; merges and splits are logged"}
+      - {name: source_keys, logicalType: array, required: true, classification: internal, description: "CRM, card, loan, deposit, collections and bureau keys"}
+      - {name: match_confidence_min, logicalType: number, required: false, classification: internal, description: "Weakest link in the cluster"}
+      - {name: match_review_status, logicalType: string, required: true, classification: internal, description: "auto | steward_approved | unlinked"}
+      - {name: display_name, logicalType: string, required: false, classification: direct_pii, description: "Most recent verified CRM value (masked)"}
+      - {name: primary_phone_e164, logicalType: string, required: false, classification: direct_pii, description: "Most recent verified CRM value (masked)"}
+      - {name: email, logicalType: string, required: false, classification: direct_pii, description: "Most recent verified CRM value (masked)"}
+      - {name: province_code, logicalType: string, required: false, classification: quasi_identifier, description: "From CRM"}
+      - {name: time_zone, logicalType: string, required: false, classification: quasi_identifier, description: "From CRM; drives local calling hours"}
+      - {name: preferred_language, logicalType: string, required: false, classification: quasi_identifier, description: "Routing only; never a model feature"}
+      - {name: total_overdue, logicalType: number, required: true, classification: internal, description: "Across current account snapshots"}
+      - {name: max_dpd, logicalType: integer, required: true, classification: internal, description: "Across current account snapshots (dpd, not cycles_delinquent)"}
+      - {name: current_bucket, logicalType: string, required: true, classification: internal, description: "DPD bucket"}
+      - {name: open_case_id, logicalType: string, required: false, classification: internal, description: "The open collections case"}
+      - {name: assigned_agent_id, logicalType: string, required: false, classification: internal, description: "The open collections case"}
+      - {name: contact_permissions, logicalType: object, required: true, classification: internal, description: "Consent per channel, most restrictive across records"}
+      - {name: permitted_call_start_local, logicalType: time, required: false, classification: internal, description: "customers.permitted_call_start_local (bank policy/province)"}
+      - {name: permitted_call_end_local, logicalType: time, required: false, classification: internal, description: "customers.permitted_call_end_local (bank policy/province)"}
+      - {name: sunday_contact_permitted, logicalType: boolean, required: false, classification: internal, description: "customers.sunday_contact_permitted, most restrictive across records"}
+      - {name: do_not_contact, logicalType: boolean, required: true, classification: sensitive, description: "Internal do-not-call or cease (national_dncl_flag never sets it: DNCL covers telemarketing, not collections)"}
+      - {name: collections_hold, logicalType: boolean, required: true, classification: sensitive, description: "Insolvency, bankruptcy or deceased"}
+      - {name: hardship_status, logicalType: string, required: true, classification: sensitive, description: "none | possible | confirmed"}
+      - {name: hardship_source, logicalType: string, required: false, classification: sensitive, description: "agent | customer_form | account_programme | model | llm | cash_flow"}
+      - {name: vulnerability_flag, logicalType: boolean, required: false, classification: sensitive, description: "customers.vulnerability_flag or a disclosed vulnerability; protects like hardship (vulnerability_type itself is protected)"}
+      - {name: expected_next_payroll_date, logicalType: date, required: false, classification: internal, description: "From deposits; drives Kept sizing"}
+      - {name: payroll_frequency_detected, logicalType: string, required: true, classification: internal, description: "From deposits"}
+      - {name: as_of_date, logicalType: date, required: true, classification: internal, description: "Lineage"}
+      - {name: refreshed_at, logicalType: timestamp, required: true, classification: internal, description: "Lineage"}
+      - {name: display_name_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: primary_phone_e164_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: email_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: province_code_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: time_zone_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: preferred_language_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: total_overdue_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: contact_permissions_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: do_not_contact_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: collections_hold_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+      - {name: expected_next_payroll_date_source, logicalType: string, required: false, classification: internal, description: "Lineage"}
+
+  - name: identity_crosswalk
+    physicalName: gold.identity_crosswalk
+    physicalType: table
+    description: One row per (source_system, source_key) link to a golden ID.
+    properties:
+      - {name: golden_customer_id, logicalType: string, required: true, classification: internal, description: "Golden ID"}
+      - {name: source_system, logicalType: string, required: true, classification: internal, description: "crm | card | loan | deposit | collections | bureau"}
+      - {name: source_key, logicalType: string, required: true, classification: internal, description: "Key in the source system"}
+      - {name: match_score, logicalType: number, required: false, classification: internal, description: "Null for exact links"}
+      - {name: match_rule, logicalType: string, required: true, classification: internal, description: "exact:<key> or splink"}
+      - {name: match_review_status, logicalType: string, required: true, classification: internal, description: "auto | steward_approved | unlinked"}
+      - {name: linked_at, logicalType: timestamp, required: true, classification: internal, description: "When the link was made"}
+      - {name: valid_to, logicalType: timestamp, required: false, classification: internal, description: "Set when a merge or split retires this link"}
+
+  - name: c360_restricted
+    physicalName: gold.c360_restricted
+    physicalType: table
+    description: Protected attributes. Compliance only (fairness audits). Never joined into features.
+    properties:
+      - {name: golden_customer_id, logicalType: string, required: true, unique: true, primaryKey: true, classification: internal, description: "Golden ID"}
+      - {name: gender_code, logicalType: string, required: false, classification: protected, description: "customers.gender_code: Self-identified gender"}
+      - {name: marital_status, logicalType: string, required: false, classification: protected, description: "customers.marital_status: Marital status as declared at onboarding"}
+      - {name: citizenship_status, logicalType: string, required: false, classification: protected, description: "customers.citizenship_status: Residency status at onboarding"}
+      - {name: household_size, logicalType: integer, required: false, classification: protected, description: "customers.household_size: Persons in household (declared)"}
+      - {name: dependants_count, logicalType: integer, required: false, classification: protected, description: "customers.dependants_count: Dependants declared"}
+      - {name: newcomer_program_flag, logicalType: boolean, required: false, classification: protected, description: "customers.newcomer_program_flag: Onboarded via newcomer-to-Canada program"}
+      - {name: newcomer_arrival_date, logicalType: date, required: false, classification: protected, description: "customers.newcomer_arrival_date: Arrival date in Canada"}
+      - {name: accessibility_needs_flag, logicalType: boolean, required: false, classification: protected, description: "customers.accessibility_needs_flag: Accessibility accommodation recorded"}
+      - {name: accessibility_type, logicalType: string, required: false, classification: protected, description: "customers.accessibility_type: Accommodation type"}
+      - {name: vulnerability_type, logicalType: string, required: false, classification: protected, description: "customers.vulnerability_type: Vulnerability category"}
+      - {name: ccb_deposit_flag, logicalType: boolean, required: false, classification: protected, description: "deposit_accounts.ccb_deposit_flag: Canada Child Benefit deposit"}
+      - {name: customer_accent_region, logicalType: string, required: false, classification: protected, description: "voice_samples.customer_accent_region: Accent style"}
+
+quality:
+  - id: Q1-unique-ids
+    description: golden_customer_id never null or duplicated; each source key maps to exactly one golden ID.
+    severity: block
+  - id: Q2-linkage
+    description: Every open case resolves to a golden ID; at least 98% of account keys link.
+    mustBeGreaterOrEqualTo: 0.98
+    severity: warn
+    blockBelow: 0.97
+  - id: Q3-match-safety
+    description: Auto links need a score >= 0.95; no cluster holds two national IDs. Weekly reviewed sample precision >= 98% (warn).
+    severity: block
+  - id: Q4-contact-safety
+    description: Any source do-not-call or cease sets do_not_contact; any insolvency, bankruptcy or deceased sets collections_hold.
+    mustBeEqualTo: 0
+    unit: violations
+    severity: block
+  - id: Q5-freshness
+    description: Published within 26 hours of the source extract (warn), blocked at 48 hours. Row count within 10% of the last load.
+    warnAfterHours: 26
+    blockAfterHours: 48
+    rowCountTolerance: 0.10
+    severity: block
+
+customProperties:
+  # The 12 protected attributes, exactly as the data dictionary marks them (sheet Columns, Sensitivity).
+  - property: protectedAttributes
+    value:
+      - gender_code  # customers
+      - marital_status  # customers
+      - citizenship_status  # customers
+      - household_size  # customers
+      - dependants_count  # customers
+      - newcomer_program_flag  # customers
+      - newcomer_arrival_date  # customers
+      - accessibility_needs_flag  # customers
+      - accessibility_type  # customers
+      - vulnerability_type  # customers
+      - ccb_deposit_flag  # deposit_accounts
+      - customer_accent_region  # voice_samples
+  # Proxies that also stay out of every decision (design §9), named as the dictionary names them.
+  - property: proxyAttributes
+    value:
+      - age
+      - age_band
+      - date_of_birth
+      - dob_raw
+      - salutation
+      - postal_code
+      - postal_code_raw
+      - fsa
+      - geo_lat
+      - geo_lon
+      - city
+      - urban_rural
+      - fsa_income_index
+      - preferred_language
+      - correspondence_language
+      - language_of_service
+      - language_used
+      - message_language
+      - note_language
+      - ei_deposit_flag
+      - cpp_oas_deposit_flag
+      - gst_hst_credit_flag
+      - provincial_benefit_flag
+      - benefit_type
+      - customer_pitch_mean_hz
+      - customer_pitch_std_hz
+      - customer_energy_mean_db
+      - customer_pause_count
+      - customer_filler_rate
+      - speaking_rate_wpm_customer
+      - customer_voice_id
+      - vulnerability_source
+  - property: restrictedTables
+    value:
+      - gold.c360_restricted
+  # Direct PII and quasi-identifiers in the SOURCE tables (dictionary Sensitivity column).
+  # Collections Ask never selects these; text goes through Presidio before any LLM.
+  - property: directPiiColumns
+    value:
+      - customers.first_name
+      - customers.middle_name
+      - customers.last_name
+      - customers.preferred_name
+      - customers.full_name_raw
+      - customers.name_suffix
+      - customers.date_of_birth
+      - customers.dob_raw
+      - customers.national_id_hash
+      - customers.primary_phone_raw
+      - customers.primary_phone_e164
+      - customers.secondary_phone_raw
+      - customers.work_phone_raw
+      - customers.email
+      - customers.address_line1
+      - customers.address_line2
+      - card_accounts.card_number_masked
+      - card_accounts.cardholder_name_raw
+      - card_accounts.cardholder_dob_raw
+      - card_accounts.cardholder_phone_raw
+      - loan_accounts.borrower_name_raw
+      - loan_accounts.borrower_dob_raw
+      - loan_accounts.borrower_phone_raw
+      - loan_accounts.co_borrower_ref
+      - loan_accounts.vehicle_vin_hash
+      - deposit_accounts.holder_name_raw
+      - deposit_accounts.holder_dob_raw
+      - deposit_accounts.holder_phone_raw
+      - deposit_accounts.joint_holder_ref
+      - contact_history.phone_number_hash
+      - contact_history.sms_reply_text
+      - agent_notes.note_text
+      - call_transcripts.turns
+      - call_transcripts.turn.text
+      - external.subject_name_reported
+      - external.subject_dob_reported
+      - external.subject_address_reported
+      - agents.agent_display_name
+  - property: quasiIdentifierColumns
+    value:
+      - customers.salutation
+      - customers.age
+      - customers.age_band
+      - customers.id_document_type
+      - customers.city
+      - customers.province_code
+      - customers.postal_code
+      - customers.postal_code_raw
+      - customers.fsa
+      - customers.urban_rural
+      - customers.geo_lat
+      - customers.geo_lon
+      - customers.employer_name
+      - card_accounts.cardholder_postal_raw
+      - loan_accounts.borrower_postal_raw
+      - deposit_accounts.holder_postal_raw
+      - deposit_accounts.payroll_descriptor_raw
+      - collections_cases.province_code
+      - transactions.raw_description
+      - geo_reference.fsa_income_index
+  # Tables Collections Ask may SELECT from: curated (silver) and golden data.
+  # TBC: Track B and Track A agree the final list against benchmark_questions.expected_tables.
+  - property: askAllowedTables
+    value:
+      - gold.c360_customer
+      - silver.collections_cases
+      - silver.promises_to_pay
+      - silver.contact_history
+      - silver.card_accounts
+      - silver.loan_accounts
+      - silver.deposit_accounts
+      - silver.card_statements
+      - silver.loan_instalments
+      - silver.account_monthly_snapshot
+      - silver.offers
+      - silver.hardship_programs
+      - silver.channel_capacity
+      - silver.model_scores
+      - silver.metric_definitions
+      - silver.agents
+  - property: tbc
+    value:
+      - Whether the organisers have ground-truth IDs to score our matching
+      - The certified metric_id for roll rate (see metric_definitions)
+      - Which assignment_method / test_cell values mean random assignment (code_lookups)
+      - Whether autopay_source_account values at other FIs should be ignored or quarantined

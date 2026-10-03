@@ -1,0 +1,8 @@
+# Used with `--profiles-dir dbt` (see Makefile). Path is relative to the repo root.
+kept:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('KEPT_WAREHOUSE_PATH', 'data/warehouse/kept.duckdb') }}"
+      threads: 4

@@ -1,0 +1,14 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - name: Contract tests (must be green)
+        run: uv run pytest -m contract
+      - name: Everything else (stubs and todos tolerated)
+        run: uv run pytest --allow-stubs -m "not integration and not perf"

@@ -1,0 +1,142 @@
+"""Shared, fixed API between the four tracks.
+
+Rules for this package:
+  * No logic beyond validation. Implementations live in the layer packages.
+  * Every change needs a PR approved by the owners of every track that imports
+    the changed symbol (see docs/TEAM_PLAN.md, "Changing a contract").
+  * Additive changes (new optional field, new enum member) are cheap.
+    Renames and removals are breaking: bump CONTRACT_VERSION.
+  * tests/contracts/ must stay green at all times.
+"""
+
+from kept.contracts.ask import (
+    AskAnswer,
+    AskRequest,
+    AskResponse,
+    Citation,
+    Clarification,
+    GuardResult,
+    Intent,
+    IntentKind,
+    Refusal,
+    RefusalReason,
+    ScopeDecision,
+    SqlPolicy,
+)
+from kept.contracts.audit import AuditEvent, AuditKind
+from kept.contracts.enums import (
+    ACTION_CHANNEL,
+    HARDSHIP_ALLOWED_ACTIONS,
+    Action,
+    Channel,
+    DpdBucket,
+    HardshipSignal,
+    HardshipSource,
+    HardshipStatus,
+    HardStop,
+    MatchReviewStatus,
+    MatchRoute,
+    PayrollFrequency,
+    ReleaseTier,
+    ReviewDecision,
+    Role,
+    Sensitivity,
+    SourceSystem,
+)
+from kept.contracts.features import (
+    Evidence,
+    ExtractedValue,
+    FeatureVector,
+    RedactedText,
+    StatedReason,
+    TextExtraction,
+)
+from kept.contracts.identity import (
+    CandidatePair,
+    ClusterEvent,
+    ContactPermissions,
+    CrosswalkEntry,
+    GoldenCustomer,
+    MatchDecision,
+    SourceKey,
+)
+from kept.contracts.nba import (
+    ActionScore,
+    Alternative,
+    CaseContext,
+    CheckName,
+    CheckResult,
+    HardStopResult,
+    NBACard,
+    PermissionResult,
+    PromiseSizing,
+    Proposal,
+    ProposalStatus,
+    Reason,
+    ReleaseDecision,
+    ReleaseResult,
+)
+
+CONTRACT_VERSION = "0.1.0"
+
+__all__ = [
+    "ACTION_CHANNEL",
+    "CONTRACT_VERSION",
+    "HARDSHIP_ALLOWED_ACTIONS",
+    "Action",
+    "ActionScore",
+    "Alternative",
+    "AskAnswer",
+    "AskRequest",
+    "AskResponse",
+    "AuditEvent",
+    "AuditKind",
+    "CandidatePair",
+    "CaseContext",
+    "Channel",
+    "CheckName",
+    "CheckResult",
+    "Citation",
+    "Clarification",
+    "ClusterEvent",
+    "ContactPermissions",
+    "CrosswalkEntry",
+    "DpdBucket",
+    "Evidence",
+    "ExtractedValue",
+    "FeatureVector",
+    "GoldenCustomer",
+    "GuardResult",
+    "HardStop",
+    "HardStopResult",
+    "HardshipSignal",
+    "HardshipSource",
+    "HardshipStatus",
+    "Intent",
+    "IntentKind",
+    "MatchDecision",
+    "MatchReviewStatus",
+    "MatchRoute",
+    "NBACard",
+    "PayrollFrequency",
+    "PermissionResult",
+    "PromiseSizing",
+    "Proposal",
+    "ProposalStatus",
+    "Reason",
+    "RedactedText",
+    "Refusal",
+    "RefusalReason",
+    "ReleaseDecision",
+    "ReleaseResult",
+    "ReleaseTier",
+    "ReviewDecision",
+    "Role",
+    "ScopeDecision",
+    "Sensitivity",
+    "SourceKey",
+    "SourceSystem",
+    "SqlPolicy",
+    "StatedReason",
+    "TextExtraction",
+]
