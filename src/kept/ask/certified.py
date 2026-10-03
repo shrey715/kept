@@ -21,11 +21,15 @@ from kept.ask.metrics import CertifiedQuery
 
 _RESOLVED = "ptp_status IN ('kept','partially_kept','broken')"
 _PTP = """(SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date,
-        p.amount_paid_against, c.queue, c.test_cell, c.province_code, coalesce(a.site, 'self_serve') AS site
+        p.amount_paid_against, p.prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code,
+        coalesce(a.site, 'self_serve') AS site
       FROM silver.promises_to_pay p
       LEFT JOIN silver.collections_cases c ON c.case_id = p.case_id
       LEFT JOIN silver.agents a ON a.agent_id = p.agent_id) t"""
-_PTP_COLS = frozenset({"product", "ptp_channel", "ptp_type", "queue", "test_cell", "province_code", "site"})
+_PTP_COLS = frozenset(
+    {"product", "ptp_channel", "ptp_type", "queue", "test_cell", "assignment_method", "province_code", "site"}
+    | {"prior_broken_ptp_count"}
+)
 _CASE_COLS = frozenset({"primary_product", "queue", "province_code", "current_bucket"})
 _CONTACT_COLS = frozenset({"contact_hour_local", "agent_site", "test_cell", "strategy_code", "day_of_week"})
 _ACCOUNTS = """(SELECT 'card' AS product_family, product_code, dpd, dpd_bucket, snapshot_date

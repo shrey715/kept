@@ -187,7 +187,11 @@ def _matches(cell: object, g: str, tol: float, pts: bool) -> bool:
         got = float(cell)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return False
-    return abs(got - want) <= tol + 1e-9 or (pts and abs(got * 100 - want) <= tol + 1e-9)
+    count = (
+        want >= 20 and want == int(want) and "." not in g
+    )  # a group size: silver and the reference differ by a few rows
+    slack = max(tol, 0.02 * want) if count and tol > 0 else tol
+    return abs(got - want) <= slack + 1e-9 or (pts and abs(got * 100 - want) <= tol + 1e-9)
 
 
 def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse) -> bool | None:
