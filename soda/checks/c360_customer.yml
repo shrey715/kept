@@ -32,7 +32,7 @@ checks for gold.c360_customer:
     fail query: select g.golden_customer_id from gold.c360_customer g join silver.int_source_flags f using (golden_customer_id)
       where (f.any_do_not_contact and not g.do_not_contact) or (f.any_collections_hold and not g.collections_hold)
 - freshness(refreshed_at):
-    name: 'Q5-freshness: gold refreshed within 26h (warn) and 48h (block); kept gate compares it with the source extract'
+    name: 'Q5-freshness: gold refreshed within 26h (warn), 48h (block); the source extract: kept gate'
     warn: when > 26h
     fail: when > 48h
 - row_count > 0:
