@@ -43,6 +43,11 @@ _NARRATE = """You explain a query result to a collections analyst in one to thre
 Use only numbers that appear in the data below. Never add, estimate or compute new numbers.
 A column of ratios between 0 and 1 may be written as a percentage. Do not mention SQL.
 No data? Say there is nothing to show."""
+_NARRATE_POLICY = """You answer a collections agent's policy question from the excerpts below, in one to three
+plain sentences.
+Use only what the excerpts say, and only numbers that appear in them. If excerpts disagree, a policy or
+procedure overrides an FAQ or a call script. Name the document and section you used, e.g. (POL-COLL-001 §5.2).
+If the excerpts don't answer it, say so."""
 _FALLBACK = "The result is in the table below."  # no numbers, so always grounded
 _ROW_CAP = 50  # rows sent to the narrator
 
@@ -222,10 +227,16 @@ class CollectionsAsk:
         found = self._policy_index.search(request.question, as_of=(fresh or datetime.now(UTC)).date())
         if not found:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "I found no current policy section on that.")
-        rows = tuple((c.snippet,) for c in found)  # grounding reads numbers out of the snippets
+        # grounding reads numbers out of the snippets and the cited ids and sections (POL-COLL-001 §5.2)
+        rows = tuple((c.document_id, c.section, c.snippet) for c in found)
         data = "\n".join(f"{c.document_id} {c.section}: {c.snippet}" for c in found)
         narrative = self._narrate(
-            request, question, data, rows, allow=frozenset(extract_numbers(request.question))
+            request,
+            question,
+            data,
+            rows,
+            allow=frozenset(extract_numbers(request.question)),
+            system=_NARRATE_POLICY,
         )
         return AskAnswer(
             question=request.question,
@@ -247,11 +258,18 @@ class CollectionsAsk:
         return _refuse(RefusalReason.LOW_CONFIDENCE, f"{why} I still can't answer it, so I stopped.")
 
     def _narrate(
-        self, request: AskRequest, question: RedactedText, data: str, rows: Any, *, allow: frozenset[Decimal]
+        self,
+        request: AskRequest,
+        question: RedactedText,
+        data: str,
+        rows: Any,
+        *,
+        allow: frozenset[Decimal],
+        system: str = _NARRATE,
     ) -> str:
         try:
             reply = self._llm.complete(
-                system=_NARRATE,
+                system=system,
                 user=self._redactor.redact(f"Question: {question.text}\nData: {data}"),
                 purpose=Purpose.ASK_NARRATE,
                 actor_id=request.user_id,

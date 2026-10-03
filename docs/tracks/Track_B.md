@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 3 done; G1 check for B done (guard on real silver). G1 opens when C reports Phase 2.
-- Working on: nothing
-- Waiting on: C's Phase 2 stop message (G1), then G2
+- Phase: 4 (parallel tasks, done early at the user's call; not pushed yet, C is merging)
+- Working on: nothing; Phase 4 parallel tasks are done. The benchmark run on real gold waits for G2.
+- Waiting on: C's merge work, G1 close-out, then G2 (A's gold)
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -22,12 +22,15 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 - G1 check (17:16): built silver locally for the 8 Ask tables (`kept land`, then `dbt build`: 8 of 8 models OK, 44 s). `scripts/ask_g1_check.py` runs the dev answers' reference SQL through `guard_sql` with the real contract and real silver columns (`build_sql_policy`): all 12 allowed, 9 match the gold answers exactly; BQ-010 and BQ-011 match once written for silver (`channel_v2` and the date parsing are already cleaned there); BQ-017 is covered by the certified roll rate. All 14 certified metrics pass the guard and run on real silver.
 
+- Phase 4 (local, not pushed): `effective_windows`, `chunk_document`, `PolicyIndex` (LanceDB full-text/BM25, current sections only, policy outranks FAQ and call scripts), `build_policy_index` in `kept/ask/policy.py`; `scripts/build_policy_index.py` builds `data/policy/lancedb` (45 chunks from 19 documents). The 5 dev policy questions (BQ-002, 005, 019, 026, 033) return the gold source first, and the BQ-026 trap (FAQ says 6 months, POL-COLL-004 v4.2 says 3) comes out right. The service answers policy questions with citations. 206 Ask tests pass.
+
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
 - Refusal labels for the hidden questions: the local scorecard only covers the dev split. A dev case's `should_refuse` is "gold_answer starts with `Refuse`" (BQ-018, BQ-024, BQ-031). Test-split questions can't be scored here; `kept benchmark` still answers them and writes the CSV, and the organisers grade it.
 - Tolerances the scorer can't parse ("direction of effect", "exact count, ±1 CAD"): `parse_tolerance` keeps raising `ValueError`; the scorer will catch it and mark the case manual (not counted in accuracy) instead of guessing. Proposed rule: "direction of effect" = same sign as the gold answer; "exact count, ±1 CAD" = count equal and amount within 1.
 - The service sends metric SQL through `guard_sql` as well as lookup SQL, so one rule covers every query that runs.
-- Policy questions refuse politely (`DATA_UNAVAILABLE`) until Phase 4 builds `PolicyIndex`.
+- Policy questions are answered from `PolicyIndex` when the service is given one, else refused politely (`DATA_UNAVAILABLE`).
+- Policy search is keyword (BM25) search, not embeddings: no model download, and the 19 documents are small. Switch to embeddings only if paraphrased questions miss.
 - `SqlPolicy` gained an optional `table_columns` (additive shared-contract change, agreed in chat): a star is refused over a table with a blocked column or with unlisted columns. Nobody else imports `SqlPolicy`.
 - Test changes: `tests/ask/conftest.py` policy fixture now passes `table_columns`; one `test_allowed_queries` row used `GOLD.COLLECTIONS_CASES`, which is not an allowed table, so it is now `SILVER.COLLECTIONS_CASES` (the row tests case-insensitivity).
 - `route` takes an optional `as_of` date for relative dates.
@@ -45,6 +48,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 17:46: Phase 4 parallel tasks done locally (policy index + service path); not pushed, C is merging.
 - 2026-10-03 17:16: G1 check done on real silver (see Done); fixed the certified roll rate to use `dpd`, not the raw bucket; pushed.
 - 2026-10-03 15:49: G0 review comment posted on PR #10 (Ask model, table list); Phase 3 done, stopped.
 - 2026-10-03 15:47: Phase 3 parallel tasks done (PR #9); free Ask model research done, waiting on the pick.

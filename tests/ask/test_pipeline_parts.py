@@ -501,3 +501,24 @@ def test_bucket_labels_and_negatives_are_grounded() -> None:
     assert is_grounded("Cases in the 31-60 bucket: 25,389.", [("31-60", 25389)])
     assert is_grounded("The rate fell by -3.5 points.", [(-3.5,)])
     assert not is_grounded("The 61-90 bucket has 25,389 cases.", [("31-60", 25389)])
+
+
+def test_long_sections_split_into_paragraphs_and_faq_answers_get_their_number() -> None:
+    faq = "# Agent FAQ\n\n" + "\n\n".join(
+        f"**Q{i}. Question {i}?**\n{'Answer text. ' * 20}" for i in (1, 2, 3)
+    )
+    chunks = chunk_document("FAQ", faq, effective_from=date(2026, 4, 1), effective_to=None, doc_type="faq")
+    assert [c.section for c in chunks] == ["Agent FAQ Q1", "Agent FAQ Q2", "Agent FAQ Q3"]
+    assert all(c.doc_type == "faq" for c in chunks)
+    short = chunk_document(
+        "D",
+        "# T\n\n## 1 A\nshort\n\nstill the same chunk",
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+    )
+    assert [c.section for c in short] == ["1 A"] and "still the same chunk" in short[0].text
+
+
+def test_a_document_without_headings_is_one_chunk() -> None:
+    (c,) = chunk_document("D", "Just text.", effective_from=date(2026, 1, 1), effective_to=None)
+    assert c.section == "D" and c.text == "Just text."

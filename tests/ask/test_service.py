@@ -225,3 +225,49 @@ def test_audit_payload_holds_the_redacted_question_only(build, audit_log: InMemo
         "clarification",
         "refusal",
     }
+
+
+def test_policy_question_is_answered_with_citations(
+    tmp_path, ask_db, ask_contract, metrics, certified_queries, audit_log
+) -> None:  # type: ignore[no-untyped-def]
+    pytest.importorskip("lancedb")
+    from datetime import date
+
+    from kept.ask.policy import PolicyChunk, PolicyIndex
+
+    idx = PolicyIndex(tmp_path / "lance")
+    idx.add(
+        [
+            PolicyChunk(
+                "POL-COLL-001",
+                "§5.2 Contact frequency",
+                "A maximum of 3 outbound call attempts in any rolling 7 days.",
+                date(2026, 1, 1),
+                None,
+                "policy",
+            )
+        ]
+    )
+    llm = PurposeLLM(
+        {
+            Purpose.ASK_ROUTE: [{"kind": "policy", "confidence": 0.9}],
+            Purpose.ASK_NARRATE: ["At most 3 attempts in any rolling 7 days (POL-COLL-001 §5.2)."],
+        }
+    )
+    svc = CollectionsAsk(
+        conn=ask_db,
+        contract=ask_contract,
+        llm=llm,
+        redactor=PassThroughRedactor(),
+        classifier=_ok,
+        metrics=metrics,
+        certified_queries=certified_queries,
+        policy_index=idx,
+        audit_log=audit_log,
+    )
+    a = svc.ask(_req("how many call attempts can we make in a week?"))
+    assert isinstance(a, AskAnswer) and a.sql is None
+    assert a.citations and a.citations[0].document_id == "POL-COLL-001"
+    assert (
+        a.narrative == "At most 3 attempts in any rolling 7 days (POL-COLL-001 §5.2)."
+    )  # grounded in the excerpt
