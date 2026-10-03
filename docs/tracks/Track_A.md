@@ -3,9 +3,9 @@
 Person: Satvik Rao · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 3 (parallel tasks done, stopped at G2)
-- Working on: G2 prep done on my side (hardship from text extractions, ready for C's files); not starting Phase 4 (steward queue, routes, `draft_mapping`) before G2
-- Waiting on: G2: C's extractions parquet (backfill and live) in `data/exports/extractions/`, then `kept build --gold-only`; D (dbt features on real gold, Feast), B (Ask on 10 real questions)
+- Phase: 4 (G3 done; G4 readiness)
+- Working on: nightly order and stable golden IDs (PR `nightly-order`)
+- Waiting on: D (`kept score`, `kept nightly`, steward queue in `kept serve`), C (live-note flip, final run), you (review of the 300 pairs)
 
 ## Done
 <!-- One line per finished task: what, which tests pass, PR/commit. -->
@@ -64,6 +64,10 @@ None. The open items from Phase 1-3 are decided below, on the data and docs we h
 
 ## Notes for the quality report (Phase 5)
 4,636 agent notes contain U+FFFD; 384,422 card phone numbers are masked in the source (`519555xxx42`) and sit in `quarantine.card_accounts`; 4,936 CRM phones are truncated to 9 digits; `account_monthly_snapshot.month_end_date` drifts across 3 formats; 2,115 CRM records are deleted (CDC) and excluded from silver.
+
+## Nightly order (for D's `kept nightly`)
+`kept land` -> `kept build --silver-only` -> `kept match` (reuses the newest full crosswalk in `data/exports/identity_crosswalk/`, so golden IDs stay put; the oldest ID survives a merge, the largest part keeps its ID on a split, IDs are never reused) -> `kept build --gold-only` -> `kept gate`. All take `--warehouse`.
+Proved on a brand-new warehouse (exit 0, gate PASS apart from Q3-review-precision WARN, 0 of 300 pairs reviewed): land 227 s (peak 7 GB), silver 38 models, match 3.84M keys -> 1,052,938 golden IDs (6 merges, 614 splits against C's crosswalk, because that one was trained on a sample), gold 40 models in about 2 min.
 
 ## Log
 <!-- Newest first: time, what happened. -->
