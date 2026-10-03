@@ -7,99 +7,160 @@ models:
     description: Golden customer record, one row per golden_customer_id.
     columns:
       - name: golden_customer_id
+        data_type: VARCHAR
         data_tests: [unique, not_null]
       - name: source_keys
+        data_type: VARCHAR[]
         data_tests: [not_null]
       - name: match_confidence_min
+        data_type: DOUBLE
       - name: match_review_status
+        data_type: VARCHAR
         data_tests:
           - not_null
           - accepted_values: {values: [auto, steward_approved, unlinked]}
       - name: display_name
+        data_type: VARCHAR
       - name: primary_phone_e164
+        data_type: VARCHAR
       - name: email
+        data_type: VARCHAR
       - name: province_code
+        data_type: VARCHAR
       - name: time_zone
+        data_type: VARCHAR
       - name: preferred_language
+        data_type: VARCHAR
       - name: total_overdue
+        data_type: DECIMAL(18,2)
         data_tests: [not_null]
       - name: max_dpd
+        data_type: INTEGER
         data_tests: [not_null]
       - name: current_bucket
+        data_type: VARCHAR
         data_tests:
           - not_null
           - accepted_values: {values: [current, "1-30", "31-60", "61-90", "91-120", "121+"]}
       - name: open_case_id
+        data_type: VARCHAR
       - name: assigned_agent_id
+        data_type: VARCHAR
       - name: contact_permissions
+        data_type: STRUCT("call" BOOLEAN, sms BOOLEAN, email BOOLEAN, push BOOLEAN)
         data_tests: [not_null]
       - name: permitted_call_start_local
+        data_type: TIME
       - name: permitted_call_end_local
+        data_type: TIME
       - name: sunday_contact_permitted
+        data_type: BOOLEAN
       - name: do_not_contact
+        data_type: BOOLEAN
         data_tests: [not_null]
       - name: collections_hold
+        data_type: BOOLEAN
         data_tests: [not_null]
       - name: hard_stop_flags
+        data_type: VARCHAR[]
       - name: hardship_status
+        data_type: VARCHAR
         data_tests:
           - not_null
           - accepted_values: {values: [none, possible, confirmed]}
       - name: hardship_source
+        data_type: VARCHAR
       - name: vulnerability_flag
+        data_type: BOOLEAN
       - name: expected_next_payroll_date
+        data_type: DATE
       - name: payroll_frequency_detected
+        data_type: VARCHAR
         data_tests: [not_null]
       - name: as_of_date
+        data_type: DATE
         data_tests: [not_null]
       - name: refreshed_at
+        data_type: TIMESTAMP WITH TIME ZONE
         data_tests: [not_null]
       - name: display_name_source
+        data_type: VARCHAR
       - name: primary_phone_e164_source
+        data_type: VARCHAR
       - name: email_source
+        data_type: VARCHAR
       - name: province_code_source
+        data_type: VARCHAR
       - name: time_zone_source
+        data_type: VARCHAR
       - name: preferred_language_source
+        data_type: VARCHAR
       - name: total_overdue_source
+        data_type: VARCHAR
       - name: contact_permissions_source
+        data_type: VARCHAR
       - name: do_not_contact_source
+        data_type: VARCHAR
       - name: collections_hold_source
+        data_type: VARCHAR
       - name: expected_next_payroll_date_source
+        data_type: VARCHAR
 
   - name: identity_crosswalk
     description: One row per (source_system, source_key) link.
     columns:
       - name: golden_customer_id
+        data_type: VARCHAR
         data_tests: [not_null]
       - name: source_system
+        data_type: VARCHAR
         data_tests:
           - not_null
           - accepted_values: {values: [crm, card, loan, deposit, collections, bureau]}
       - name: source_key
+        data_type: VARCHAR
         data_tests: [not_null]
       - name: match_score
+        data_type: DOUBLE
       - name: match_rule
+        data_type: VARCHAR
         data_tests: [not_null]
       - name: match_review_status
+        data_type: VARCHAR
         data_tests: [not_null]
       - name: linked_at
+        data_type: TIMESTAMP WITH TIME ZONE
         data_tests: [not_null]
       - name: valid_to
+        data_type: TIMESTAMP WITH TIME ZONE
 
   - name: c360_restricted
     description: Protected attributes. Compliance only. Never joined into features.
     columns:
       - name: golden_customer_id
+        data_type: VARCHAR
         data_tests: [unique, not_null]
       - name: gender_code
+        data_type: VARCHAR
       - name: marital_status
+        data_type: VARCHAR
       - name: citizenship_status
+        data_type: VARCHAR
       - name: household_size
+        data_type: INTEGER
       - name: dependants_count
+        data_type: INTEGER
       - name: newcomer_program_flag
+        data_type: BOOLEAN
       - name: newcomer_arrival_date
+        data_type: DATE
       - name: accessibility_needs_flag
+        data_type: BOOLEAN
       - name: accessibility_type
+        data_type: VARCHAR
       - name: vulnerability_type
+        data_type: VARCHAR
       - name: ccb_deposit_flag
+        data_type: BOOLEAN
       - name: customer_accent_region
+        data_type: VARCHAR

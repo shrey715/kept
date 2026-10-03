@@ -31,6 +31,7 @@ data = [
     "dbt-duckdb>=1.8,<1.10",
     "splink>=4.0",
     "soda-core-duckdb>=3.3",
+    "setuptools>=70",  # soda-core imports distutils, which Python 3.12 dropped
     "phonenumbers>=8.13",
     "python-dateutil>=2.9",
 ]
