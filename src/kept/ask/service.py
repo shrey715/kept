@@ -59,16 +59,19 @@ def _refuse(reason: RefusalReason, message: str) -> Refusal:
 
 _CONVENTIONS = """Conventions (from the data dictionary):
 - An open case has collections_cases.outcome IS NULL. A randomised case has assignment_method = 'random'.
-- Delinquency buckets, from days past due (dpd / current_dpd): 'current' (0), '1-30', '31-60', '61-90',
-  '91-120', '121-150', '151-180', '180+'. Use exactly these labels and compute them from dpd.
+- Delinquency buckets are 'current', '1-30', '31-60', '61-90', '91-120', '121-150', '151-180', '180+'.
+  When the question asks "by bucket", group by the stored bucket column (current_bucket, dpd_bucket) as it
+  is. Work a bucket out from dpd / current_dpd only when the question gives a days-past-due range.
 - A resolved promise has ptp_status in ('kept', 'partially_kept', 'broken'); open and cancelled are not
   resolved.
 - An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
 - contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
-  is the hour 0-23. Disputes and complaints raised in a period are contacts with dispute_raised_flag or
-  complaint_raised_flag; collections_cases.dispute_flag is only the case's current state."""
+  is the hour 0-23.
+- Disputes and complaints raised in a date range are events: count contact_history rows with
+  dispute_raised_flag (or complaint_raised_flag), dated by contact_ts_local, with no other filter (the type
+  exists only on collections_cases). collections_cases.dispute_date is just the latest dispute on a case."""
 
 
 def _describe(conn: duckdb.DuckDBPyConnection, policy: SqlPolicy) -> str:

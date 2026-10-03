@@ -123,3 +123,10 @@ def test_a_refusal_has_no_correctness() -> None:
         )
         is None
     )
+
+
+def test_a_wide_answer_matches_the_gold_by_number() -> None:
+    gold = {"gold_answer": "period,disputes\n15-22 Sep,875\n7-14 Sep,566", "gold_sources": ""}
+    wide = _answer(("disputes_target_period", "disputes_prior_period", "n"), ((875, 566, 1441),))
+    assert is_correct(_case("exact"), gold, wide) is True
+    assert is_correct(_case("exact"), gold, _answer(("a", "b", "n"), ((875, 500, 1441),))) is False

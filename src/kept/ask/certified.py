@@ -21,7 +21,7 @@ from kept.ask.metrics import CertifiedQuery
 
 _RESOLVED = "ptp_status IN ('kept','partially_kept','broken')"
 _PTP = """(SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date,
-        p.amount_paid_against, p.prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code,
+        p.amount_paid_against, least(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code,
         coalesce(a.site, 'self_serve') AS site
       FROM silver.promises_to_pay p
       LEFT JOIN silver.collections_cases c ON c.case_id = p.case_id
