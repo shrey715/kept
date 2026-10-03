@@ -21,7 +21,7 @@ models:
       +schema: gold
       +materialized: table
       +contract:
-        enforced: false   # flip to true once gold models are real (Track A)
+        enforced: true   # gold models are real: dbt fails a build whose columns or types drift from schema.yml
     features:
       +schema: features
       +materialized: table

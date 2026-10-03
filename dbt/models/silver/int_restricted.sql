@@ -1,5 +1,6 @@
 {# The 12 protected attributes per golden ID, for compliance (c360_restricted). Never joined into #}
-{# features or Ask; the lineage CI test enforces it. #}
+{# features or Ask; the lineage CI test enforces it. One row per golden ID, like c360_customer: a #}
+{# customer with no CRM record (bureau and accounts only) has no attributes, all null. #}
 with crm as (
     select x.golden_customer_id, c.*,
            struct_pack(ts := c.effective_from_ts, id := c.crm_customer_id) as recency
@@ -43,7 +44,7 @@ accent as (
     group by golden_customer_id
 )
 select
-    c.golden_customer_id,
+    g.golden_customer_id,
     c.gender_code,
     c.marital_status,
     c.citizenship_status,
@@ -56,6 +57,7 @@ select
     c.vulnerability_type,
     b.ccb_deposit_flag,
     a.customer_accent_region
-from crm_latest c
+from {{ ref('int_golden_clusters') }} g
+left join crm_latest c using (golden_customer_id)
 left join ccb b using (golden_customer_id)
 left join accent a using (golden_customer_id)
