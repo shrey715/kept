@@ -7,21 +7,100 @@ Team Sharpe Shooters, CIBC Collections Hackathon.
 - Data dictionary: [`docs/CIBC Hackathon - Data Dictionary.xlsx`](docs/)
 - **Who builds what, phases, integration gates, interfaces: [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md)**
 
-This is a skeleton: every function is a documented stub that raises `NotImplementedError`,
-and the tests are the spec. Make them pass.
+## Run it
 
-## Quick start
+### 1. Prerequisites
+
+| Tool | Version | Who needs it |
+|---|---|---|
+| Python + [uv](https://docs.astral.sh/uv/) | 3.12, uv ≥ 0.5 | everyone |
+| Node + [pnpm](https://pnpm.io/) | Node 22, pnpm ≥ 10 | whoever runs the web app (the demo machine) |
+| Google Chrome or Firefox | current | the demo |
+
+### 2. Install
 
 ```bash
-make setup          # core + dev tools (uv sync)
-make setup-a        # or -b / -c / -d: your track's heavy libraries
-make test-contract  # shared API: must always be green
-make test-a         # your track: red until you implement it
-make progress       # stubs remaining per track
+make setup                 # core + dev tools
+make setup-d               # or setup-a / -b / -c / setup-all: your track's libraries
+make web-setup             # web app (pnpm install in web/)
 ```
 
-Copy `.env.example` to `.env` for LLM keys. Put the organisers' files in `data/raw/`
-(see [`data/README.md`](data/README.md)); nothing under `data/` is committed.
+Copy `.env.example` to `.env` (free LLMs only: a local Ollama model and a free hosted tier).
+
+### 3. Data
+
+Download the release and lay it out under `data/` exactly as [`data/README.md`](data/README.md) says,
+then land it: `uv run kept land` (31 bronze tables in `data/warehouse/kept.duckdb`). Nothing under
+`data/` is ever committed.
+
+### 4. The demo (no warehouse needed)
+
+Two terminals:
+
+```bash
+make serve-demo            # API on :8000: the real engine and release gate over 12 demo cases
+make web                   # web app on :3000, forwarding /api to the API
+```
+
+Open <http://localhost:3000>: the landing tells the story; **Run the guided demo** walks the
+six-step script. Personas have direct links, e.g. `/signin?as=agent-7&next=/queue`,
+`/signin?as=hs-1&next=/approvals`, `/signin?as=tl-1&next=/approvals`, `/signin?as=c-1&next=/audit`.
+
+- Demo mode runs on a business-hours clock (shown in the header) so releases pass the real
+  calling-hours check at any time of day. Restarting the API resets the demo cases.
+- **Port 8000 taken** (VS Code often holds it): `uv run kept serve --demo --port 8010` and
+  `cd web && KEPT_API_URL=http://127.0.0.1:8010 pnpm dev`.
+- **Showing it from another machine on the network:** `cd web && KEPT_DEV_ORIGINS=<this machine's IP> pnpm dev`,
+  then open `http://<ip>:3000`. Without it the dev server serves the page but not its scripts.
+- **For the live demo**, use the production build (faster, no dev overlay):
+  `cd web && pnpm build && KEPT_API_URL=http://127.0.0.1:8000 pnpm start`.
+- `uv run kept serve --demo --reload` restarts the API when Python code changes (demo state resets).
+
+### 5. The pipeline on real data
+
+```bash
+uv run kept land           # A: raw -> bronze
+uv run kept build          # A: dbt bronze -> silver -> gold          (G1/G2)
+uv run kept match          # A: exact links + Splink                  (G1)
+uv run kept features       # D: dbt features -> Parquet -> Feast      (G2)
+uv run kept train          # D: uplift models, logged to MLflow       (after G2)
+uv run kept score          # D: a card for every open case            (G3)
+uv run kept serve          # D: the API on the real services          (G4)
+uv run kept nightly        # everyone: the steps above in order       (G4)
+```
+
+Commands marked with a gate land when that gate passes (`docs/TEAM_PLAN.md` §6).
+
+### 6. Tests
+
+```bash
+make test-contract         # shared API: always green
+make test-d                # one track (a / b / c / d)
+make lint typecheck
+make progress              # stubs left per track
+cd web && pnpm lint && npx tsc --noEmit
+```
+
+## What changed from the design, and why
+
+- **UI (D):** a Next.js app with Radix Themes instead of the plan's single static page, so the
+  demo covers every role's flow (queue, approvals, audit, Ask) and the guided script. It needs
+  Node on the demo machine.
+- **Red-tier release in two steps (D):** a hardship specialist approves, then a second person
+  releases after a fresh safety recheck, instead of both names on one form. The handoff is real:
+  the proposal waits in the second person's inbox.
+- **Safety checks run at the proposed contact time (D):** a 06:00 batch would otherwise block
+  every call; the release gate rechecks everything again at release.
+- **SHAP from LightGBM itself (D):** `pred_contrib` instead of the `shap` package, converted to
+  probability points per feature.
+- **Feast offline store is `file` (D):** the DuckDB offline store needs `ibis`; the file store reads
+  the same Parquet export.
+
+## AI tools we used, and for what
+
+- **Claude Code (D):** pair-programming the Track D code and tests, the web app, and the
+  dataset checks behind the legacy-code and random-assignment answers. Every change went through
+  the tests and a person's review before merging.
 
 ## Layout
 

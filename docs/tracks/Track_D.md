@@ -3,9 +3,9 @@
 Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: parallel tasks for Phases 1-5 done
-- Working on: nothing; what's left needs other tracks (see Open questions)
-- Waiting on: G0 (merge), then G2 for real features/labels, G3/G4 for real services
+- Phase: G1 work done (dbt features on real silver); ready to integrate
+- Working on: nothing until G1 passes
+- Waiting on: G1 sign-off, then G2 (real gold + crosswalk) for account/deposit/text features, labels and training
 
 ## Done
 - `DuckDBAuditLog` + `new_event_id` (early provider, Q2): `tests/common/test_audit.py` 7/7. Branch `track-d`.
@@ -22,6 +22,8 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 5: `Releaser` + `cancel_pending` (`test_release.py` 34/34); `/cases/{id}/nba` and `/proposals/{id}/decision` with access checks (`tests/app` 8/8, `/ask` is B's); `kept serve --demo`.
 - Frontend: Next.js app in `web/` (case card + review/release, Ask, steward). Screenshot-checked on desktop and phone.
 - Product flows: persona sign-in (deep link `/signin?as=agent-7&next=/queue`), ranked queue, case card with what-if sizing and interactive probabilities, approvals inbox (Red two-step, Green batch), audit trail, guided demo (§7 script), scroll-driven 3D landing (light and dark). API routes `/queue`, `/approvals`, `/audit`, `/cases/{id}/customer`, `/demo/cases/{id}/notes`; `tests/app/test_demo_flows.py` 9/9.
+
+- **G1 (3 Oct, this laptop, real data):** `kept land` (31 bronze tables, counts = release README); `dbt build --select bronze silver` **38/38 pass** (4m11s, DuckDB capped at 2.5 GB: see below); `dbt build --select path:models/features identity_crosswalk` **13/13 pass** (5 s) on real silver + stub gold. `features.case_features`: 96,000 rows = every case open at 2026-09-28 06:00 in silver, no duplicates, columns = feature registry. **Parity on 200 random real cases: 200/200 match the Python reference definitions.** Built features: broken_promises_90d (mean 0.34), kept_promise_ratio (45% non-null), answer_rate (58%), answer_rate_after_18h (40%), payment_link_usage (75%), contacts_last_7d (max 8: real cap breaches), cohort_recovery_rate (0.965–0.999: little variance), cohort_kept_rate (0.45–0.64).
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -53,12 +55,25 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Demo clock:** `kept serve --demo` runs on a business-hours clock (shown in the header) so releases can pass the real calling-hours check at any time of day.
 - **For B:** `/ask` is now a one-line pass-through to `services.ask` (it raised before even with a service injected). The demo Ask answers the kept-rate metric with real SQL over `data/raw`; everything else is B's.
 
+- **Features read silver through `ref()`** (was `source('silver', ...)` until A's silver existed), so dbt orders them after A's models. The fixture parity test now selects only the feature models.
+- **Memory on 14 GB laptops:** `kept land` and `dbt build --select silver` were OOM-killed at default DuckDB settings (≈4.7 GB). With `memory_limit = 2.5–3GB`, `threads = 1`, `preserve_insertion_order = false` both pass (peak 3.7 GB). I used a local profile copy in `data/warehouse/local/` (not committed); **for A:** worth adding `settings: {memory_limit: ...}` to `dbt/profiles.yml` and the same `SET`s in `connect()` for the demo laptop.
+
 ## Open questions
-- **paid_14d source (§9, D + A):** dated payment events exist in `loan_instalments` (`paid_date`, `paid_amount`), `card_statements` (`payments_amount`, `first_payment_after_due_date`, per cycle), `transactions` (sample only) and `contact_history.payment_taken_flag`. Proposal for A: loans from `loan_instalments.paid_date`; cards from `transactions` where present, else `card_statements` (cycle-level, so `paid_14d` is approximate for cards). Needs A's silver.
+- **paid_14d source (§9, D + A, by G2). Proposal for Satvik, from counts on the raw data (3 Oct):**
+  `paid_14d` = any dated payment in (decision, decision + 14 days], from the union of:
+  1. `contact_history` at the contact's time: `payment_taken_flag` (20,072), `link_payment_flag` (26,581), `app_payment_after_contact_flag` (38,084). All products.
+  2. `promises_to_pay.paid_date` for `kept` / `partially_kept` (117,549 dated). All products.
+  3. `loan_instalments.paid_date` (14.2M dated; `partially_paid` rows have no date). Personal, auto, LOC, mortgage.
+  4. `transactions` debits with `txn_type` `card_payment` / `loan_payment` and a `target_account_id` (≈1.17M; customer sample only): confirms a payment, never denies one.
+  5. `card_statements.first_payment_after_due_date` where set (136K): late card payments only.
+  Gaps: on-time card payments outside the transactions sample have only cycle-level `payments_amount`; overdraft has monthly snapshots only. Proposed: label those rows only when a source above fires, mark the rest `paid_14d_known = false`, and leave them out of training rather than guess.
+  **Ask for A:** keep these five tables in silver with their dates, and the three `contact_history` flags.
 - **Still needs other tracks:** `kept train` (real features + labels, after G2), `kept score` and real `kept serve` (A's `DuckDBC360Reader`, G3/G4), `kept nightly` (every track's subcommands), hardship programmes on the banner (C's `eligible_programs`).
 - **G0 contract proposal:** `GoldenCustomer` should carry `hard_stop_flags: frozenset[HardStop]` (A already computes it in `kept.data.gold.hard_stop_flags`). Today gold only has a yes/no `collections_hold`, so the context builder labels an unexplained hold INSOLVENCY. Additive change across the four golden-record copies (plan §8), A's files.
 
 ## Log
+- 3 Oct: G1: bronze + silver built on real data here; dbt features 13/13 on real silver, 96,000 open cases, parity 200/200. Stop message posted.
+- 3 Oct: after the Phase 1 merge (NEXT_STEPS §4): README run steps; paid_14d proposal for A; G0 PR #10 reviewed (dbt pre-hook bug blocking, ExtractionStore needs for_case); extraction confirm/edit panel and programme chips on the case card (demo-backed until G0 merges).
 - 3 Oct: Radix redesign, product flows, two-step Red release, 3D landing; all pushed to track-d / PR #2.
 - 3 Oct: Phases 3-5 parallel tasks done against fakes; Next.js frontend; demo server.
 - 3 Oct: dataset downloaded and laid out under data/; Phase 2 parallel tasks done; continuing into later phases against fakes.

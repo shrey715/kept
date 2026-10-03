@@ -21,6 +21,9 @@ export type Role = S["Role"];
 export type Action = S["Action"];
 export type Tier = S["ReleaseTier"];
 export type AuditKind = S["AuditKind"];
+export type TextExtraction = S["TextExtraction"];
+/** Demo-only route shape (kept.app.demo): a note and what was read from it. */
+export type NoteExtraction = { note: string; extraction: TextExtraction };
 
 export class ApiError extends Error {
   constructor(
@@ -65,6 +68,15 @@ export const api = {
     call<ReleaseResult>(`/proposals/${encodeURIComponent(d.proposal_id)}/decision`, post(d)),
   note: (caseId: string, text: string, w: Who) =>
     call<NBACard>(`/demo/cases/${encodeURIComponent(caseId)}/notes`, post({ text, user_id: w.userId, role: w.role })),
+  /** A case's notes and their extractions. Demo now; C's store via a case-level read after G0. */
+  extractions: (caseId: string, w: Who) =>
+    call<NoteExtraction[]>(`/demo/cases/${encodeURIComponent(caseId)}/extractions?${q(w)}`),
+  /** Confirm or edit at wrap-up. Demo route in demo mode, C's /extractions route otherwise. */
+  confirmExtraction: (sourceId: string, agentId: string, edits: Record<string, unknown>, demo: boolean) =>
+    call<TextExtraction>(
+      `${demo ? "/demo" : ""}/extractions/${encodeURIComponent(sourceId)}/confirm`,
+      post({ agent_id: agentId, edits }),
+    ),
   ask: (question: string, w: Who) => call<AskResponse>("/ask", post({ question, user_id: w.userId, role: w.role })),
   stewardQueue: () => call<StewardItem[]>("/steward/queue"),
   stewardResolve: (itemId: string, verdict: string, stewardId: string) =>
