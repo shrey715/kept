@@ -44,7 +44,17 @@ class SetFitBackfill:
 
         model = SetFitModel.from_pretrained(self.base_model)
         data = Dataset.from_dict({"text": [t.text for t in texts], "label": [str(y) for y in labels]})
-        args = TrainingArguments(num_epochs=1, show_progress_bar=False, report_to="none", save_strategy="no")
+        # 20 pairs per example (SetFit's classic setting): the default uses every unique pair,
+        # 145K pairs from 518 labels, millions from 2,000. Long transcripts capped at 256 tokens.
+        args = TrainingArguments(
+            num_epochs=1,
+            num_iterations=20,
+            batch_size=32,
+            max_length=256,
+            show_progress_bar=False,
+            report_to="none",
+            save_strategy="no",
+        )
         Trainer(model=model, args=args, train_dataset=data).train()
         self._model = model
 
