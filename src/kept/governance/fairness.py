@@ -69,29 +69,37 @@ def fairness_report(
 ) -> str:
     """Markdown report: for each protected attribute, the share of cases that get each outcome per group,
     and the lowest-to-highest ratio (flagged under four fifths). Cases are joined to the protected
-    attributes by golden_customer_id; a case with no match is group "unknown". Groups below min_group_size
-    are listed but not compared; an attribute with more than max_groups distinct values (a free-form
-    field or a date) is skipped.
+    attributes by golden_customer_id. Groups below min_group_size are listed but not compared; a case
+    whose attribute is blank is reported on its own and not compared (missing data is not a group); an
+    attribute with more than max_groups distinct values (a free-form field or a date) is skipped.
     A flag is a question to ask, not a verdict: a hardship review is *meant* to reach customers who are
     in hardship, so a gap there can be correct. The report says what the rates are, compliance decides."""
     joined = cards.merge(restricted, on="golden_customer_id", how="left")
-    actions = joined["action"]
-    summary = ["| attribute | " + " | ".join(OUTCOMES) + " |", "|---|" + "---|" * len(OUTCOMES)]
+    summary = [
+        "| attribute | " + " | ".join(OUTCOMES) + " | cases with the attribute blank |",
+        "|---|" + "---|" * (len(OUTCOMES) + 1),
+    ]
     sections: list[str] = []
     for attr in attributes:
         if attr not in joined.columns or joined[attr].nunique(dropna=True) > max_groups:
             continue
-        groups = joined[attr].astype("string").fillna("unknown").tolist()
+        # A blank attribute is missing data, not a group: show its rates, but compare only real groups.
+        blank = joined[attr].isna()
+        known = joined[~blank]
+        groups = known[attr].astype("string").tolist()
         reports = {
-            o: recommendation_rates(_outcome(actions, o), groups, min_group_size=min_group_size)
+            o: recommendation_rates(_outcome(known["action"], o), groups, min_group_size=min_group_size)
             for o in OUTCOMES
         }
+        n_blank = int(blank.sum())
+        any_blank = _outcome(joined.loc[blank, "action"], "any contact action") if n_blank else []
+        blank_note = f"{n_blank:,} ({sum(any_blank) / n_blank:.0%} get a contact action)" if n_blank else "0"
         summary.append(
             f"| {attr} | "
             + " | ".join(f"{r.min_ratio:.2f}{' FLAG' if r.flagged else ''}" for r in reports.values())
-            + " |"
+            + f" | {blank_note} |"
         )
-        sizes = joined.assign(_g=groups).groupby("_g").size()
+        sizes = known.assign(_g=groups).groupby("_g").size()
         lines = [
             f"### {attr}",
             "",
@@ -99,9 +107,15 @@ def fairness_report(
             "|---|---|" + "---|" * len(OUTCOMES),
         ]
         for g in sorted(sizes.index, key=str):
-            rates = [reports[o].rates.get(g) for o in OUTCOMES]
-            cells = " | ".join("n/a (too few)" if x is None else f"{x:.1%}" for x in rates)
+            cells = " | ".join(
+                "n/a (too few)" if (x := reports[o].rates.get(g)) is None else f"{x:.1%}" for o in OUTCOMES
+            )
             lines.append(f"| {g} | {sizes[g]:,} | {cells} |")
+        if n_blank:
+            cells = " | ".join(
+                f"{sum(_outcome(joined.loc[blank, 'action'], o)) / n_blank:.1%}" for o in OUTCOMES
+            )
+            lines.append(f"| *(blank, not compared)* | {n_blank:,} | {cells} |")
         sections.append("\n".join(lines))
     head = (
         f"Cases scored: {len(cards):,}. Compared by protected attribute from `gold.c360_restricted` "
