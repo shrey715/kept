@@ -15,13 +15,18 @@ from pathlib import Path
 
 import duckdb
 
-from kept.app.api import Services
+from kept.app.api import QueueItem, Services
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
 from kept.config import EXPORT_DIR, REPO_ROOT, WAREHOUSE_PATH
+from kept.contracts.enums import Action, HardshipSignal, HardshipStatus, HardStop, ReleaseTier, Role
 from kept.contracts.interfaces import AuditLog
+from kept.contracts.nba import CaseContext, ProposalStatus
 from kept.data.c360_reader import DuckDBC360Reader
+from kept.data.identity.steward import load_steward_queue
 from kept.features.store import FeastFeatureProvider
+from kept.governance.access import mask_name
+from kept.hardship.programs import HardshipProgram, ProgramCase, eligible_programs
 from kept.nba.context import KeptContextBuilder, duckdb_case_reader
 from kept.nba.engine import KeptEngine
 from kept.nba.release import Releaser
@@ -70,6 +75,7 @@ def real_services(
         scorer=pickle.loads(model.read_bytes()),  # our own file, written by kept train
         audit_log=audit_log,
         proposals=proposals,
+        programs=_programs(conn),
     )
     typed: dict[str, str] = {}  # notes typed in this session: source_id -> text
 
@@ -94,6 +100,8 @@ def real_services(
         add_note=_live_extraction(warehouse, audit_log, typed),
         extractions=store,
         note_text=note_text,
+        steward=load_steward_queue(warehouse=warehouse),
+        scored_queue=_scored_queue(conn),
     )
 
 
@@ -121,3 +129,123 @@ def _live_extraction(warehouse: Path, audit_log: AuditLog, typed: dict[str, str]
         typed[source.source_id] = text
 
     return add
+
+
+def _scored_queue(conn: duckdb.DuckDBPyConnection):  # type: ignore[no-untyped-def]
+    """/queue from `kept score`'s nba.cards: an agent's own cases, other roles the top 500, best
+    first. Names masked for every role but compliance (governance.access.masked_view's rule)."""
+
+    def queue(user_id: str, role: Role) -> list[QueueItem]:
+        where, params = ("where assigned_agent_id = ?", [user_id]) if role is Role.AGENT else ("", [])
+        with conn.cursor() as c:
+            if not c.execute(
+                "select count(*) from duckdb_tables() where schema_name = 'nba' and table_name = 'cards'"
+            ).fetchone()[0]:  # type: ignore[index]
+                return []  # kept score hasn't run
+            rows = c.execute(
+                "select case_id, golden_customer_id, display_name, total_overdue, max_dpd, current_bucket,"
+                " headline, action, tier, expected_value, hardship, hard_stop, no_action_reason"
+                f" from nba.cards {where} order by action is null, expected_value desc, case_id limit 500",
+                params,
+            ).fetchall()
+        return [
+            QueueItem(
+                case_id=r[0],
+                golden_customer_id=r[1],
+                display_name=r[2] if role is Role.COMPLIANCE else mask_name(r[2]),
+                total_overdue=r[3],
+                max_dpd=r[4],
+                current_bucket=r[5],
+                headline=r[6],
+                action=Action(r[7]) if r[7] else None,
+                tier=ReleaseTier(r[8]) if r[8] else None,
+                proposal_status=ProposalStatus.PENDING if r[7] else None,
+                expected_value=r[9],
+                hardship=r[10],
+                hard_stop=r[11],
+                no_action_reason=r[12],
+            )
+            for r in rows
+        ]
+
+    return queue
+
+
+_LEVEL = {HardshipStatus.NONE: HardshipSignal.NONE, HardshipStatus.POSSIBLE: HardshipSignal.POSSIBLE,
+          HardshipStatus.CONFIRMED: HardshipSignal.CLEAR}  # fmt: skip
+
+
+def _programs(conn: duckdb.DuckDBPyConnection):  # type: ignore[no-untyped-def]
+    """C's eligible_programs for the hardship banner: the hardship_programs table loaded once, the
+    case's facts read per card. ponytail: uses in the last 12 months = hardship plans the
+    customer's cases started in 12 months; a broken plan = a broken promise in 90 days."""
+    import json
+
+    with conn.cursor() as c:
+        programs = [
+            HardshipProgram(
+                program_id=r[0],
+                version=r[1],
+                program_name=r[2],
+                product_types=frozenset(json.loads(r[3])),
+                policy_section=r[4] or "",
+                min_hardship_level=HardshipSignal(r[5]),
+                max_dpd=r[6],
+                min_months_on_book=r[7],
+                max_uses_12m=r[8],
+                excludes_insolvency=bool(r[9]),
+                excludes_broken_plan_90d=bool(r[10]),
+                requires_income_evidence=bool(r[11]),
+                payment_reduction_pct=r[12],
+                duration_months=r[13],
+                approver_level=Role(r[14]),
+                effective_from=r[15],
+                effective_to=r[16],
+            )
+            for r in c.execute(
+                "select program_id, version, program_name, product_types, policy_section, min_hardship_level,"
+                " max_dpd, min_months_on_book, max_uses_12m, excludes_insolvency, excludes_broken_plan_90d,"
+                " requires_income_evidence, payment_reduction_pct, duration_months, approver_level,"
+                " effective_from, effective_to from silver.hardship_programs"
+            ).fetchall()
+        ]
+
+    def names(ctx: CaseContext) -> list[str]:
+        today = ctx.now.date()
+        with conn.cursor() as c:
+            row = c.execute(
+                """select c.primary_product, coalesce(c.current_dpd, 0),
+                       coalesce(ca.months_on_book,
+                                date_diff('month', coalesce(la.origination_date, da.open_date), ?), 0),
+                       (select count(*) from silver.collections_cases p
+                        where p.coll_customer_ref = c.coll_customer_ref
+                          and p.hardship_plan_start > ? - interval 12 month),
+                       exists (select 1 from silver.promises_to_pay b
+                               where b.crm_customer_id = c.coll_customer_ref
+                                 and b.ptp_status = 'broken' and b.ptp_due_date > ? - interval 90 day)
+                   from silver.collections_cases c
+                   left join silver.card_accounts ca on ca.card_account_id = c.primary_account_id
+                   left join silver.loan_accounts la on la.loan_id = c.primary_account_id
+                   left join silver.deposit_accounts da on da.deposit_account_id = c.primary_account_id
+                   where c.case_id = ?""",
+                [today, today, today, ctx.case_id],
+            ).fetchone()
+        if row is None:
+            return []
+        product, dpd, months, uses, broken = row
+        level = _LEVEL[ctx.hardship_status]
+        if ctx.vulnerable and level is HardshipSignal.NONE:
+            level = HardshipSignal.POSSIBLE
+        case = ProgramCase(
+            product_type=product,
+            hardship_level=level,
+            dpd=int(dpd),
+            months_on_book=int(months),
+            uses_last_12m=int(uses),
+            broken_plan_90d=bool(broken),
+            insolvency=bool(ctx.hard_stop_flags & {HardStop.INSOLVENCY, HardStop.BANKRUPTCY}),
+        )
+        eligible = eligible_programs(case, programs, as_of=today)
+        return [f"{p.program_name} ({p.program_id} {p.version})" for p in eligible]
+
+    return names
