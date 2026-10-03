@@ -10,7 +10,8 @@ G0–G4 have passed and every track's code is on `main`. The track and phase rul
 don't ask which track or phase, and don't work on `track-a/b/c/d`. Follow `docs/NEXT_STEPS.md`:
 - Branch off `main` for each change, named by purpose (`docs/...`, `fix/...`, `bench/...`); PR to `main`,
   CI green, merge commit (never squash or rebase), the owner merges.
-- Code freeze: only demo blockers, docs and deliverables. No new features or refactors.
+- New features and visual work (e.g. data viz) are welcome until the deadline: keep each one a small PR that
+  keeps `main` demo-ready (tests and lint green, `kept nightly` and `kept serve` still work).
 - After 19:00 IST, don't change anything under `kept/ask/` (the benchmark runs on the system as it is).
   Nothing is pushed after 21:00 IST.
 - Commit messages: one plain line, no AI attribution trailers.
