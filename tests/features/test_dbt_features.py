@@ -104,6 +104,10 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
             c.register("df", df)
             c.execute(f"create table silver.{name} as select * from df")
             c.unregister("df")
+        # A's real crosswalk needs the match step's output; the features only join these columns
+        c.execute("create schema gold")
+        c.execute("""create table gold.identity_crosswalk (golden_customer_id varchar, source_system varchar,
+                     source_key varchar, valid_to timestamptz)""")
 
     import os
 
@@ -114,7 +118,6 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> tuple[pd.DataFrame, dict[
             "build",
             "--select",  # the feature models over the fixture silver, not A's silver models
             "path:models/features",
-            "identity_crosswalk",
             "--project-dir",
             str(DBT),
             "--profiles-dir",
