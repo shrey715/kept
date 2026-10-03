@@ -82,20 +82,25 @@ CERTIFIED_QUERIES: dict[str, CertifiedQuery] = {
     for q in (
         # Accounts in a delinquent bucket at one snapshot vs the same account's next snapshot.
         # date_from/date_to bound the START snapshot; a quarter-end to quarter-end roll is the
-        # release's snapshot cadence. ponytail: insolvency holds are matched on primary_account_id only.
+        # release's snapshot cadence. Buckets are computed from dpd, never read from dpd_bucket:
+        # the source bucket disagrees with dpd on ~4% of rows (checked against the dev gold answer).
+        # ponytail: insolvency holds are matched on primary_account_id only.
         CertifiedQuery(
             "roll_rate",
             f"""WITH s AS (
-  SELECT account_id, product_type, month_end_date, dpd_bucket,
-         lead(dpd_bucket) OVER (PARTITION BY account_id ORDER BY month_end_date) AS end_bucket
+  SELECT account_id, product_type, month_end_date, dpd,
+         lead(dpd) OVER (PARTITION BY account_id ORDER BY month_end_date) AS end_dpd
   FROM silver.account_monthly_snapshot m
-  WHERE NOT coalesce(write_off_flag, false)
+  WHERE dpd IS NOT NULL AND NOT coalesce(write_off_flag, false)
     AND NOT EXISTS (SELECT 1 FROM silver.collections_cases c
-                    WHERE c.primary_account_id = m.account_id AND c.insolvency_hold_flag))
-SELECT {{group_by_select}} avg(CASE WHEN list_position({_BUCKETS}, end_bucket) > list_position({_BUCKETS}, dpd_bucket)
-                                    THEN 1.0 ELSE 0.0 END) AS roll_rate, count(*) AS n
-FROM s WHERE 1=1 {{where}} {{group_by}}""",
-            ("dpd_bucket <> 'current'", "end_bucket IS NOT NULL"),
+                    WHERE c.primary_account_id = m.account_id AND c.insolvency_hold_flag)),
+b AS (
+  SELECT product_type, month_end_date, end_dpd, least(7, (dpd + 29) // 30) AS start_rank, least(7, (end_dpd + 29) // 30) AS end_rank,
+         list_extract({_BUCKETS}, least(7, (dpd + 29) // 30) + 1) AS dpd_bucket
+  FROM s)
+SELECT {{group_by_select}} avg(CASE WHEN end_rank > start_rank THEN 1.0 ELSE 0.0 END) AS roll_rate, count(*) AS n
+FROM b WHERE 1=1 {{where}} {{group_by}}""",
+            ("start_rank > 0", "end_dpd IS NOT NULL"),
             frozenset({"product_type", "dpd_bucket"}),
             frozenset({"product_type", "dpd_bucket"}),
             "month_end_date",

@@ -19,6 +19,8 @@ _SYSTEM = """You write one DuckDB SELECT query that answers a collections analys
 Rules: SELECT only, one statement. Use only these tables and columns, always schema-qualified
 (silver.collections_cases, never collections_cases). Name every column, never SELECT *. For any
 aggregate also return count(*) AS n, the size of each group. Do not filter on protected attributes.
+Bucket columns (dpd_bucket, current_bucket) disagree with the days-past-due column on ~4% of rows and dpd is
+missing on ~8%: work out buckets from dpd / current_dpd and leave out rows where dpd is NULL.
 Reply with the SQL only, no explanation.
 
 {schema_doc}

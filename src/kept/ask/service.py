@@ -51,6 +51,23 @@ def _refuse(reason: RefusalReason, message: str) -> Refusal:
     return Refusal(reason=reason, message=message)
 
 
+def build_sql_policy(conn: duckdb.DuckDBPyConnection, contract: DataContract) -> SqlPolicy:
+    """The guard's policy: the contract's Ask tables and blocked columns, plus the real columns of
+    each allowed table (read from the warehouse) so the star rule knows what a star would return."""
+    allowed = frozenset(t.lower() for t in contract.ask_allowed_tables)
+    cols: dict[str, set[str]] = {}
+    for schema, table, col in conn.execute(
+        "SELECT table_schema, table_name, column_name FROM information_schema.columns"
+    ).fetchall():
+        if (name := f"{schema}.{table}".lower()) in allowed:
+            cols.setdefault(name, set()).add(col.lower())
+    return SqlPolicy(
+        allowed_tables=allowed,
+        blocked_columns=frozenset(c.lower() for c in contract.ask_blocked_columns()),
+        table_columns={t: frozenset(c) for t, c in cols.items()},
+    )
+
+
 class CollectionsAsk:
     def __init__(
         self,
@@ -246,17 +263,7 @@ class CollectionsAsk:
         return _FALLBACK  # numbers only from rows: an ungrounded or missing narration is dropped
 
     def _sql_policy(self) -> SqlPolicy:
-        cols: dict[str, set[str]] = {}
-        for schema, table, col in self._conn.execute(
-            "SELECT table_schema, table_name, column_name FROM information_schema.columns"
-        ).fetchall():
-            if (name := f"{schema}.{table}".lower()) in self._allowed:
-                cols.setdefault(name, set()).add(col.lower())
-        return SqlPolicy(
-            allowed_tables=self._allowed,
-            blocked_columns=self._blocked,
-            table_columns={t: frozenset(c) for t, c in cols.items()},
-        )
+        return build_sql_policy(self._conn, self._contract)
 
     def _schema_doc(self, policy: SqlPolicy) -> str:
         return "\n".join(

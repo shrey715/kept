@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 3 done (parallel tasks, against fakes). Stopped as NEXT_STEPS says.
+- Phase: 3 done; G1 check for B done (guard on real silver). G1 opens when C reports Phase 2.
 - Working on: nothing
-- Waiting on: G0 PR #10 (apply my `.env.example` lines), then G1 (A's real silver) for the guard on 10 real questions
+- Waiting on: C's Phase 2 stop message (G1), then G2
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -19,6 +19,8 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - Phase 3: `kept/ask/lookup.py` (`generate_candidates`, `normalize_result`, `majority_result`), `kept/ask/grounding.py`, `kept/ask/service.py` (`CollectionsAsk.ask`). 198 Ask tests pass; metric SQL also passes the guard on the 8-table Ask list. `/ask` route and its test were already on main (D). PR: https://github.com/shrey715/kept/pull/9
 
 - G0 lines: reviewed PR #10; the 16 Ask tables cover B's SQL; picked Gemini Flash-Lite (`gemini/gemini-3.5-flash-lite`, `GEMINI_API_KEY`, Groq 8B as the spare) and posted the `.env.example` lines as a comment on #10.
+
+- G1 check (17:16): built silver locally for the 8 Ask tables (`kept land`, then `dbt build`: 8 of 8 models OK, 44 s). `scripts/ask_g1_check.py` runs the dev answers' reference SQL through `guard_sql` with the real contract and real silver columns (`build_sql_policy`): all 12 allowed, 9 match the gold answers exactly; BQ-010 and BQ-011 match once written for silver (`channel_v2` and the date parsing are already cleaned there); BQ-017 is covered by the certified roll rate. All 14 certified metrics pass the guard and run on real silver.
 
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
@@ -34,6 +36,8 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - The gateway generates its own event ids (uuid4) so it doesn't depend on Track D's `new_event_id` stub.
 
 ## Open questions
+- **Gold SQL drops a date format (matters for scoring).** The raw `account_monthly_snapshot.month_end_date` has 4 formats (ISO 90%, DD/MM 3.3%, MM/DD 3.3%, YYYYMMDD 3.3%). The reference SQL parses 3 and silently drops MM/DD rows, so its BQ-017 counts are ~6% lower than silver's (card 2,699 vs 2,870). Our roll rate on all rows: card 4.9 (gold 4.9), student_loc 25.0 (25.0), chequing 4.7 (5.0), mortgage 3.4 (3.6), auto 8.0 (7.4), personal 5.5 (4.9), unsecured 5.3 (5.9). The tolerance is ±0.5 pts, so some products would fail against the gold. We use all the data (correct); matching the gold means copying its omission. Team call.
+- **For A (silver):** `dpd_bucket` / `current_bucket` are still the raw source values: 3.7% of rows in `account_monthly_snapshot`, `card_accounts` and `loan_accounts` disagree with `dpd` (461,396 snapshot rows), `dpd` is NULL on 8% (1.0M snapshot rows), and 1% of `collections_cases.current_bucket`. Ask computes buckets from `dpd`, but a clean derived column in silver would help everyone.
 - Agents are only checked for case ids named in the question. A lookup like "average DPD by queue" is not filtered to `own_case_ids`, so an agent sees aggregates over every case. Decide at G1 whether agent lookups get a row filter (needs `assigned_agent_id` in the allowed columns) or are limited to metrics.
 - Which silver tables does the Ask table list (G0) include? Certified SQL reads collections_cases, promises_to_pay, agents, contact_history, account_monthly_snapshot, card_accounts, loan_accounts, deposit_accounts.
 - Refusal labels: only dev answers say "Refuse: …" (BQ-018, BQ-024, BQ-031). The scorecard needs a rule for the hidden ones. The docs say nothing (release README: "deciding which is part of the challenge").
@@ -41,6 +45,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-03 17:16: G1 check done on real silver (see Done); fixed the certified roll rate to use `dpd`, not the raw bucket; pushed.
 - 2026-10-03 15:49: G0 review comment posted on PR #10 (Ask model, table list); Phase 3 done, stopped.
 - 2026-10-03 15:47: Phase 3 parallel tasks done (PR #9); free Ask model research done, waiting on the pick.
 - 2026-10-03 ~15:15: pulled main (all Phase 1 PRs merged), started Phase 3 per docs/NEXT_STEPS.md.
