@@ -3,7 +3,7 @@
 
 Reads silver tables with the data dictionary's names (K2). Tables used, for the Ask table list at G0:
 collections_cases, promises_to_pay, agents, contact_history, account_monthly_snapshot,
-card_accounts, loan_accounts, deposit_accounts. Values come back as ratios (0..1), CAD or days;
+card_accounts, loan_accounts, deposit_accounts, channel_capacity. Values come back as ratios (0..1), CAD or days;
 the narration turns ratios into percentages. Every query ends with `n`, the group size.
 
 Date bounds are inclusive and apply to the metric's own date column (the roll-rate start snapshot,
@@ -115,10 +115,20 @@ FROM b WHERE 1=1 {{where}} {{group_by}}""",
             frozenset({"product_type", "dpd_bucket"}),
             "month_end_date",
         ),
-        _cases(
+        # Cases joined to their agent, so the rate can be compared between vulnerable-certified agents and
+        # the rest, within randomised or hardship cases (the randomised pilot question).
+        CertifiedQuery(
             "cure_rate",
-            "avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate",
+            """SELECT {group_by_select} avg(CASE WHEN cure_flag THEN 1.0 ELSE 0.0 END) AS cure_rate, count(*) AS n
+FROM (SELECT k.primary_product, k.queue, k.province_code, k.current_bucket, k.assignment_method,
+        k.hardship_flag, k.cure_flag, k.case_open_date, k.insolvency_hold_flag, k.deceased_hold_flag,
+        a.vulnerable_customer_certified AS agent_vulnerable_certified
+      FROM silver.collections_cases k
+      LEFT JOIN silver.agents a ON a.agent_id = k.assigned_agent_id) t
+WHERE 1=1 {where} {group_by}""",
             _HOLDS,
+            _CASE_COLS | {"assignment_method", "hardship_flag", "agent_vulnerable_certified"},
+            _CASE_COLS | {"assignment_method", "hardship_flag", "agent_vulnerable_certified"},
             "case_open_date",
         ),
         _ptp("promise_kept_rate", "avg(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate"),
@@ -129,11 +139,17 @@ FROM b WHERE 1=1 {{where}} {{group_by}}""",
         _contacts(
             "ptp_rate", "avg(CASE WHEN ptp_made_flag THEN 1.0 ELSE 0.0 END) AS ptp_rate", ("rpc_flag",)
         ),
-        _contacts(
+        # The channel's unit cost per contact attempt (channel_capacity.unit_cost_cad), weighted by the attempts
+        # made. Averaging contact_history.contact_cost_cad instead gives a different number for calls (1.46
+        # outbound, 3.00 inbound, against the 2.40 unit cost), and the reference answer is the unit cost.
+        CertifiedQuery(
             "cost_per_contact",
-            "sum(contact_cost_cad) / count(*) AS cost_per_contact",
-            _NO_SYSTEM,
-            _CONTACT_COLS | {"channel"},
+            "SELECT {group_by_select} sum(unit_cost_cad * used_units) / nullif(sum(used_units), 0) AS cost_per_contact, "
+            "sum(used_units) AS n FROM silver.channel_capacity WHERE 1=1 {where} {group_by}",
+            ("used_units > 0",),
+            frozenset({"channel", "time_band"}),
+            frozenset({"channel", "time_band"}),
+            "date",
         ),
         _contacts(
             "cost_per_rpc",

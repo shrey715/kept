@@ -161,7 +161,12 @@ def answer_row(question_id: str, response: AskResponse) -> dict[str, object]:
             for r in response.rows[:50]:
                 w.writerow([_cell(c, v) for c, v in zip(response.columns, r, strict=False)])
         text = (buf.getvalue() + response.narrative).strip()
-        sources = response.sql or "; ".join(f"{c.document_id} {c.section}" for c in response.citations)
+        sources = response.sql or "; ".join(
+            f"{c.document_id}, {c.section}"
+            if c.document_id.startswith("text.")
+            else f"{c.document_id} {c.section}"
+            for c in response.citations
+        )
         return {"question_id": question_id, "answer": text, "sql_or_sources": sources, "refused": False}
     message = response.message if isinstance(response, Refusal) else response.question
     return {"question_id": question_id, "answer": f"Refuse: {message}", "sql_or_sources": "", "refused": True}

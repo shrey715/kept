@@ -18,8 +18,9 @@ from kept.contracts.ask import Citation
 _OPEN_END = "9999-12-31"  # effective_to of a document that is still current (ISO strings sort as dates)
 _SNIPPET_CHARS = 1500
 _SPLIT_OVER = 800  # a section longer than this is split into its paragraphs (FAQ answers, long policies)
-# When documents disagree the policy wins: FAQs, call scripts and incident notes lag behind it.
-_LOW_AUTHORITY = frozenset({"faq", "call_script", "incident_report", "release_note"})
+# When documents disagree the policy wins: FAQs and call scripts lag behind it. Incident reports and release
+# notes are not versions of a policy, so they are not demoted: for "why did X happen" they are the answer.
+_LOW_AUTHORITY = frozenset({"faq", "call_script"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +118,7 @@ class PolicyIndex:
             self._db.open_table("policy")
             .search(query, query_type="fts")
             .where(f"effective_from <= '{day}' AND effective_to > '{day}'", prefilter=True)
-            .limit(max(k * 3, 10))  # over-fetch, then let authority reorder
+            .limit(max(k * 6, 20))  # over-fetch, then let authority reorder
             .to_list()
         )
         hits.sort(key=lambda h: h["doc_type"] in _LOW_AUTHORITY)  # stable: BM25 order within a group
@@ -132,7 +133,12 @@ class PolicyIndex:
         ]
 
 
-def build_policy_index(index: PolicyIndex, docs: list[dict[str, object]], docs_dir: Path) -> int:
+def build_policy_index(
+    index: PolicyIndex,
+    docs: list[dict[str, object]],
+    docs_dir: Path,
+    ops_events: list[dict[str, object]] | None = None,
+) -> int:
     """Chunk every reference document (rows of reference_documents; file_path is relative to the
     release's files/ folder, and docs_dir is where its docs/ content was copied) and index it with
     its effective window. Returns the number of chunks."""
@@ -148,5 +154,30 @@ def build_policy_index(index: PolicyIndex, docs: list[dict[str, object]], docs_d
             effective_to=end,
             doc_type=str(d.get("doc_type", "")),
         )
+    chunks += ops_event_chunks(ops_events or [])
     index.add(chunks)
     return len(chunks)
+
+
+def ops_event_chunks(events: list[dict[str, object]]) -> list[PolicyChunk]:
+    """One chunk per operations event (ops_events): an outage, a release, a policy change. They answer "why
+    did X change on that day?", and carry the dated facts the incident report only summarises."""
+    out = []
+    for e in events:
+        start = str(e["start_ts"])
+        kind = str(e["event_type"]).replace("_", " ")
+        text = (
+            f"{e['description']}. A {kind} on {e['system']} from {start} to {e['end_ts']} "
+            f"(severity {e['severity']}), affecting about {e['affected_customers_est']} customers."
+        )
+        out.append(
+            PolicyChunk(
+                str(e.get("reference_doc_id") or e["event_id"]),
+                f"{e['event_id']}: {kind}",
+                text,
+                date.fromisoformat(start[:10]),
+                None,
+                "ops_event",
+            )
+        )
+    return out

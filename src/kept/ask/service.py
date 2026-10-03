@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import re
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -16,7 +19,7 @@ from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric
 from kept.ask.policy import PolicyIndex
 from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
-from kept.ask.scope import Classifier, check_scope, refusal_for
+from kept.ask.scope import Classifier, check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import execute_guarded, guard_sql
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
@@ -25,6 +28,7 @@ from kept.contracts.ask import (
     AskAnswer,
     AskRequest,
     AskResponse,
+    Citation,
     Clarification,
     GuardResult,
     Intent,
@@ -49,6 +53,12 @@ plain sentences.
 Use only what the excerpts say, and only numbers that appear in them. If excerpts disagree, a policy or
 procedure overrides an FAQ or a call script. Name the document and section you used, e.g. (POL-COLL-001 §5.2).
 If the excerpts don't answer it, say so."""
+# "Summarise the most recent (recorded) call on case CS-2026-614370 ...": answered from the call's redacted
+# transcript (kept.text.calls), before the scope check, which sees "personal data" in it.
+_CALL_SUMMARY = re.compile(
+    r"\b(?:summari[sz]e|summary of)\b.*?\b(?:most recent|latest|last)\b.*?\bcall\b.*?\bcase\s+(CS?-\d[\w-]*)",
+    re.I | re.S,
+)
 _FALLBACK = "The result is in the table below."  # no numbers, so always grounded
 _ROW_CAP = 50  # rows sent to the narrator
 
@@ -65,6 +75,9 @@ _CONVENTIONS = """Conventions (from the data dictionary):
 - A resolved promise has ptp_status in ('kept', 'partially_kept', 'broken'); open and cancelled are not
   resolved.
 - An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
+- Charge-offs: rows of card_accounts and loan_accounts with chargeoff_flag = TRUE, dated by chargeoff_date,
+  amount in chargeoff_amount. "By product": cards are one product, 'card'; loans use product_type. A 12-month
+  window ends on the data's as-of date.
 - contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
@@ -107,6 +120,12 @@ def _describe(conn: duckdb.DuckDBPyConnection, policy: SqlPolicy) -> str:
     return "\n".join(lines)
 
 
+def _kept_summarise_call() -> Callable[..., Any]:
+    """Track C's summariser, imported on first use so the Ask still loads without it."""
+    fn: Callable[..., Any] = importlib.import_module("kept.text.calls").summarise_call
+    return fn
+
+
 def build_sql_policy(conn: duckdb.DuckDBPyConnection, contract: DataContract) -> SqlPolicy:
     """The guard's policy: the contract's Ask tables and blocked columns, plus the real columns of
     each allowed table (read from the warehouse) so the star rule knows what a star would return."""
@@ -146,7 +165,9 @@ class CollectionsAsk:
         certified_queries: dict[str, CertifiedQuery],
         policy_index: PolicyIndex | None,
         audit_log: AuditLog,
+        summarise_call: Callable[..., Any] | None = None,
     ) -> None:
+        self._summarise_call = summarise_call
         self._conn, self._contract, self._llm, self._redactor = conn, contract, llm, redactor
         self._classifier, self._metrics, self._queries = classifier, metrics, certified_queries
         self._policy_index, self._audit = policy_index, audit_log
@@ -182,6 +203,13 @@ class CollectionsAsk:
 
     # ------------------------------------------------------------------ pipeline
     def _answer(self, request: AskRequest, question: RedactedText, seen: dict[str, Any]) -> AskResponse:
+        if (
+            rule := rule_check(request, self._contract)
+        ) is not None:  # protected, bulk, write, other people's cases
+            return refusal_for(rule, suggestion=None)
+        if call := _CALL_SUMMARY.search(request.question):
+            seen["intent"] = "call_summary"
+            return self._call_summary(request, call[1].upper())
         decision = check_scope(request, self._contract, self._classifier)
         if not decision.in_scope:
             return refusal_for(decision, suggestion=None)
@@ -291,6 +319,41 @@ class CollectionsAsk:
             columns=columns,
             rows=rows,
             narrative=narrative,
+        )
+
+    def _call_summary(self, request: AskRequest, case_id: str) -> AskResponse:
+        """The newest recorded call on a case, summarised by kept.text.calls from its redacted transcript.
+        No recorded call is an answer, not a refusal."""
+        try:
+            summarise = self._summarise_call or _kept_summarise_call()
+            result = summarise(case_id, llm=self._llm)
+        except Exception:
+            return _refuse(RefusalReason.DATA_UNAVAILABLE, "I couldn't read that call just now.")
+        citations: tuple[Citation, ...] = ()
+        if result is None:
+            summary = f"There is no recorded call on case {case_id}."
+        else:
+            try:
+                day = date.fromisoformat(str(result.call_start)[:10])
+            except ValueError:
+                day = datetime.now(UTC).date()
+            summary = result.summary
+            citations = (
+                Citation(
+                    document_id="text.redacted_notes",
+                    section=f"transcript {result.transcript_id}",
+                    effective_from=day,
+                    snippet=result.summary,
+                ),
+            )
+        return AskAnswer(
+            question=request.question,
+            intent=Intent(kind=IntentKind.LOOKUP, confidence=1.0),
+            sql=None,
+            tables_used=("text.redacted_notes",),
+            data_freshness=None,
+            narrative=summary,
+            citations=citations,
         )
 
     def _policy(

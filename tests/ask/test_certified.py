@@ -51,6 +51,7 @@ _ASK_TABLES = frozenset(
         "card_accounts",
         "loan_accounts",
         "deposit_accounts",
+        "channel_capacity",
     )
 )
 
@@ -67,3 +68,17 @@ def test_certified_sql_passes_the_guard_on_the_ask_table_list(metric_id: str) ->
     sql, _ = _compile(metric_id)
     g = guard_sql(sql, policy)
     assert g.allowed, g.reason
+
+
+def test_cost_per_contact_reads_the_channel_unit_cost() -> None:
+    sql, _ = _compile("cost_per_contact", group_by=("channel",))
+    assert "silver.channel_capacity" in sql and "unit_cost_cad" in sql and "contact_history" not in sql
+
+
+def test_cure_rate_compares_agents_certified_for_vulnerable_customers_on_randomised_cases() -> None:
+    sql, params = _compile(
+        "cure_rate",
+        group_by=("agent_vulnerable_certified",),
+        filters={"assignment_method": "random", "hardship_flag": True},
+    )
+    assert "silver.agents" in sql and "agent_vulnerable_certified" in sql and params == ["random", True]
