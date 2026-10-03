@@ -5,7 +5,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 ## Now
 - Phase: G2 work done on real gold (features, Feast, training rows, `kept train`); ready to integrate
 - Working on: nothing until G2 passes
-- Waiting on: nothing for the features; G3 next (`kept score`, Qini vs legacy, new-note flip)
+- Waiting on: nothing; G3 next: `kept score` (queue + every open case), C's `eligible_programs` on the banner
 
 ## Done
 - `DuckDBAuditLog` + `new_event_id` (early provider, Q2): `tests/common/test_audit.py` 7/7. Branch `track-d`.
@@ -30,6 +30,8 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - Context builder reads `ExtractionStore.for_case`: a fresh note raises hardship via `hardship.combine`, a confirmed text cease is a hard stop, gold `hard_stop_flags` used (`test_context.py` 18/18). Text features (`text_features.sql`) joined into `case_features` from C's `text_signals`, point in time.
 
 - **The 11 empty features are wired** (`account_points.sql`, `account_features.sql`; the snapshot history was already in silver, no A work needed). On real data (96,000 open cases): `times_30plus_dpd_12m` = the snapshot's `times_30dpd_12m` on 99.6%; `days_in_bucket` = `bucket_entry_date` on 95%; `max_dpd` = gold's on 91%; `days_to_next_payroll` = the Python definition on every case within a pay period. Training features: max DPD on 89% of rows, no leaks. New fixture test `test_account_features_match_the_rules` (dbt tests 6/6). Engine on 300 real cases: 300/300 cards.
+
+- **C's G3 asks (3 Oct):** (1) real `Services` in `kept/app/real.py`, `kept serve` without `--demo` runs it; (2) the card's add-note path = C's `extract_into` with Presidio + the LLM built once at startup (`POST /cases/{id}/notes`); (3) `GET /cases/{id}/extractions` + a "Possible cease request: confirm" banner on the case page that confirms through `/extractions/{id}/confirm`; (4) the 30/90 rule in `text_features` (text-only hardship on open cases 41% -> 18%; Red cards 26% -> 15% on 300 real cases); (5) `kept train` reports Qini against the legacy strategy: model beats legacy on calls (+0.0062 vs +0.0017, noise 0.0003) and on any contact vs wait (+0.0006 vs -0.0009); email is noise for both. **Real-mode smoke test on real data:** startup 2.6 s, card 0.09 s, a typed note -> live extraction 4.3 s -> the card turns Red (hardship review), cease confirmed -> hard stop.
 
 ## Decisions and changes from the plan
 - Audit log: a file-backed log opens a DuckDB connection per call (K5); `:memory:` keeps one. Events are stored as JSON, so reads are lossless.
@@ -80,6 +82,11 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Honest uplift result:** calls show real uplift (Qini 0.0062, z = +21 against random rankings on the test split); email, push and SMS are within noise (z -1.1..+1.9): the model can't tell which customers a message helps more. Uplift params are now regularised (100 trees, 7 leaves, 300 min rows, L2 5): best call Qini of the four settings tried.
 - **`CLOSE_CALL_MARGIN` back to 0.02** with the new model (0.05 now makes 17% of cases close calls; 0.02 gives the same ~7% as before). The margin still barely tracks stability, so it is a review-load setting.
 - **For A:** `kept features --training` peaks at 4.9 GB with `dbt/profiles.yml` (no DuckDB memory cap); a `settings: {memory_limit: 3GB}` there would keep it safe on 14 GB laptops.
+- **One warehouse connection in the API:** DuckDB refuses a read-only and a read-write connection to one file in the same process, and C's store writes. `real_services` holds one read-write connection and every reader takes a cursor (A's reader through a subclass in `real.py`, not an edit to A's file). Also cuts a card from 0.3 s to 0.09 s. The API owns the file while it runs (K5).
+- **`kept features` defaults to the latest 06:00 UTC** (was fixed at 28 Sep): with the real clock, 28 Sep features are stale (> 26 h) and every card says "no action". The data ends 28 Sep, so nothing leaks; the features age correctly.
+- **Context builder, fresh notes:** an unconfirmed store note counts only if newer than the features and not from the SetFit backfill (history comes through the features and their 30/90 rule); a person's confirmation always counts. Demo cease now needs an agent's confirmation too, like the real path.
+- **The 30/90 rule lives in our `text_features`** (point in time per as_of), not C's planned `text.case_hardship` table, which has a single as_of and can't serve training. Same rule; C can keep the table for gold.
+- **Not yet:** real `/queue` (needs `kept score`, G3); hardship programmes on the real banner (C's `eligible_programs` needs a `ProgramCase` per case).
 - Uplift models convert inputs themselves (fixed `pay_frequency` levels, bools/None to float), so a serving `FeatureVector` scores the same as a warehouse row.
 
 ## Open questions
@@ -101,6 +108,7 @@ Person: Shreyas Deb · Tasks: `docs/TEAM_PLAN.md` §5
 - **Batch scoring needs one shared read-only connection:** each reader opens the warehouse per call (K5), about 60 ms each, so a card takes about 0.3 s; `kept score` (G3) should read the case rows, gold and extractions in bulk.
 
 ## Log
+- 3 Oct: C's G3 asks done: real services and `kept serve`, live add-note, extractions route + cease confirm, 30/90 rule, Qini vs legacy in `kept train`.
 - 3 Oct: 11 account/payroll/cash-flow features wired and checked on real data; WAIT arm rebuilt (hold-out delays contact); honest Qini: calls only; regularised uplift params; margin 0.02.
 - 3 Oct: close-call margin 0.05 from bootstrap stability; engine fixed for the real model's five arms (300/300 real cards).
 - 3 Oct: C's extractions loaded; text features on real data; context builder on A's real reader 2,000/2,000; G2 checks done on Track D's side.

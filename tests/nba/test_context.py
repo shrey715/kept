@@ -130,7 +130,13 @@ def test_duckdb_case_reader(tmp_path: Path) -> None:
 
 # ----------------------------------------------------------------- fresh notes and gold hard stops
 def _extraction(
-    source_id: str, at: datetime, *, signal: str = "none", cease: bool = False, confirmed: str | None = None
+    source_id: str,
+    at: datetime,
+    *,
+    signal: str = "none",
+    cease: bool = False,
+    confirmed: str | None = None,
+    extractor: str = "llm:test",
 ):  # type: ignore[no-untyped-def]
     from kept.contracts.features import TextExtraction
 
@@ -149,7 +155,7 @@ def _extraction(
             "dispute": v(False),
             "cease_request": v(cease),
             "third_party_present": v(False),
-            "extractor": "llm:test",
+            "extractor": extractor,
             "extracted_at": at,
             "confirmed_by_agent_id": confirmed,
         }
@@ -229,3 +235,20 @@ def test_gold_hard_stop_flags_are_used(make_customer, now_utc) -> None:  # type:
         make_customer, now_utc, [], collections_hold=True, hard_stop_flags=frozenset({HardStop.BANKRUPTCY})
     )
     assert ctx.hard_stop_flags == {HardStop.BANKRUPTCY}  # named by gold: no INSOLVENCY guess
+
+
+def test_only_new_live_notes_count_unless_a_person_confirmed(make_customer, now_utc) -> None:  # type: ignore[no-untyped-def]
+    """History comes through the features (30/90 rule): an unconfirmed note from before the features
+    were built, or from the SetFit backfill, doesn't raise hardship here; a confirmed one always does."""
+    before_features = now_utc - timedelta(hours=20)  # features are 16 hours old
+    old = _extraction("N-1", before_features, signal="possible")
+    backfill = _extraction(
+        "N-2", now_utc - timedelta(hours=1), signal="possible", extractor="setfit:setfit-v1"
+    )
+    assert _with_store(make_customer, now_utc, [old, backfill]).hardship_status is HardshipStatus.NONE
+    confirmed = _extraction(
+        "N-3", before_features, signal="clear", confirmed="agent-7", extractor="setfit:setfit-v1"
+    )
+    assert _with_store(make_customer, now_utc, [old, confirmed]).hardship_status is HardshipStatus.CONFIRMED
+    cease = _extraction("N-4", before_features, cease=True, confirmed="agent-7")
+    assert HardStop.CEASE in _with_store(make_customer, now_utc, [cease]).hard_stop_flags
