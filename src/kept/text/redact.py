@@ -38,7 +38,7 @@ class PresidioRedactor:
     Money amounts and ordinary dates (e.g. "3 Oct", "$140") are kept: extraction needs them.
     """
 
-    version: str = "presidio-v4"
+    version: str = "presidio-v5"
 
     def __init__(self, *, models: dict[str, str] | None = None) -> None:
         from presidio_analyzer import AnalyzerEngine
@@ -301,10 +301,11 @@ def _canadian_recognizers(language: str) -> list[Any]:
                 "compte",
             ],
         ),
-        rec(
-            "DATE_OF_BIRTH",
-            date,
-            0.05,
-            ["dob", "born", "birth", "birthday", "birthdate", "ddn", "naissance", "né", "née"],
-        ),
+        rec("DATE_OF_BIRTH", date, 0.05, _DOB_WORDS),
+        # Corrupted DOBs in synthetic notes ("DOB 206-12-25", "DOB 1987-0113"): digits and dashes, only
+        # with a DOB word nearby.
+        rec("DATE_OF_BIRTH", r"\b\d{2,6}[-/]\d{1,4}(?:[-/]\d{1,4})?\b", 0.05, _DOB_WORDS),
     ]
+
+
+_DOB_WORDS = ["dob", "born", "birth", "birthday", "birthdate", "ddn", "naissance", "né", "née"]

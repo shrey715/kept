@@ -98,6 +98,8 @@ def test_titlecase_name_in_transcript_removed(redactor: PresidioRedactor) -> Non
         ("card 4520 766 9760 7290. CB scheduled", "766 9760"),  # a digit dropped
         ("crad 420 369 585 454", "369 585"),
         ("spoke w/ cust PTP 65 May 31 DOB 1987-01-13", "1987-01-13"),
+        ("will try to pay 5 next payday; DOB 206-12-25; sent pmt link", "206-12-25"),
+        ("RPC w/ cust - DOB 1987-0113 - CB scheduled", "1987-0113"),
     ],
 )
 def test_malformed_cards_and_dob_after_dates_removed(
@@ -108,3 +110,8 @@ def test_malformed_cards_and_dob_after_dates_removed(
 
 def test_phone_number_is_not_a_card(redactor: PresidioRedactor) -> None:
     assert "<PHONE_NUMBER>" in redactor.redact("call back at 416-555-0123").text
+
+
+def test_dashed_numbers_without_dob_word_kept(redactor: PresidioRedactor) -> None:
+    note = "PTP 10-12 the 5th, ref 2024-118"
+    assert redactor.redact(note).text == note
