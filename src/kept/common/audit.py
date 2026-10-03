@@ -37,7 +37,6 @@ def _micros(at: datetime) -> int:
     return (at - _EPOCH) // _ONE_US
 
 
-
 class DuckDBAuditLog:
     """Implements kept.contracts.interfaces.AuditLog. Exposes no update or delete.
 
@@ -67,8 +66,15 @@ class DuckDBAuditLog:
         try:
             with self._conn() as c:
                 c.execute(
-                    "insert into audit_events (event_id, at_us, kind, subject_id, body) values (?, ?, ?, ?, ?)",
-                    [event.event_id, _micros(event.at), event.kind.value, event.subject_id, event.model_dump_json()],
+                    "insert into audit_events (event_id, at_us, kind, subject_id, body)"
+                    " values (?, ?, ?, ?, ?)",
+                    [
+                        event.event_id,
+                        _micros(event.at),
+                        event.kind.value,
+                        event.subject_id,
+                        event.model_dump_json(),
+                    ],
                 )
         except duckdb.ConstraintException as e:
             raise ValueError(f"duplicate event_id {event.event_id}") from e
@@ -81,7 +87,8 @@ class DuckDBAuditLog:
         since: datetime | None = None,
     ) -> Sequence[AuditEvent]:
         """Events matching every given filter, in append order. `since` is inclusive."""
-        where, params = ["true"], []
+        where: list[str] = ["true"]
+        params: list[object] = []
         if kind is not None:
             where.append("kind = ?")
             params.append(kind.value)
@@ -92,7 +99,9 @@ class DuckDBAuditLog:
             where.append("at_us >= ?")
             params.append(_micros(since))
         with self._conn() as c:
-            rows = c.execute(f"select body from audit_events where {' and '.join(where)} order by seq", params)
+            rows = c.execute(
+                f"select body from audit_events where {' and '.join(where)} order by seq", params
+            )
             return [AuditEvent.model_validate_json(b) for (b,) in rows.fetchall()]
 
 
