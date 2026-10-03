@@ -24,9 +24,7 @@ import numpy as np
 import pandas as pd
 
 from kept.config import AUTO_LINK_THRESHOLD, MAX_KEYS_PER_CLUSTER, STEWARD_REVIEW_THRESHOLD
-from kept.contracts.enums import MatchReviewStatus, SourceSystem
-from kept.contracts.identity import SourceKey
-from kept.data.identity.clustering import Cluster, GoldenIdRegistry
+from kept.contracts.enums import MatchReviewStatus
 from kept.data.identity.exact import exact_link_pairs
 from kept.data.identity.probabilistic import build_settings, score_pairs, train_model
 from kept.data.identity.steward import read_verdicts
@@ -60,27 +58,37 @@ def _roots(n: int, left: np.ndarray, right: np.ndarray) -> np.ndarray:
     return np.array([find(x) for x in range(n)])
 
 
-def _assign_with_registry(
-    keys: pd.MultiIndex, group: np.ndarray, previous: pd.DataFrame, at: datetime
-) -> np.ndarray:
-    """Golden ID numbers for each key, keeping the IDs of `previous` (merges and splits are logged)."""
-    registry = GoldenIdRegistry()
-    sk = [SourceKey(system=SourceSystem(a), key=b) for a, b in keys]
-    registry.seed(
-        {
-            SourceKey(system=SourceSystem(s), key=k): g
-            for g, s, k in previous[["golden_customer_id", "source_system", "source_key"]].itertuples(
-                index=False
-            )
-        }
+def _assign_stable(
+    keys: pd.MultiIndex, group: np.ndarray, previous: pd.DataFrame
+) -> tuple[np.ndarray, int, int]:
+    """Golden ID numbers that keep the IDs of `previous`, the rules of GoldenIdRegistry on arrays
+    (tests/data/test_stable_ids.py checks the two agree): a cluster keeps the lowest ID among the old IDs
+    that have their largest part in it (a merge keeps the oldest), an old ID whose keys are now apart stays
+    with its largest part (a split gives the rest new IDs), and an ID is never reused: new IDs count up from
+    the highest ever issued. Returns (number per key, merges, splits)."""
+    n = len(keys)
+    old = np.zeros(n, dtype=np.int64)  # the previous golden number of each key; 0 = a key we had not seen
+    where = keys.get_indexer(pd.MultiIndex.from_frame(previous[["source_system", "source_key"]]))
+    seen = where >= 0
+    numbers = previous["golden_customer_id"].str.removeprefix("G-").astype(np.int64).to_numpy()
+    old[where[seen]] = numbers[seen]
+
+    held = pd.DataFrame({"old": old[old > 0], "group": group[old > 0]})
+    parts = held.groupby(["old", "group"]).size().rename("keys").reset_index()
+    # an old ID's home: the group holding most of its keys (ties: the group of the smallest key)
+    home = parts.sort_values(["keys", "group"], ascending=[False, True]).drop_duplicates("old")
+    survivor = home.groupby("group")["old"].min()  # the oldest of the IDs homed in a group keeps it
+    merges = int((home.groupby("group").size() > 1).sum())
+    splits = int((parts.groupby("old").size() > 1).sum())
+
+    groups = np.unique(group)
+    fresh = groups[~np.isin(groups, survivor.index.to_numpy())]  # in order of each group's smallest key
+    first_new = (int(numbers.max()) if len(numbers) else 0) + 1
+    number_of_group = pd.Series(
+        np.concatenate([survivor.to_numpy(), np.arange(first_new, first_new + len(fresh))]),
+        index=np.concatenate([survivor.index.to_numpy(), fresh]),
     )
-    members: dict[int, list[int]] = {}
-    for i, g in enumerate(group.tolist()):
-        members.setdefault(g, []).append(i)
-    ids = registry.assign(
-        (Cluster(keys=frozenset(sk[i] for i in m)) for m in members.values()), actor_id="kept-match", at=at
-    )
-    return np.array([int(ids[k].removeprefix("G-")) for k in sk])
+    return number_of_group.reindex(group).to_numpy(), merges, splits
 
 
 def run_matching(
@@ -179,9 +187,9 @@ def run_matching(
     group = np.where(held & ~released, np.arange(n), root)
 
     if previous is not None and len(previous):
-        number = _assign_with_registry(keys, group, previous, at)
+        number, id_merges, id_splits = _assign_stable(keys, group, previous)
     else:  # a first run: IDs in order of each cluster's smallest key, as GoldenIdRegistry would issue them
-        number = pd.factorize(group)[0] + 1
+        number, id_merges, id_splits = pd.factorize(group)[0] + 1, 0, 0
     golden = pd.Series(number).map(GOLDEN_ID_FORMAT.format).to_numpy()
 
     # per key: the strongest link that put it in a cluster (exact beats Splink), else a singleton
@@ -252,6 +260,8 @@ def run_matching(
         "multi_key_clusters": int((sizes > 1).sum()),
         "largest_cluster": int(sizes.max()),
         "exact_pairs": len(exact),
+        "ids_merged": id_merges,
+        "ids_split": id_splits,
         "steward_links": len(approved),
         "steward_cuts": len(cannot),
         "splink_pairs_auto": int((splink.score >= AUTO_LINK_THRESHOLD).sum()),

@@ -62,7 +62,7 @@ def land(args: argparse.Namespace) -> int:
     from kept.common.db import connect
     from kept.data.ingest import land_directory
 
-    conn = connect()
+    conn = connect(args.warehouse or WAREHOUSE_PATH)
     try:
         extracted_at = args.extracted_at or datetime.now(UTC)
         for t in land_directory(conn, args.raw_dir, extracted_at=extracted_at):
@@ -79,11 +79,19 @@ def match(args: argparse.Namespace) -> int:
     import pandas as pd
 
     from kept.common.db import connect
-    from kept.data.identity.pipeline import run_matching, write_run
+    from kept.data.identity.pipeline import latest_crosswalk, run_matching, write_run
 
-    conn = connect(read_only=True)
+    conn = connect(args.warehouse or WAREHOUSE_PATH, read_only=True)
     try:
-        previous = pd.read_parquet(args.previous) if args.previous else None
+        previous_file = args.previous
+        if previous_file is None and not args.no_previous and not args.sample_mod:
+            # keep golden IDs from night to night: the newest full crosswalk is the previous one
+            try:
+                previous_file = latest_crosswalk(args.out_dir)
+                print(f"keeping the golden IDs of {previous_file.name}")
+            except FileNotFoundError:
+                previous_file = None
+        previous = pd.read_parquet(previous_file) if previous_file else None
         run = run_matching(
             conn, sample_mod=args.sample_mod, train_sample_mod=args.train_sample_mod, previous=previous
         )
@@ -166,18 +174,26 @@ def benchmark(args: argparse.Namespace) -> int:
 
 
 def build(args: argparse.Namespace) -> int:
-    """Track A: dbt silver (unless --gold-only), load the crosswalk, dbt gold, export c360 parquet."""
+    """Track A: dbt silver (unless --gold-only), then (unless --silver-only) load the crosswalk, dbt gold,
+    export c360 parquet. The nightly order is silver, `kept match`, gold: gold needs the crosswalk."""
     from kept.common.db import connect
-    from kept.data.gold import build_gold, export_parquet, run_dbt
+    from kept.data.gold import GOLD_MODELS, build_gold, export_parquet, run_dbt
 
-    conn = connect()
-    warehouse = str(args.warehouse or WAREHOUSE_PATH)
-    conn.close()
+    warehouse = args.warehouse or WAREHOUSE_PATH
+    connect(warehouse).close()  # creates the file and the schemas on a fresh warehouse
     if not args.gold_only:
-        run_dbt(["silver"], warehouse=warehouse)
-    conn = connect()
-    build_gold(conn, crosswalk=args.crosswalk, extractions=args.extractions)  # closes conn
-    conn = connect()  # not read_only: dbt's connection in this process holds the file read-write
+        # the models gold is built from need the crosswalk: they wait for gold
+        run_dbt(["silver"], warehouse=str(warehouse), exclude=GOLD_MODELS)
+    if args.silver_only:
+        print("silver built; run `kept match`, then `kept build --gold-only`")
+        return 0
+    conn = connect(warehouse)
+    try:
+        build_gold(conn, crosswalk=args.crosswalk, extractions=args.extractions)  # closes conn
+    except FileNotFoundError as e:
+        print(f"kept build: {e}")
+        return 2
+    conn = connect(warehouse)  # not read_only: dbt's connection in this process holds the file read-write
     try:
         export_parquet(conn, as_of_date=args.as_of_date)
         row = conn.execute("select count(*) from gold.c360_customer").fetchone()
@@ -195,7 +211,7 @@ def gate(args: argparse.Namespace) -> int:
     from kept.data.quality import Status, quality_report, run_gate
 
     write_soda_checks()
-    conn = connect(read_only=True)
+    conn = connect(args.warehouse or WAREHOUSE_PATH, read_only=True)
     try:
         results = gather_results(conn)
     finally:
@@ -402,6 +418,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--host", default="127.0.0.1")
             p.add_argument("--port", type=int, default=8000)
             p.add_argument("--reload", action="store_true", help="restart when code under src/ changes")
+        if name in ("land", "match", "gate"):
+            p.add_argument(
+                "--warehouse", type=Path, default=None, help="warehouse file (default: the project's)"
+            )
         if name == "land":
             p.add_argument("--raw-dir", type=Path, default=RAW_DIR)
             p.add_argument(
@@ -412,6 +432,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if name == "build":
             p.add_argument("--gold-only", action="store_true", help="skip the silver build (about 3 min)")
+            p.add_argument("--silver-only", action="store_true", help="stop after silver (then: kept match)")
             p.add_argument("--crosswalk", type=Path, default=None, help="crosswalk parquet (default: newest)")
             p.add_argument(
                 "--extractions",
@@ -484,6 +505,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="train Splink on 1/N of the records (hash of DOB), score all of them",
             )
             p.add_argument("--out-dir", type=Path, default=EXPORT_DIR / "identity_crosswalk")
+            p.add_argument("--no-previous", action="store_true", help="do not reuse the last crosswalk's IDs")
             p.add_argument(
                 "--previous", type=Path, default=None, help="earlier crosswalk parquet: keep its golden IDs"
             )
