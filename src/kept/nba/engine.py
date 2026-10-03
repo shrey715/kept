@@ -27,7 +27,7 @@ from kept.contracts.nba import (
 )
 from kept.nba.explain import top_reasons
 from kept.nba.ranking import is_close_call, score_actions
-from kept.nba.release import is_stale
+from kept.nba.release import cancel_pending, is_stale
 from kept.nba.rules import allowed_actions, hard_stops, hardship_override
 from kept.nba.sizing import size_promise
 from kept.nba.tiers import assign_tier
@@ -124,6 +124,14 @@ class KeptEngine:
         except Exception as e:  # never raise after the context: no action, and say why
             card = self._no_action(ctx, f"No action: the recommendation failed ({type(e).__name__}).")
         if card.proposal is not None:
+            # one live proposal per case: a fresh recommendation retires the older pending one
+            cancel_pending(
+                case_id,
+                reason="superseded by a newer recommendation",
+                proposals=self._proposals,
+                audit_log=self._log,
+                now=now,
+            )
             self._proposals[card.proposal.proposal_id] = card.proposal
         self._log.append(
             AuditEvent(

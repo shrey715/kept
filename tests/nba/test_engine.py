@@ -189,3 +189,27 @@ def test_proposals_are_stored_for_the_release_gate(make_ctx) -> None:  # type: i
     )
     p = eng.recommend(ctx.case_id, NOW).proposal
     assert p is not None and store == {p.proposal_id: p}
+
+
+def test_new_recommendation_supersedes_the_pending_one(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    from kept.contracts.nba import ProposalStatus
+
+    ctx = make_ctx()
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+    )
+    store: dict[str, Any] = {}
+    eng = KeptEngine(
+        context=FixedContextBuilder({ctx.case_id: ctx}),
+        features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(PROBS),
+        audit_log=InMemoryAuditLog(),
+        proposals=store,
+    )
+    a = eng.recommend(ctx.case_id, NOW).proposal
+    b = eng.recommend(ctx.case_id, NOW).proposal
+    assert a and b and store[a.proposal_id].status is ProposalStatus.CANCELLED
+    assert store[b.proposal_id].status is ProposalStatus.PENDING

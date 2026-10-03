@@ -312,3 +312,41 @@ def test_reject(world) -> None:  # type: ignore[no-untyped-def]
     rel, proposals, log, _ = world()
     r = rel.release(_decide(decision=ReviewDecision.REJECT), LATER)
     assert not r.released and proposals["P-1"].status is ProposalStatus.REJECTED and len(log.read()) == 1
+
+
+# ----------------------------------------------------------------- Red in two steps
+def test_red_two_step_handoff(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, log, _ = world(red)
+    first = rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    assert not first.released and proposals["P-1"].status is ProposalStatus.APPROVED
+    assert rel.first_approver("P-1") == ("hs-1", Role.HARDSHIP_SPECIALIST)
+    same = rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    assert not same.released and "different person" in same.reason
+    agent = rel.release(_decide(reviewer_id="agent-9", reviewer_role=Role.AGENT), LATER)
+    assert not agent.released and proposals["P-1"].status is ProposalStatus.APPROVED
+    done = rel.release(_decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD), LATER)
+    assert done.released and proposals["P-1"].status is ProposalStatus.RELEASED
+    assert rel.first_approver("P-1") is None
+    assert len(log.read(subject_id="P-1")) == 4
+
+
+def test_red_second_step_rechecks_fresh_data(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, _, builder = world(red)
+    rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    ctx = builder.contexts["C-118204"]
+    builder.contexts["C-118204"] = ctx.model_copy(update={"hard_stop_flags": frozenset({HardStop.CEASE})})
+    r = rel.release(_decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD), LATER)
+    assert not r.released and "cease" in r.reason.lower()
+    assert proposals["P-1"].status is ProposalStatus.APPROVED
+
+
+def test_red_second_step_can_reject(world) -> None:  # type: ignore[no-untyped-def]
+    red = _proposal(tier=ReleaseTier.RED, action=Action.HARDSHIP_REVIEW)
+    rel, proposals, _, _ = world(red)
+    rel.release(_decide(reviewer_id="hs-1", reviewer_role=Role.HARDSHIP_SPECIALIST), LATER)
+    rel.release(
+        _decide(reviewer_id="tl-1", reviewer_role=Role.TEAM_LEAD, decision=ReviewDecision.REJECT), LATER
+    )
+    assert proposals["P-1"].status is ProposalStatus.REJECTED

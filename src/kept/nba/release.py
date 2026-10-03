@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from kept.common.audit import new_event_id
 from kept.config import FEATURE_MAX_STALENESS
 from kept.contracts.audit import AuditEvent, AuditKind
-from kept.contracts.enums import ACTION_CHANNEL, HardshipStatus, ReleaseTier, ReviewDecision
+from kept.contracts.enums import ACTION_CHANNEL, HardshipStatus, ReleaseTier, ReviewDecision, Role
 from kept.contracts.interfaces import AuditLog, CaseContextBuilder
 from kept.contracts.nba import CaseContext, Proposal, ProposalStatus, ReleaseDecision, ReleaseResult
 from kept.governance.access import can_release
@@ -25,6 +25,7 @@ from kept.nba.rules import hard_stops, hardship_override, permission_gate
 from kept.nba.tiers import assign_tier
 
 _TIER_ORDER = list(ReleaseTier)  # declaration order = precedence (BLOCKED first)
+SECOND_REVIEWER_ROLES = frozenset({Role.HARDSHIP_SPECIALIST, Role.TEAM_LEAD, Role.COMPLIANCE})
 
 
 def in_holdout(golden_customer_id: str, *, salt: str, share: float = 0.05) -> bool:
@@ -55,6 +56,11 @@ class Releaser:
         self._proposals = proposals
         self._context = context
         self._log = audit_log
+        self._first: dict[str, tuple[str, Role]] = {}  # Red proposals approved once: who approved
+
+    def first_approver(self, proposal_id: str) -> tuple[str, Role] | None:
+        """Who gave the first approval of a Red proposal now waiting for a second person."""
+        return self._first.get(proposal_id)
 
     def release(self, decision: ReleaseDecision, now: datetime) -> ReleaseResult:
         """Not released (with reason) when: proposal unknown, not PENDING, expired
@@ -62,14 +68,38 @@ class Releaser:
         second reviewer, a hard stop now fires, consent/hours/cap now fail, or context
         lookup raises. Exactly one audit event (RELEASE or OVERRIDE) per call either way.
         ALTERNATIVE/OVERRIDE release the reviewer's action under the stricter of the two tiers;
-        EDIT must keep the amount within the sizing's spare cash; REJECT marks it REJECTED."""
+        EDIT must keep the amount within the sizing's spare cash; REJECT marks it REJECTED.
+
+        Red in two steps: a permitted first reviewer without a second_reviewer_id moves the
+        proposal to APPROVED (every check still runs); a later ACCEPT by a different person in
+        SECOND_REVIEWER_ROLES releases it, rechecking everything on fresh data."""
         d = decision
         kind = AuditKind.OVERRIDE if d.decision is ReviewDecision.OVERRIDE else AuditKind.RELEASE
         p = self._proposals.get(d.proposal_id)
         released, reason, final = False, "", p
+        first = self._first.get(d.proposal_id)
+        if p is not None and p.status is ProposalStatus.APPROVED and first is not None:
+            if d.reviewer_id == first[0]:
+                p, reason = None, "The second approval must come from a different person."
+                final = self._proposals[d.proposal_id]
+            elif d.decision not in (ReviewDecision.ACCEPT, ReviewDecision.REJECT):
+                p, reason = None, "The second person can only approve or reject."
+                final = self._proposals[d.proposal_id]
+            elif d.decision is ReviewDecision.ACCEPT:
+                d = d.model_copy(
+                    update={
+                        "reviewer_id": first[0],
+                        "reviewer_role": first[1],
+                        "second_reviewer_id": decision.reviewer_id,
+                        "second_reviewer_role": decision.reviewer_role,
+                    }
+                )
+                p = p.model_copy(update={"status": ProposalStatus.PENDING})  # re-run the full gate
         if p is None:
-            reason = "Unknown proposal."
-        elif p.status is not ProposalStatus.PENDING:
+            reason = reason or "Unknown proposal."
+        elif p.status is not ProposalStatus.PENDING and not (
+            p.status is ProposalStatus.APPROVED and d.decision is ReviewDecision.REJECT
+        ):
             reason = f"Proposal is already {p.status.value}."
         elif now >= p.expires_at:
             final = p.model_copy(update={"status": ProposalStatus.EXPIRED})
@@ -85,22 +115,28 @@ class Releaser:
             else:
                 final, reason = self._check(p, d, ctx, now)
                 released = final is not None and final.status is ProposalStatus.RELEASED
-                final = final or p
-        if p is not None and final is not None:
-            self._proposals[p.proposal_id] = final
+                if final is not None and final.status is ProposalStatus.APPROVED:
+                    self._first[p.proposal_id] = (d.reviewer_id, d.reviewer_role)
+                final = final or self._proposals[p.proposal_id]
+        if final is not None:
+            self._proposals[final.proposal_id] = final
+            if final.status is not ProposalStatus.APPROVED:
+                self._first.pop(final.proposal_id, None)
         event_id = new_event_id()
         self._log.append(
             AuditEvent(
                 event_id=event_id,
                 at=now,
                 kind=kind,
-                actor_id=d.reviewer_id,
-                actor_role=d.reviewer_role,
+                actor_id=decision.reviewer_id,
+                actor_role=decision.reviewer_role,
                 subject_id=d.proposal_id,
                 payload={
                     "released": released,
+                    "status": final.status.value if final else None,
                     "reason": reason,
-                    "decision": d.decision.value,
+                    "decision": decision.decision.value,
+                    "first_reviewer_id": d.reviewer_id if d is not decision else None,
                     "case_id": p.case_id if p else None,
                     "action": final.action.value if final else None,
                     "tier": final.tier.value if final else None,
@@ -136,8 +172,9 @@ class Releaser:
             tier, role=d.reviewer_role, is_assigned_agent=d.reviewer_id == ctx.assigned_agent_id
         ):
             return None, f"A {d.reviewer_role.value} can't release a {tier.value}-tier proposal."
-        if tier is ReleaseTier.RED and (d.second_reviewer_id is None or d.second_reviewer_role is None):
-            return None, "Red tier needs a second person to approve."
+        second = d.second_reviewer_id is not None and d.second_reviewer_role is not None
+        if tier is ReleaseTier.RED and second and d.second_reviewer_role not in SECOND_REVIEWER_ROLES:
+            return None, "The second person must be a hardship specialist, team lead or compliance."
         stop = hard_stops(ctx)
         if stop.blocked:
             return None, stop.rule_card or "Hard stop."
@@ -160,15 +197,21 @@ class Releaser:
                 )
             except ValidationError:
                 return None, "Edited amount must stay within the estimated spare cash."
+        waiting = tier is ReleaseTier.RED and not second
         updated = p.model_copy(
             update={
                 "action": action,
                 "channel": ACTION_CHANNEL[action],
                 "tier": tier,
                 "sizing": sizing,
-                "status": ProposalStatus.RELEASED,
+                "status": ProposalStatus.APPROVED if waiting else ProposalStatus.RELEASED,
             }
         )
+        if waiting:
+            return (
+                updated,
+                f"Approved by {d.reviewer_id}; waiting for a second person (team lead or compliance).",
+            )
         return updated, f"Released ({tier.value} tier) by {d.reviewer_id}" + (
             f" and {d.second_reviewer_id}." if d.second_reviewer_id else "."
         )
