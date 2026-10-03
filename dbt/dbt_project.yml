@@ -25,6 +25,9 @@ models:
     features:
       +schema: features
       +materialized: table
+    text:
+      +schema: text
+      +materialized: table
       +pre-hook: "set TimeZone = 'UTC'"  # source timestamps are naive UTC (K7)
 
 vars:

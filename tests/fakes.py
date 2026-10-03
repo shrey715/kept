@@ -24,6 +24,7 @@ from kept.contracts import (
     GoldenCustomer,
     RedactedText,
     SourceKey,
+    TextExtraction,
 )
 from kept.contracts.interfaces import LLMResponse
 
@@ -107,6 +108,19 @@ class PassThroughRedactor:
 
     def redact(self, text: str) -> RedactedText:
         return RedactedText(text=text, redactor_version=self.version)
+
+
+class InMemoryExtractionStore:
+    """ExtractionStore fake: a dict keyed by source_id."""
+
+    def __init__(self) -> None:
+        self._rows: dict[str, TextExtraction] = {}
+
+    def get(self, source_id: str) -> TextExtraction | None:
+        return self._rows.get(source_id)
+
+    def put(self, extraction: TextExtraction) -> None:
+        self._rows[extraction.source_id] = extraction
 
 
 class InMemoryAuditLog:
