@@ -165,6 +165,7 @@ select *,
     kept_name_key(last_name) as last_name_key,
     coalesce(date_of_birth, kept_dob(dob_raw)) as dob_clean,
     coalesce(primary_phone_e164, kept_phone(primary_phone_raw)) as primary_phone_clean,
-    coalesce(postal_code, kept_postal(postal_code_raw)) as postal_code_clean
+    coalesce(postal_code, kept_postal(postal_code_raw)) as postal_code_clean,
+    kept_province(province_code) as province_code_clean
 from current_version
 where not coalesce(is_deleted, false)

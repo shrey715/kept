@@ -1,0 +1,8 @@
+# silver.int_crosswalk is not a dbt model: `kept build` loads the latest identity_crosswalk parquet
+# (kept match, or Track C's full run) into it, then dbt reads it here.
+version: 2
+sources:
+  - name: identity
+    schema: silver
+    tables:
+      - name: int_crosswalk

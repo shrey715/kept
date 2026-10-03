@@ -17,6 +17,7 @@ from kept.data.clean import (
     normalize_name,
     normalize_phone_e164,
     normalize_postal_code,
+    normalize_province,
     parse_date,
     parse_dob,
 )
@@ -226,3 +227,27 @@ def test_first_name_only_when_the_system_holds_one() -> None:
     assert match_first_name("Kaufman, Jane", style="last_comma_first") == "jane"
     assert match_first_name("J. KAUFMAN", style="card") is None  # initial only
     assert match_first_name("SHAH M", style="last_first_initials") is None
+
+
+# ----------------------------------------------------------------- provinces
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("ON", "ON"), ("Ont.", "ON"), ("ontario", "ON"), ("B.C.", "BC"), ("Alta.", "AB"), ("Quebec", "QC"),
+        ("Québec", "QC"), ("PQ", "QC"), ("Man.", "MB"), ("N.S.", "NS"), ("PE", "PE"), ("P.E.I.", "PE"),
+        ("NL", "NL"), ("Sask.", "SK"), ("YT", "YT"),
+    ],
+)  # fmt: skip
+def test_normalize_province(raw: str, expected: str) -> None:
+    assert normalize_province(raw) == expected
+
+
+@pytest.mark.parametrize("raw", [None, "", "Texas", "XX", "12"])
+def test_unknown_province_is_none(raw: str | None) -> None:
+    assert normalize_province(raw) is None
+
+
+def test_all_thirteen_provinces_and_territories_are_reachable() -> None:
+    from kept.data.clean import _PROVINCES
+
+    assert len(_PROVINCES) == 13 and all(normalize_province(code) == code for code in _PROVINCES)
