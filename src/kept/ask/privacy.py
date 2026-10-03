@@ -17,4 +17,5 @@ def suppress_small_groups(
 ) -> tuple[tuple[Any, ...], ...]:
     """Drop rows whose count_column < k. Missing count_column -> ValueError
     (an analyst query without a count can't be checked, so the caller refuses)."""
-    raise NotImplementedError("Track B")
+    i = list(columns).index(count_column)  # ValueError when missing
+    return tuple(tuple(r) for r in rows if (r[i] or 0) >= k)  # a NULL count is treated as small

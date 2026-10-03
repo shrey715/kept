@@ -1,0 +1,111 @@
+# Draft for G0 (S4). Written by kept.text (Track C), read by A (gold hardship_status) and D (text features).
+# One row per source_id (note_id or call_id); a re-extraction or an agent confirm replaces the row.
+# Each TextExtraction field is flattened to <field>_value, <field>_quote, <field>_confidence, plus
+# <field>_char_start / <field>_char_end so the Evidence round-trips exactly (quote null = no evidence).
+version: 2
+
+sources:
+  - name: text
+    schema: text
+    tables:
+      - name: extractions
+        columns:
+          - name: source_id
+            data_type: varchar
+            data_tests: [not_null, unique]
+          - name: case_id
+            data_type: varchar
+            data_tests: [not_null]
+          - name: hardship_signal_value
+            data_type: varchar
+            description: none / possible / clear
+          - name: hardship_signal_quote
+            data_type: varchar
+          - name: hardship_signal_char_start
+            data_type: integer
+          - name: hardship_signal_char_end
+            data_type: integer
+          - name: hardship_signal_confidence
+            data_type: double
+          - name: stated_reason_value
+            data_type: varchar
+            description: StatedReason; routes to hardship handling, never a model feature
+          - name: stated_reason_quote
+            data_type: varchar
+          - name: stated_reason_char_start
+            data_type: integer
+          - name: stated_reason_char_end
+            data_type: integer
+          - name: stated_reason_confidence
+            data_type: double
+          - name: promise_intent_value
+            data_type: boolean
+          - name: promise_intent_quote
+            data_type: varchar
+          - name: promise_intent_char_start
+            data_type: integer
+          - name: promise_intent_char_end
+            data_type: integer
+          - name: promise_intent_confidence
+            data_type: double
+          - name: promised_date_value
+            data_type: date
+            description: resolved against the note's written_at
+          - name: promised_date_quote
+            data_type: varchar
+          - name: promised_date_char_start
+            data_type: integer
+          - name: promised_date_char_end
+            data_type: integer
+          - name: promised_date_confidence
+            data_type: double
+          - name: promised_amount_value
+            data_type: decimal(12,2)
+          - name: promised_amount_quote
+            data_type: varchar
+          - name: promised_amount_char_start
+            data_type: integer
+          - name: promised_amount_char_end
+            data_type: integer
+          - name: promised_amount_confidence
+            data_type: double
+          - name: dispute_value
+            data_type: boolean
+          - name: dispute_quote
+            data_type: varchar
+          - name: dispute_char_start
+            data_type: integer
+          - name: dispute_char_end
+            data_type: integer
+          - name: dispute_confidence
+            data_type: double
+          - name: cease_request_value
+            data_type: boolean
+            description: feeds the hard stops
+          - name: cease_request_quote
+            data_type: varchar
+          - name: cease_request_char_start
+            data_type: integer
+          - name: cease_request_char_end
+            data_type: integer
+          - name: cease_request_confidence
+            data_type: double
+          - name: third_party_present_value
+            data_type: boolean
+            description: feeds the hard stops
+          - name: third_party_present_quote
+            data_type: varchar
+          - name: third_party_present_char_start
+            data_type: integer
+          - name: third_party_present_char_end
+            data_type: integer
+          - name: third_party_present_confidence
+            data_type: double
+          - name: extractor
+            data_type: varchar
+            description: "llm:<prompt-version> or setfit:<model-version>"
+          - name: extracted_at
+            data_type: timestamptz
+          - name: confirmed_by_agent_id
+            data_type: varchar
+            description: null until an agent confirms or edits at wrap-up

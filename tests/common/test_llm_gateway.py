@@ -82,3 +82,26 @@ def test_model_is_configurable(patched: list[dict[str, Any]]) -> None:
     gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_NARRATE, actor_id="u1")
     assert patched[0]["model"] == "ollama/llama3.1"
     assert json.dumps(patched[0]["messages"])  # serialisable
+
+
+def test_rate_limit_is_retried_then_gives_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    litellm = pytest.importorskip("litellm")
+    n = {"calls": 0}
+
+    def limited(**kw: Any) -> Any:
+        n["calls"] += 1
+        if n["calls"] < 3:
+            raise litellm.RateLimitError("slow down", llm_provider="test", model="test-model")
+        return _reply("fine")
+
+    monkeypatch.setattr(litellm, "completion", limited)
+    log = InMemoryAuditLog()
+    gw = LiteLLMGateway(model="test-model", audit_log=log, max_retries=2, backoff_s=0)
+    assert gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_NARRATE, actor_id="u1").text == "fine"
+    (event,) = log.read(kind=AuditKind.LLM_CALL)
+    assert event.payload["attempts"] == 3
+
+    n["calls"] = -10  # never succeeds within the retry budget
+    with pytest.raises(litellm.RateLimitError):
+        gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_NARRATE, actor_id="u1")
+    assert log.read(kind=AuditKind.LLM_CALL)[-1].payload["ok"] is False

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
+
+from kept.config import RAW_DIR
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -46,8 +49,23 @@ def serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def land(args: argparse.Namespace) -> int:
+    """Track A: land data/raw into bronze."""
+    from kept.common.db import connect
+    from kept.data.ingest import land_directory
+
+    conn = connect()
+    try:
+        extracted_at = args.extracted_at or datetime.now(UTC)
+        for t in land_directory(conn, args.raw_dir, extracted_at=extracted_at):
+            print(f"{t.table:<40} {t.row_count:>12,}")
+    finally:
+        conn.close()
+    return 0
+
+
 # Each track adds its own handler here when its step works (plan K9).
-HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve}
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve, "land": land}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -60,6 +78,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--host", default="127.0.0.1")
             p.add_argument("--port", type=int, default=8000)
             p.add_argument("--reload", action="store_true", help="restart when code under src/ changes")
+        if name == "land":
+            p.add_argument("--raw-dir", type=Path, default=RAW_DIR)
+            p.add_argument(
+                "--extracted-at",
+                type=datetime.fromisoformat,
+                default=None,
+                help="source extract time, ISO 8601 with offset (default: now, UTC)",
+            )
     args = parser.parse_args(argv)
     handler = HANDLERS.get(args.command)
     if handler is None:

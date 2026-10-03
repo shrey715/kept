@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 from datetime import date
 from decimal import Decimal
 
@@ -9,14 +10,21 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from kept.ask.benchmark import BenchmarkCase, BenchmarkOutcome, load_benchmark, parse_tolerance, score
+from kept.ask.benchmark import (
+    BenchmarkCase,
+    BenchmarkOutcome,
+    load_benchmark,
+    parse_tolerance,
+    score,
+    write_answers,
+)
 from kept.ask.grounding import extract_numbers, is_grounded, needs_clarification
 from kept.ask.lookup import majority_result, normalize_result
 from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric, load_metric_definitions
 from kept.ask.policy import chunk_document, effective_windows
 from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
-from kept.ask.scope import check_scope, refusal_for, rule_check
+from kept.ask.scope import check_scope, make_classifier, refusal_for, rule_check
 from kept.common.llm import Purpose
 from kept.contracts import AskRequest, Intent, IntentKind, RefusalReason, Role, ScopeDecision
 from kept.contracts.data_contract import DataContract
@@ -77,6 +85,8 @@ def test_agent_cannot_ask_about_other_peoples_cases(ask_contract: DataContract) 
         "How many cases entered at 1-30 DPD this week?",
         "What does the hardship policy say about payment reductions?",
         "Average overdue balance by product",
+        "Is CASL express consent needed to send a collections payment reminder by email?",
+        "What was the change in roll rate versus last month?",
     ],
 )
 def test_rules_pass_ordinary_questions(ask_contract: DataContract, q: str) -> None:
@@ -108,6 +118,25 @@ def test_classifier_can_refuse_what_rules_miss(ask_contract: DataContract) -> No
 
     d = check_scope(_req("What's the weather in Toronto?"), ask_contract, classifier)
     assert d.reason is RefusalReason.DATA_UNAVAILABLE
+
+
+def test_llm_classifier_decides_and_redacts_first(ask_contract: DataContract) -> None:
+    llm = PurposeLLM(
+        {
+            Purpose.ASK_SCOPE: [
+                {"in_scope": False, "reason": "data_unavailable"},
+                {"in_scope": True, "reason": None},
+                "not json",
+            ]
+        }
+    )
+    classify = make_classifier(llm, PassThroughRedactor(), actor_id="u1")
+    d = check_scope(_req("What will the weather be in Toronto tomorrow?"), ask_contract, classify)
+    assert not d.in_scope and d.reason is RefusalReason.DATA_UNAVAILABLE and d.decided_by == "classifier"
+    assert check_scope(_req("Average overdue balance by product"), ask_contract, classify).in_scope
+    bad = check_scope(_req("Average overdue balance by product"), ask_contract, classify)  # reply is not JSON
+    assert not bad.in_scope and bad.reason is RefusalReason.LOW_CONFIDENCE
+    assert llm.purposes() == [Purpose.ASK_SCOPE] * 3
 
 
 def test_refusal_message_says_why_and_suggests() -> None:
@@ -426,3 +455,43 @@ def test_benchmark_refusing_an_in_scope_question_is_wrong() -> None:
 def test_benchmark_outcome_mismatch_raises(outcomes: list[BenchmarkOutcome]) -> None:
     with pytest.raises(ValueError):
         score([BenchmarkCase("a", "q", "metric", False)], outcomes)
+
+
+def test_load_benchmark_released_columns_only() -> None:
+    """The released CSV has no question_type / should_refuse / expected_tables."""
+    row = {
+        "question_id": "BQ-034",
+        "question_text": "q",
+        "difficulty": "easy",
+        "metric_id": "promise_kept_rate",
+        "as_of_date": "2026-09-28",
+        "tolerance": "±0.1 pts",
+        "split": "dev",
+    }
+    (case,) = load_benchmark([row])
+    assert case.should_refuse is False and case.question_type == "metric" and case.expected_tables == ()
+
+
+def test_write_answers_matches_the_release_template(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    out = tmp_path / "answers.csv"
+    write_answers(
+        str(out),
+        [
+            {
+                "question_id": "BQ-018",
+                "answer": "Refuse: outside scope",
+                "sql_or_sources": "",
+                "refused": True,
+            },
+            {
+                "question_id": "BQ-004",
+                "answer": "queue,avg\na,1",
+                "sql_or_sources": "SELECT 1,2",
+                "refused": False,
+            },
+        ],
+    )
+    lines = out.read_text().splitlines()
+    assert lines[0] == "question_id,answer,sql_or_sources,refused"
+    assert lines[1] == "BQ-018,Refuse: outside scope,,true"
+    assert list(csv.DictReader(out.open()))[1]["answer"] == "queue,avg\na,1"
