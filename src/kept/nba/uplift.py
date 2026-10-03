@@ -20,7 +20,7 @@ from kept.contracts.enums import Action
 from kept.features.store import assert_no_denied
 
 # Small, regularised trees: the random-assignment rows are a minority of the data.
-DEFAULT_PARAMS: dict[str, object] = {
+DEFAULT_PARAMS: dict[str, Any] = {
     "n_estimators": 200,
     "learning_rate": 0.05,
     "num_leaves": 15,
@@ -41,7 +41,7 @@ class TLearnerUplift:
         self,
         actions: Sequence[Action] = tuple(Action),
         *,
-        params: dict[str, object] | None = None,
+        params: dict[str, Any] | None = None,
         seed: int = 0,
     ) -> None:
         self.actions = tuple(actions)

@@ -99,7 +99,8 @@ class KeptContextBuilder:
             HardStop.BANKRUPTCY,
             HardStop.DECEASED,
         }:
-            # ponytail: gold only says "some hold"; INSOLVENCY until GoldenCustomer carries hard_stop_flags (G0)
+            # ponytail: gold only says "some hold", so name it INSOLVENCY until
+            # GoldenCustomer carries hard_stop_flags (proposed for G0)
             stops.add(HardStop.INSOLVENCY)
 
         hardship = customer.hardship_status
