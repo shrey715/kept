@@ -5,7 +5,7 @@ Team Sharpe Shooters, CIBC Collections Hackathon.
 
 - Design: [`docs/SharpeShooters_SystemDesign.pdf`](docs/SharpeShooters_SystemDesign.pdf)
 - Data dictionary: [`docs/CIBC Hackathon - Data Dictionary.xlsx`](docs/)
-- **Who builds what, interfaces, TDD workflow: [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md)**
+- **Who builds what, phases, integration gates, interfaces: [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md)**
 
 This is a skeleton: every function is a documented stub that raises `NotImplementedError`,
 and the tests are the spec. Make them pass.
