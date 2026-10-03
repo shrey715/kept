@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from kept.config import RAW_DIR
+from kept.config import EXPORT_DIR, RAW_DIR
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -64,8 +64,34 @@ def land(args: argparse.Namespace) -> int:
     return 0
 
 
+def match(args: argparse.Namespace) -> int:
+    """Track A: exact links + Splink on silver -> clusters -> golden IDs; writes parquet files."""
+    import subprocess
+
+    import pandas as pd
+
+    from kept.common.db import connect
+    from kept.data.identity.pipeline import run_matching, write_run
+
+    conn = connect(read_only=True)
+    try:
+        previous = pd.read_parquet(args.previous) if args.previous else None
+        run = run_matching(conn, sample_mod=args.sample_mod, previous=previous)
+    finally:
+        conn.close()
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    scope = f"sample{args.sample_mod}" if args.sample_mod else "full"
+    tag = f"{commit or 'nogit'}-{datetime.now(UTC):%Y%m%d}-{scope}"
+    for path in write_run(run, args.out_dir, tag=tag):
+        print(path)
+    print({k: v for k, v in run.summary.items() if k != "splink_settings"})
+    return 0
+
+
 # Each track adds its own handler here when its step works (plan K9).
-HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve, "land": land}
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve, "land": land, "match": match}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -85,6 +111,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 type=datetime.fromisoformat,
                 default=None,
                 help="source extract time, ISO 8601 with offset (default: now, UTC)",
+            )
+        if name == "match":
+            p.add_argument(
+                "--sample-mod", type=int, default=None, help="tune on 1/N of the records (hash of DOB)"
+            )
+            p.add_argument("--out-dir", type=Path, default=EXPORT_DIR / "identity_crosswalk")
+            p.add_argument(
+                "--previous", type=Path, default=None, help="earlier crosswalk parquet: keep its golden IDs"
             )
     args = parser.parse_args(argv)
     handler = HANDLERS.get(args.command)
