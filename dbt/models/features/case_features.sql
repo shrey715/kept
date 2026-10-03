@@ -38,4 +38,5 @@ left join {{ ref('contact_features') }} h using (case_id, as_of)
 left join {{ ref('cohort_features') }} k using (case_id, as_of)
 left join {{ ref('text_features') }} t using (case_id, as_of)
 left join {{ ref('identity_crosswalk') }} x
-    on x.source_system = 'crm' and x.source_key = s.crm_customer_id and x.valid_to is null
+    -- coll_customer_ref is a collections key (as in A's int_open_case); as a crm key it missed 3%
+    on x.source_system = 'collections' and x.source_key = s.crm_customer_id and x.valid_to is null
