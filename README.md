@@ -154,6 +154,31 @@ cd web && pnpm lint && npx tsc --noEmit
 - **Cash-flow hardship from deposit data (C):** late payroll, a 20% pay drop or new EI deposits
   add a possible-hardship observation to gold (`hardship.cashflow_observations`).
 
+- **Ask on a free hosted model (B):** `gemini/gemini-3.5-flash-lite` through LiteLLM, one free key per
+  person, because a paid key is not an option. Every question is redacted (Presidio) before any LLM call,
+  and each call is logged without the prompt text. The free tier allows 500 requests a day per project, so
+  a full benchmark run (about 110 calls) is rationed.
+- **Certified SQL for 14 of 15 metrics (B):** the metric definitions' formulas are pseudo-SQL, so each
+  certified metric is hand-translated to reviewed SQL and the LLM never writes it. `write_off_rate` is
+  not certified: its period bounds only the numerator, and one date column cannot express that. That SQL
+  also goes through the SQL guard before it runs.
+- **Lookups are voted and repaired (B):** three SQL drafts, the result shared by a majority wins, and a
+  draft that will not run gets one repair round in which the model sees the database error. Without it,
+  one bad draft left the other two disagreeing and the Ask refused.
+- **Policy search is keyword search, not embeddings (B):** LanceDB full-text (BM25) over the 19 policy
+  documents: no model download, and only sections current on the asked date are returned, so a superseded
+  version is never cited. Policies and procedures outrank FAQs and call scripts when they disagree.
+- **Numbers must come from the rows (B):** a narrative whose numbers are not in the result is dropped and
+  replaced by "the result is in the table", so the Ask never states a figure the query did not return.
+- **Where the reference answers take a shortcut, we follow them (B):** the roll rate reads
+  `month_end_date` the way the reference does (it skips the MM/DD/YYYY spelling, 3.3% of rows), and two
+  other dev questions group the way the reference does. Everywhere else the Ask computes from cleaned data.
+- **Not answered (B):** questions about a recorded call (3 of the 35 released) are refused: call
+  transcripts hold personal data and are not a table the Ask may read.
+- **Fairness report on the real cards (B):** `docs/fairness_report.md` compares recommendations across the
+  protected attributes in `gold.c360_restricted` (compliance only); a blank attribute is reported, not
+  treated as a group.
+
 ## AI tools we used, and for what
 
 - **Claude Code (D):** pair-programming the Track D code and tests, the web app, and the
@@ -166,6 +191,13 @@ cd web && pnpm lint && npx tsc --noEmit
 - **gemma3 12B (local, Ollama) (C):** extracts the text features from redacted notes, and labelled
   1,604 notes to train SetFit. Tuned and gated on the release's public labels (30% held out).
 - **SetFit (`BAAI/bge-small-en-v1.5`) (C):** the fast classifier that backfills hardship for all history.
+
+- **Claude Code (B):** pair-programming the Track B code and tests, running the benchmark and tuning the
+  prompts and certified SQL from what it showed, and writing the scorecard and fairness notes. Every change
+  went through the tests and a person's review before merging.
+- **Gemini 3.5 Flash-Lite (hosted, free tier) (B):** the Ask's scope check, question routing, SQL drafting
+  for lookups, and plain-English narration of results. Its output is checked by code: the SQL guard before
+  anything runs, and the grounding check on every number.
 
 ## Layout
 

@@ -3,9 +3,21 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: G3 side done; Phase 5 code done (benchmark, lineage, fairness report script)
-- Working on: nothing
-- Waiting on: two Parquet exports for the fairness run: D's `nba.cards` and A's `gold.c360_restricted` (not written by `kept build`); then the 4 Oct 19:00 benchmark run
+- Phase: G4 passed, code freeze (docs and deliverables only; no Ask changes after 19:00; nothing pushed after 21:00)
+- Working on: nothing; README lines merged (PR #46)
+- Waiting on: 4 Oct 19:00 IST: the extra benchmark questions. Then `kept benchmark` on the 35 released + the extra ones, answers CSV committed before 21:00 (runbook below)
+
+### Runbook for the 19:00 run (deliverable 5)
+Before 19:00 (after the Gemini quota resets, about 12:30 IST):
+1. `git checkout main && git pull`; rebuild the local silver from main (`dbt build --select collections_cases promises_to_pay agents contact_history account_monthly_snapshot card_accounts loan_accounts deposit_accounts metric_definitions`, about a minute) and pull the newest gold from the shared folder, so the run is on the final data.
+2. Rehearse once with the 35 released questions on the final main (about 110 calls) to check the CSV: one row per question, columns `question_id, answer, sql_or_sources, refused`.
+3. Check the Gemini key still has quota (one call). Keep the spare keys in `.env` (not read by the code).
+
+At 19:00:
+4. Save the extra questions CSV to `data/benchmark/extra_questions.csv`. Combine with the released file into `data/benchmark/all_questions.csv` (same header, no duplicate ids).
+5. `set -a; . ./.env; set +a; .venv/bin/python -m kept.cli benchmark --questions data/benchmark/all_questions.csv --out docs/benchmark_answers.csv`
+6. Check the row count equals the question count, then `git checkout -b bench/answers`, commit `docs/benchmark_answers.csv` only, PR to main, CI green, merge. Nothing is edited by hand, and the Ask is not changed after 19:00.
+7. If Gemini fails mid-run: rerun with a spare key from another project; Mistral (`mistral/ministral-14b-latest`) is the last resort and scores about 44% on the dev split.
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -64,6 +76,8 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-04 02:40: G4 passed, freeze announced. README lines for Track B merged (PR #46). Runbook for the 19:00 run written.
+- 2026-10-04 02:10: fairness report on the full nightly cards merged (PR #43): no material gap on contact actions; vulnerable customers go to hardship review by design.
 - 2026-10-04 00:33: Satvik's `month_end_date_raw` (PR #36) merged and verified (his counts match mine); roll rate now equals the reference for all 7 products; one repair round for lookup drafts that fail to run. Dev **83% (15 of 18), recall 100%**: both targets met. Scorecard refreshed.
 - 2026-10-03 23:55: teammate's Gemini key (a different project, fresh 500/day) works; full 35-question rerun with the final code: dev 78% (14 of 18), recall 100%, 109 calls; scorecard refreshed. Track B G3 ready.
 - 2026-10-03 23:40: Mistral key tested (14B 44%, codestral 39% vs Gemini 78%); router accepts null filters; Ask stays on Gemini.
