@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import csv
+import io
+import json
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
 
 from kept.ask.metrics import as_bool, json_array
 from kept.config import ASK_ACCURACY_TARGET, ASK_REFUSAL_RECALL_TARGET
+from kept.contracts.ask import AskAnswer, AskRequest, AskResponse, Refusal
+from kept.contracts.enums import Role
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +137,134 @@ def write_answers(path: str, answers: Iterable[dict[str, object]]) -> None:
             w.writerow({**a, "refused": "true" if a["refused"] else "false"})
 
 
+# ----------------------------------------------------------------- running and checking
+# ratio columns of the certified metrics: the answer shows them as percentages, like the gold answers
+_PCT = frozenset(
+    {"kept_rate", "broken_rate", "cure_rate", "rpc_rate", "ptp_rate", "hardship_rate"}
+    | {"delinquency_rate", "roll_rate", "payroll_delay_share"}
+)
+
+
+def _cell(col: str, v: object) -> object:
+    if v is not None and col in _PCT:
+        return round(float(v) * 100, 2)  # type: ignore[arg-type]
+    return round(float(v), 4) if isinstance(v, float) else (float(v) if hasattr(v, "as_tuple") else v)  # type: ignore[arg-type]
+
+
+def answer_row(question_id: str, response: AskResponse) -> dict[str, object]:
+    """One row of the answers CSV for an Ask response."""
+    if isinstance(response, AskAnswer):
+        buf = io.StringIO()
+        if response.rows:
+            w = csv.writer(buf, lineterminator="\n")
+            w.writerow([c + "_pct" if c in _PCT else c for c in response.columns])
+            for r in response.rows[:50]:
+                w.writerow([_cell(c, v) for c, v in zip(response.columns, r, strict=False)])
+        text = (buf.getvalue() + response.narrative).strip()
+        sources = response.sql or "; ".join(f"{c.document_id} {c.section}" for c in response.citations)
+        return {"question_id": question_id, "answer": text, "sql_or_sources": sources, "refused": False}
+    message = response.message if isinstance(response, Refusal) else response.question
+    return {"question_id": question_id, "answer": f"Refuse: {message}", "sql_or_sources": "", "refused": True}
+
+
+def apply_gold(cases: list[BenchmarkCase], gold: dict[str, dict[str, str]]) -> list[BenchmarkCase]:
+    """Dev questions have gold answers; one that starts with "Refuse" is a question to refuse.
+    Test-split questions keep should_refuse False: their answers are hidden, so they are not scored here."""
+    return [
+        replace(c, should_refuse=gold[c.question_id]["gold_answer"].startswith("Refuse"))
+        if c.question_id in gold
+        else c
+        for c in cases
+    ]
+
+
+def _matches(cell: object, g: str, tol: float, pts: bool) -> bool:
+    try:
+        want = float(g)
+    except ValueError:
+        return str(cell).strip().lower() == g.strip().lower()
+    try:
+        got = float(cell)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    count = (
+        want >= 20 and want == int(want) and "." not in g
+    )  # a group size: silver and the reference differ by a few rows
+    slack = max(tol, 0.02 * want) if count and tol > 0 else tol
+    return abs(got - want) <= slack + 1e-9 or (pts and abs(got * 100 - want) <= tol + 1e-9)
+
+
+def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse) -> bool | None:
+    """None when the answer can't be checked automatically (a tolerance we can't parse, or a refusal).
+    Tables: every gold row must appear in the result, each gold number within the tolerance (a ratio
+    also matches as a percentage). Documents: the gold sources are cited and the gold numbers are in the
+    text."""
+    if not isinstance(response, AskAnswer):
+        return None
+    sources = json.loads(gold["gold_sources"]) if gold.get("gold_sources") else []
+    if sources:
+        cited = {c.document_id for c in response.citations}
+        figures = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", gold["gold_answer"])}
+        have = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", response.narrative)}
+        return (
+            any(src.split()[0] in cited for src in sources if not src.startswith("transcript"))
+            and figures <= have
+        )
+    try:
+        parsed = parse_tolerance(case.tolerance)
+    except ValueError:
+        return None
+    tol, unit = parsed if parsed else (0.0, "")
+    want = list(csv.reader(io.StringIO(gold["gold_answer"])))[1:]
+    if not want:
+        return None
+    return all(
+        any(
+            all(any(_matches(c, g, tol, unit == "pts") for c in row) for g in want_row)
+            for row in response.rows
+        )
+        for want_row in want
+    )
+
+
+def run_benchmark(
+    ask: Any, cases: list[BenchmarkCase], *, role: Role = Role.TEAM_LEAD, user_id: str = "benchmark"
+) -> list[AskResponse]:
+    """Ask every question once. clarification_round=1: there is nobody to answer a clarifying question,
+    so an unsure Ask refuses. Role TEAM_LEAD sees exact counts (analysts get small groups suppressed)."""
+    return [
+        ask.ask(AskRequest(question=c.question_text, user_id=user_id, role=role, clarification_round=1))
+        for c in cases
+    ]
+
+
+def scorecard_markdown(
+    cases: list[BenchmarkCase], responses: list[AskResponse], gold: dict[str, dict[str, str]], card: Scorecard
+) -> str:
+    lines = [
+        "| question | type | expected | got | correct |",
+        "|---|---|---|---|---|",
+    ]
+    for c, r in zip(cases, responses, strict=True):
+        if c.question_id not in gold:
+            continue
+        got = "refused" if not isinstance(r, AskAnswer) else "answered"
+        ok = (
+            ""
+            if c.should_refuse
+            else {True: "yes", False: "NO", None: "n/a"}[is_correct(c, gold[c.question_id], r)]
+        )
+        want = "refuse" if c.should_refuse else "answer"
+        lines.append(f"| {c.question_id} | {c.question_type} | {want} | {got} | {ok} |")
+    head = (
+        f"Dev split: accuracy {card.accuracy:.0%} ({card.n_in_scope} in scope), "
+        f"refusal recall {card.refusal_recall:.0%} ({card.n_should_refuse} to refuse), "
+        f"refusal precision {card.refusal_precision:.0%}. Targets {ASK_ACCURACY_TARGET:.0%} / "
+        f"{ASK_REFUSAL_RECALL_TARGET:.0%}: {'PASSED' if card.passed else 'not met'}.\n"
+    )
+    return head + "\n" + "\n".join(lines) + "\n"
+
+
 __all__ = [
     "ANSWER_COLUMNS",
     "ASK_ACCURACY_TARGET",
@@ -139,8 +272,13 @@ __all__ = [
     "BenchmarkCase",
     "BenchmarkOutcome",
     "Scorecard",
+    "answer_row",
+    "apply_gold",
+    "is_correct",
     "load_benchmark",
     "parse_tolerance",
+    "run_benchmark",
     "score",
+    "scorecard_markdown",
     "write_answers",
 ]

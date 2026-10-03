@@ -14,7 +14,6 @@ from kept.contracts.data_contract import load_data_contract
 from kept.data.gold import DO_NOT_CONTACT_FLAGS, HARD_STOP_FLAGS
 from kept.data.quality import (
     QualityResult,
-    Status,
     check_contact_safety,
     check_freshness,
     check_linkage,
@@ -98,24 +97,6 @@ def gather_results(
     assert extracted is not None and refreshed is not None
     previous = json.loads(STATE.read_text())["c360_rows"] if STATE.exists() else None
 
-    text = conn.execute(
-        "select count(*) from duckdb_tables() where schema_name = 'text' and table_name = 'extractions'"
-    ).fetchone()
-    rows = conn.execute("select count(*) from text.extractions").fetchone() if text and text[0] else None
-    from_text = conn.execute(
-        "select count(*) from gold.c360_customer where hardship_source = 'llm'"
-    ).fetchone()
-    assert from_text is not None
-    hardship = (
-        QualityResult(
-            "hardship-text", Status.PASS, f"{rows[0]:,} extractions; {from_text[0]:,} golden IDs rest on them"
-        )
-        if rows and rows[0]
-        else QualityResult(
-            "hardship-text", Status.WARN, "no text.extractions: hardship_status is agent and account only"
-        )
-    )
-
     results = [
         check_unique_ids(c360, crosswalk),
         check_linkage(
@@ -126,7 +107,6 @@ def gather_results(
         check_freshness(extracted[0], published_at or refreshed[0]),
         check_row_count(len(c360), previous),
     ]
-    results.append(hardship)
     if REVIEWED_PAIRS.exists():
         results.append(check_review_precision(pd.read_csv(REVIEWED_PAIRS)))
     STATE.parent.mkdir(parents=True, exist_ok=True)

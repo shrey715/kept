@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -93,6 +94,70 @@ def match(args: argparse.Namespace) -> int:
     return 0
 
 
+def benchmark(args: argparse.Namespace) -> int:
+    """Track B: ask every benchmark question, write the answers CSV, score the dev split."""
+    import csv
+
+    from dotenv import load_dotenv
+
+    from kept.ask.benchmark import (
+        BenchmarkOutcome,
+        answer_row,
+        apply_gold,
+        is_correct,
+        load_benchmark,
+        run_benchmark,
+        score,
+        scorecard_markdown,
+        write_answers,
+    )
+    from kept.ask.service import build_ask
+    from kept.common.audit import DuckDBAuditLog
+    from kept.common.db import connect
+    from kept.contracts.ask import AskAnswer
+    from kept.contracts.audit import AuditKind
+
+    load_dotenv()
+    with open(args.questions, encoding="utf-8", newline="") as f:
+        cases = load_benchmark(list(csv.DictReader(f)))
+    gold: dict[str, dict[str, str]] = {}
+    if args.dev_answers.exists():
+        with open(args.dev_answers, encoding="utf-8", newline="") as f:
+            gold = {r["question_id"]: r for r in csv.DictReader(f)}
+    cases = apply_gold(cases, gold)
+    if args.only:
+        cases = [c for c in cases if c.question_id in args.only]
+    audit = DuckDBAuditLog(os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb")))
+    started = datetime.now(UTC)
+    conn = connect(read_only=True)
+    try:
+        responses = run_benchmark(build_ask(conn, audit), cases)
+    finally:
+        conn.close()
+    write_answers(
+        str(args.out), [answer_row(c.question_id, r) for c, r in zip(cases, responses, strict=True)]
+    )
+    calls = len(audit.read(kind=AuditKind.LLM_CALL, since=started))
+    per = calls / max(len(cases), 1)
+    print(f"{len(cases)} questions, {calls} LLM calls ({per:.1f} per question) -> {args.out}")
+    dev = [(c, r) for c, r in zip(cases, responses, strict=True) if c.question_id in gold]
+    if dev:
+        outcomes = [
+            BenchmarkOutcome(
+                c.question_id,
+                refused=not isinstance(r, AskAnswer),
+                correct=None if c.should_refuse else is_correct(c, gold[c.question_id], r),
+            )
+            for c, r in dev
+        ]
+        card = score([c for c, _ in dev], outcomes)
+        text = scorecard_markdown([c for c, _ in dev], [r for _, r in dev], gold, card)
+        print(text)
+        if args.scorecard:
+            args.scorecard.write_text(text, encoding="utf-8")
+    return 0
+
+
 def build(args: argparse.Namespace) -> int:
     """Track A: dbt silver (unless --gold-only), load the crosswalk, dbt gold, export c360 parquet."""
     from kept.common.db import connect
@@ -104,7 +169,7 @@ def build(args: argparse.Namespace) -> int:
     if not args.gold_only:
         run_dbt(["silver"], warehouse=warehouse)
     conn = connect()
-    build_gold(conn, crosswalk=args.crosswalk, extractions=args.extractions)  # closes conn
+    build_gold(conn, crosswalk=args.crosswalk)  # closes conn
     conn = connect()  # not read_only: dbt's connection in this process holds the file read-write
     try:
         export_parquet(conn, as_of_date=args.as_of_date)
@@ -181,6 +246,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "match": match,
     "build": build,
     "gate": gate,
+    "benchmark": benchmark,
     "extract": extract,
 }
 
@@ -208,15 +274,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         if name == "build":
             p.add_argument("--gold-only", action="store_true", help="skip the silver build (about 3 min)")
             p.add_argument("--crosswalk", type=Path, default=None, help="crosswalk parquet (default: newest)")
-            p.add_argument(
-                "--extractions",
-                type=Path,
-                nargs="*",
-                default=None,
-                help="Track C's text.extractions parquet files (default: data/exports/extractions/*.parquet)",
-            )
             p.add_argument("--warehouse", type=Path, default=None)
             p.add_argument("--as-of-date", default="2026-09-28", help="snapshot date of the load")
+        if name == "benchmark":
+            p.add_argument("--questions", type=Path, default=Path("data/benchmark/benchmark_questions.csv"))
+            p.add_argument(
+                "--dev-answers", type=Path, default=Path("data/benchmark/benchmark_dev_answers.csv")
+            )
+            p.add_argument("--out", type=Path, default=Path("data/benchmark/answers.csv"))
+            p.add_argument("--scorecard", type=Path, default=None, help="write the dev scorecard (markdown)")
+            p.add_argument(
+                "--only", nargs="+", default=None, metavar="ID", help="ask only these question ids"
+            )
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "extract":
