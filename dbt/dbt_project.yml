@@ -25,3 +25,10 @@ models:
     features:
       +schema: features
       +materialized: table
+      +pre-hook: "set TimeZone = 'UTC'"  # source timestamps are naive UTC (K7)
+
+vars:
+  # Track D features: as_of is naive UTC. Nightly = one as_of; training adds features_start.
+  features_as_of: "2026-09-28 06:00:00"
+  features_step_days: 7
+  feature_set_version: "fs-0.1"
