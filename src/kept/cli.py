@@ -22,7 +22,7 @@ COMMANDS = {
     "score": "Track D: score every open case",
     "benchmark": "Track B: run the Ask scorecard",
     "serve": "Track D: run the API",
-    "nightly": "Everyone: build -> match -> gate -> features -> parity -> score (by 06:00 ET)",
+    "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
 }
 
 
@@ -287,8 +287,8 @@ def features(args: argparse.Namespace) -> int:
     if args.training:
         dbt_vars = {"training_spine": True}
     res = dbtRunner().invoke(
-        ["build", "--select", "path:models/features", "--threads", "1", "--vars", json.dumps(dbt_vars),
-         "--profiles-dir", str(DBT_DIR), "--project-dir", str(DBT_DIR)]
+        ["build", "--select", "text_signals", "path:models/features", "--threads", "1",
+         "--vars", json.dumps(dbt_vars), "--profiles-dir", str(DBT_DIR), "--project-dir", str(DBT_DIR)]
     )  # fmt: skip
     if not res.success:
         print(f"kept features: dbt build failed: {res.exception or 'see the dbt log above'}")
@@ -331,6 +331,50 @@ def score(args: argparse.Namespace) -> int:
     took = time.perf_counter() - t0
     print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
     print(cards.groupby(cards.tier.fillna("no action"), dropna=False).size().to_string())
+    return 0
+
+
+# The nightly run, in order (A's order for land..gate, docs/tracks/Track_A.md). Each step is its own
+# `kept` process, so its memory is freed before the next (land peaks at 7 GB), and the run stops at
+# the first failure: a blocked quality gate must not publish features or cards.
+NIGHTLY = (
+    ("land", ["land"]),
+    ("silver", ["build", "--silver-only"]),
+    ("match", ["match"]),
+    ("gold", ["build", "--gold-only"]),
+    ("gate", ["gate"]),
+    ("extract", ["extract", "--new"]),  # C: tonight's notes -> text.extractions
+    ("features", ["features"]),  # rebuilds text_signals, then features, Feast
+    ("parity", ["parity"]),
+    ("score", ["score"]),
+)
+
+
+def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = None) -> int:
+    """Everyone's steps in order (S6). --from STEP resumes; --skip STEP (repeatable) leaves one out,
+    e.g. `--skip extract` on a machine without C's model. Exit code = the failing step's."""
+    import subprocess
+    import sys
+    import time
+
+    exe = str(Path(sys.executable).parent / "kept")
+    run = run or (lambda argv: subprocess.run([exe, *argv]).returncode)
+    names = [n for n, _ in NIGHTLY]
+    if args.start and args.start not in names:
+        print(f"kept nightly: unknown step {args.start}; steps: {', '.join(names)}")
+        return 2
+    steps = NIGHTLY[names.index(args.start) :] if args.start else NIGHTLY
+    for name, argv in steps:
+        if name in args.skip:
+            print(f"== {name}: skipped")
+            continue
+        print(f"== {name}: kept {' '.join(argv)}", flush=True)
+        t0 = time.perf_counter()
+        code = run(argv)
+        print(f"== {name}: exit {code} in {time.perf_counter() - t0:.0f}s", flush=True)
+        if code != 0:
+            print(f"kept nightly: stopped at {name}; nothing after it ran (resume with --from {name})")
+            return code
     return 0
 
 
@@ -403,6 +447,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "features": features,
     "parity": parity,
     "score": score,
+    "nightly": nightly,
 }
 
 
@@ -461,6 +506,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="serving as_of, naive UTC (default: the latest 06:00 UTC, the nightly run)",
             )
             p.add_argument("--training", action="store_true", help="per-decision spine for kept train")
+        if name == "nightly":
+            p.add_argument("--from", dest="start", default=None, help="resume at this step")
+            p.add_argument("--skip", action="append", default=[], help="leave a step out (repeatable)")
         if name == "score":
             p.add_argument("--model", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
             p.add_argument(
