@@ -66,6 +66,7 @@ class LiteLLMGateway:
         if not isinstance(user, RedactedText):
             raise TypeError("LLM input must be a RedactedText")
         import litellm  # lazy: core installs (contracts, Purpose) don't carry it
+        from litellm.exceptions import RateLimitError
 
         if json_schema is not None:
             system += "\n\nReply with only a JSON object matching this JSON schema:\n" + json.dumps(
@@ -93,7 +94,7 @@ class LiteLLMGateway:
                 try:
                     reply = litellm.completion(**kwargs)
                     break
-                except litellm.RateLimitError:
+                except RateLimitError:
                     if attempts > self.max_retries:
                         raise
                     time.sleep(self.backoff_s * 2 ** (attempts - 1))
@@ -125,7 +126,7 @@ class LiteLLMGateway:
 
 
 def _validated(text: str, schema: Mapping[str, Any]) -> dict[str, Any]:
-    import jsonschema  # ships with litellm
+    import jsonschema  # type: ignore[import-untyped]  # ships with litellm
 
     body = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text)  # models like to fence their JSON
     try:

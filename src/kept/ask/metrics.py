@@ -116,11 +116,11 @@ def compile_metric(
     params: list[object] = []
     for col in sorted(intent.filters):  # col is in allowed_filters: our identifiers, not user text
         v = intent.filters[col]
-        vals = v if isinstance(v, list) else [v]
+        vals: list[object] = list(v) if isinstance(v, list) else [v]
         if not vals:
             raise ValueError(f"empty filter list for {col}")
         where.append(f"{col} IN ({', '.join('?' * len(vals))})" if isinstance(v, list) else f"{col} = ?")
-        params += vals
+        params.extend(vals)
     for bound, op in ((intent.date_from, ">="), (intent.date_to, "<=")):
         if bound is not None:
             if q.date_column is None:

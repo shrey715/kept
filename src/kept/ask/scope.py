@@ -102,7 +102,7 @@ _MESSAGES = {
     RefusalReason.WRITE_ACTION: "Ask is read-only: I can't change records or send messages.",
     RefusalReason.OTHER_PEOPLES_CASES: "You can only ask about the cases in your own queue.",
     RefusalReason.DATA_UNAVAILABLE: "The collections data doesn't cover that.",
-    RefusalReason.LOW_CONFIDENCE: "I couldn't tell whether I can answer that, so I didn't. Try rephrasing it.",
+    RefusalReason.LOW_CONFIDENCE: "I couldn't tell whether I can answer that, so I didn't. Try rephrasing.",
     RefusalReason.SQL_GUARD: "That would need a query I'm not allowed to run.",
     RefusalReason.SMALL_GROUP: "That group is too small to show.",
 }
