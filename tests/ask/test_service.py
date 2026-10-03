@@ -280,3 +280,25 @@ def test_relative_dates_use_the_snapshot_date_not_the_gold_build_time(build, ask
     svc.ask(_req("promise kept rate by product"))
     route_call = next(c for c in llm.calls if c["purpose"] == Purpose.ASK_ROUTE)
     assert "relative to 2026-09-28" in route_call["system"]
+
+
+def test_a_draft_that_will_not_run_is_repaired_once_with_the_error(build) -> None:  # type: ignore[no-untyped-def]
+    """Draft 1 names a column that does not exist; the model sees the error and corrects it, so the vote has
+    two agreeing drafts instead of refusing."""
+    other = "SELECT count(*) AS n FROM silver.collections_cases"
+    svc, llm = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [
+                "SELECT nope FROM silver.collections_cases",
+                GOOD_SQL,
+                other,
+                GOOD_SQL,
+            ],  # last: the repair
+            Purpose.ASK_NARRATE: ["There are 30 card cases and 30 loan cases."],
+        }
+    )
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and a.rows == (("credit_card", 30), ("personal_loan", 30))
+    repair = [c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL][-1]
+    assert "failed with" in repair["user"].text and "nope" in repair["user"].text

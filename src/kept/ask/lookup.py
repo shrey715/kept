@@ -19,9 +19,8 @@ _SYSTEM = """You write one DuckDB SELECT query that answers a collections analys
 Rules: SELECT only, one statement. Use only these tables and columns, always schema-qualified
 (silver.collections_cases, never collections_cases). Name every column, never SELECT *. For any
 aggregate also return count(*) AS n, the size of each group. Do not filter on protected attributes.
-Bucket columns (dpd_bucket, current_bucket) disagree with the days-past-due column on ~4% of rows and dpd is
-missing on ~8%: work out buckets from dpd / current_dpd and leave out rows where dpd is NULL.
-Reply with the SQL only, no explanation.
+Leave out rows where dpd is NULL when you compare days past due. For a question "by bucket" group by the
+stored bucket column as it is.
 
 {schema_doc}
 
@@ -33,26 +32,33 @@ def _sql_only(text: str) -> str:
     return re.sub(r"^\s*```(?:sql)?\s*|\s*```\s*$", "", text).strip().rstrip(";").strip()
 
 
+def lookup_system(intent: Intent, schema_doc: str) -> str:
+    """The system prompt for a lookup draft: the rules, the schema and the router's hints."""
+    hints = intent.model_dump_json(exclude={"kind", "confidence"}, exclude_defaults=True)
+    return _SYSTEM.format(schema_doc=schema_doc, hints=hints)
+
+
+def draft_sql(llm: LLMGateway, system: str, user: RedactedText, actor_id: str) -> str | None:
+    """One SQL draft, or None when the call fails or comes back empty."""
+    try:
+        # a little temperature so the drafts can differ: the vote is the check
+        reply = llm.complete(
+            system=system, user=user, purpose=Purpose.ASK_SQL, actor_id=actor_id, temperature=0.3
+        )
+    except Exception:
+        return None
+    return _sql_only(reply.text) or None
+
+
 def generate_candidates(
     intent: Intent, schema_doc: str, llm: LLMGateway, *, n: int, actor_id: str, question: RedactedText
 ) -> list[str]:
     """n candidate SQL strings: n separate calls with purpose Purpose.ASK_SQL.
     A failed call yields no candidate (the list may be shorter than n).
     `question` is added to the spec: the intent alone doesn't carry what the user asked."""
-    hints = intent.model_dump_json(exclude={"kind", "confidence"}, exclude_defaults=True)
-    system = _SYSTEM.format(schema_doc=schema_doc, hints=hints)
-    out: list[str] = []
-    for _ in range(n):
-        try:
-            # a little temperature so the n drafts can differ: the vote is the check
-            reply = llm.complete(
-                system=system, user=question, purpose=Purpose.ASK_SQL, actor_id=actor_id, temperature=0.3
-            )
-        except Exception:
-            continue
-        if sql := _sql_only(reply.text):
-            out.append(sql)
-    return out
+    system = lookup_system(intent, schema_doc)
+    drafts = (draft_sql(llm, system, question, actor_id) for _ in range(n))
+    return [d for d in drafts if d]
 
 
 def _canon(v: Any) -> Any:

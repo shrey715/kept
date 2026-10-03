@@ -3,9 +3,9 @@
 Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
-- Phase: 5 code merged (PR #19). G2 item done. Waiting for G2/G3 for the full run.
+- Phase: G3 ready (code, scorecard, quota plan). Phases 1 to 5 parallel tasks done.
 - Working on: nothing
-- Waiting on: G2 close-out; G3 for the full benchmark run, tuning to 80% / 95% and the fairness run on real recommendations
+- Waiting on: D's `kept score` output for the fairness run on real recommendations; 4 Oct 19:00 IST for the extra questions (`kept benchmark`, commit before 21:00)
 
 ## Done
 - `LiteLLMGateway.complete` (`kept/common/llm.py`) with retry test: 5 gateway tests pass.
@@ -30,6 +30,11 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 - G2 check (19:58): `kept benchmark` with the real Presidio redactor, the real Gemini model and the real gold C360 (`data/exports/c360_customer/part-000.parquet`, 1,052,300 rows, pulled from the shared folder) on 10 dev questions: **7 of 8 in scope correct (88%), refusals 2 of 2, 2.7 LLM calls per question**, 1 min 45 s. Lookups vary run to run (the 3-draft vote can disagree: BQ-010 passed once and was refused once).
 - Found by the G2 run and fixed: relative dates ("today") came from gold's `refreshed_at` (build time, 3 Oct) instead of its `as_of_date` (the data snapshot, 28 Sep), so snapshot questions came back empty; the router over-grouped delinquency by `dpd_bucket` (removed from that metric: a rate per bucket is always 0% or 100%).
 - **The gold I tested on is a pre-backfill export (3 Oct 18:48).** Its `hardship_status` (32,306 confirmed, 3,998 possible) comes from the agent flags, account programmes and the 50 real extractions only; the SetFit backfill has not landed. No hardship number from it is an answer. Rerun hardship questions after the backfill and a gold rebuild.
+
+- G3 prep (23:30): updated gold (3 Oct 20:41, with the SetFit backfill) loaded; silver rebuilt; "match the key" decided with the user: BQ-003 groups 3+ prior broken promises, BQ-035 groups by the stored `current_bucket`. Full 35-question run: dev **78% (14 of 18)**, refusal recall 100%, 103 calls. Scorecard: `docs/benchmark_scorecard.md`. BQ-017 can't be matched from the Ask side (silver keeps no raw date format: needs one column from A); BQ-016 and BQ-022 (transcripts) skipped by decision; BQ-006 is an ambiguous reading.
+- **Free-tier quota finding:** Gemini's free tier is 500 requests per day **per Google project per model** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`), shared by every key in the project, and resets about 6 hours after the limit is hit. Today's tuning used it up (resets about 05:30 IST on 4 Oct). A second key from the same project does not help; a key from a different project, a different model, or a different provider does. For 4 Oct: keep about 250 calls for the 19:00 run.
+
+- Mistral trial (23:40, user's key, local only, not adopted): `ministral-14b-latest` 44%, `codestral-latest` 39% on the dev split (refusal recall 100%); `mistral-small/medium/large` unavailable on that tier. Kept: the router now accepts null filters (`{"queue": null}`) and drops them, which smaller models need and Gemini does not mind. The Ask stays on Gemini; Mistral is only a last-resort fallback for 4 Oct.
 
 ## Decisions and changes from the plan
 - `generate_candidates` gained a required `question: RedactedText` keyword: the intent alone doesn't carry what the user asked, and the LLM needs it. Nothing else calls it.
@@ -59,6 +64,12 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-04 00:33: Satvik's `month_end_date_raw` (PR #36) merged and verified (his counts match mine); roll rate now equals the reference for all 7 products; one repair round for lookup drafts that fail to run. Dev **83% (15 of 18), recall 100%**: both targets met. Scorecard refreshed.
+- 2026-10-03 23:55: teammate's Gemini key (a different project, fresh 500/day) works; full 35-question rerun with the final code: dev 78% (14 of 18), recall 100%, 109 calls; scorecard refreshed. Track B G3 ready.
+- 2026-10-03 23:40: Mistral key tested (14B 44%, codestral 39% vs Gemini 78%); router accepts null filters; Ask stays on Gemini.
+- 2026-10-03 23:30: Gemini free quota exhausted (500 per day per project per model); stopped the benchmark run; scorecard from the 23:11 run committed; waiting for a Mistral key.
+- 2026-10-03 23:11: full 35-question run, dev 78% / recall 100%.
+- 2026-10-03 23:02: pulled main, updated gold (20:41), rebuilt silver; matched the key on BQ-003 and BQ-035.
 - 2026-10-03 19:58: G2 check done on real gold with the real redactor (7 of 8, refusals 2 of 2); fixed the as-of date and the delinquency router bug.
 - 2026-10-03 19:25: pulled the gold C360 from the shared folder with rclone and loaded it into the local warehouse.
 - 2026-10-03 19:16: PR #19 merged (kept benchmark, lineage check, fairness rates, Ask quality fixes).

@@ -82,9 +82,9 @@ def _equal(a: pd.Series, b: pd.Series, *, rel_tol: float, abs_tol: float) -> pd.
         values = pd.Series(
             [_same(x, y, rel_tol, abs_tol) for x, y in zip(av, bv, strict=True)], index=av.index
         )
-    equal = equal.copy()
-    equal[both] = values
-    return equal
+    result = equal.to_numpy().copy()
+    result[both.to_numpy()] = values.to_numpy()
+    return pd.Series(result, index=a.index)
 
 
 def _same(x: object, y: object, rel_tol: float, abs_tol: float) -> bool:
@@ -130,4 +130,31 @@ def run_parity(
     columns_out = [c for c in _COLUMNS]
     return parity_report(
         pd.DataFrame(offline, columns=columns_out), pd.DataFrame(online, columns=columns_out)
+    )
+
+
+def parity_markdown(report: ParityReport, *, cases: int, as_of: str, generated: str) -> str:
+    """The parity report as Markdown (G3 exit check: "parity report produced")."""
+    worst = (
+        "\n".join(f"| {name} | {count:,} |" for name, count in report.worst_features[:10]) or "| none | 0 |"
+    )
+    return "\n".join(
+        [
+            "# Offline / online feature parity",
+            "",
+            f"Generated {generated}. Offline: `features.case_features` in the warehouse (as of {as_of}). "
+            "Online: the Feast online store, read through `FeatureVector`.",
+            "",
+            f"Result: **{'PASS' if report.passed else 'FAIL'}**: {report.n_mismatched:,} of "
+            f"{report.n_cells:,} cells differ ({report.mismatch_rate:.4%}; the limit is "
+            f"{PARITY_MAX_MISMATCH_RATE:.1%}).",
+            "",
+            f"- Cases compared: {cases:,}; missing from one side: {len(report.missing_entities):,}",
+            "- Floats compare to 1e-9; null equals null; null against a value is a mismatch",
+            "",
+            "| Feature with mismatches | Cells |",
+            "|---|---|",
+            worst,
+            "",
+        ]
     )

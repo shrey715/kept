@@ -293,12 +293,39 @@ def features(args: argparse.Namespace) -> int:
     return 0
 
 
+def score(args: argparse.Namespace) -> int:
+    """Track D: a card for every open case (G3) -> nba.cards; audit events in one write."""
+    import time
+
+    from dotenv import load_dotenv
+
+    from kept.common.audit import DuckDBAuditLog
+    from kept.nba.score import score as score_all
+
+    load_dotenv()  # KEPT_HOLDOUT_SALT, KEPT_AUDIT_LOG_PATH
+    t0 = time.perf_counter()
+    audit = DuckDBAuditLog(os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb")))
+    cards = score_all(
+        WAREHOUSE_PATH,
+        model=args.model,
+        holdout_salt=os.environ["KEPT_HOLDOUT_SALT"],
+        now=args.now or datetime.now(UTC),
+        audit_log=audit,
+    )
+    took = time.perf_counter() - t0
+    print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
+    print(cards.groupby(cards.tier.fillna("no action"), dropna=False).size().to_string())
+    return 0
+
+
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
     import duckdb
+    from dotenv import load_dotenv
 
     from kept.nba.train import run
 
+    load_dotenv()  # MLFLOW_TRACKING_URI
     conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
     try:
@@ -315,7 +342,8 @@ def parity(args: argparse.Namespace) -> int:
     """Track A: offline features (warehouse) against the online store (Feast). Exit 1 if parity fails."""
     from kept.common.db import connect
     from kept.config import PARITY_MAX_MISMATCH_RATE
-    from kept.features.parity import run_parity
+    from kept.features.parity import _COLUMNS as FEATURES_COLUMNS
+    from kept.features.parity import parity_markdown, run_parity
     from kept.features.store import FeastFeatureProvider
 
     repo = Path(__file__).resolve().parents[2] / "feature_repo"
@@ -326,6 +354,17 @@ def parity(args: argparse.Namespace) -> int:
         )
     finally:
         conn.close()
+    out = EXPORT_DIR / "quality" / "parity_report.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cases = report.n_cells // (len(FEATURES_COLUMNS) - 1)  # the key is not a cell if report.n_cells else 0
+    out.write_text(
+        parity_markdown(
+            report,
+            cases=cases,
+            as_of=str(args.as_of),
+            generated=datetime.now(UTC).isoformat(timespec="minutes"),
+        )
+    )
     worst = ", ".join(f"{f}: {n}" for f, n in report.worst_features[:5]) or "none"
     print(
         f"parity {'PASS' if report.passed else 'FAIL'}: {report.n_mismatched:,} of {report.n_cells:,} cells "
@@ -347,6 +386,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "train": train,
     "features": features,
     "parity": parity,
+    "score": score,
 }
 
 
@@ -400,6 +440,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="serving as_of, naive UTC (default: the latest 06:00 UTC, the nightly run)",
             )
             p.add_argument("--training", action="store_true", help="per-decision spine for kept train")
+        if name == "score":
+            p.add_argument("--model", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
+            p.add_argument(
+                "--now", type=datetime.fromisoformat, default=None, help="with a UTC offset (default: now)"
+            )
         if name == "train":
             p.add_argument(
                 "--cutoff",
@@ -413,6 +458,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")
             p.add_argument("--seed", type=int, default=7)
+            p.add_argument("--as-of", default="2026-09-28 06:00 UTC", help="shown in the report")
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
         if name == "extract":

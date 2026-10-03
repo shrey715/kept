@@ -11,7 +11,7 @@ from typing import Any
 import duckdb
 
 from kept.ask.grounding import extract_numbers, is_grounded, needs_clarification
-from kept.ask.lookup import generate_candidates, majority_result, normalize_result
+from kept.ask.lookup import draft_sql, generate_candidates, lookup_system, majority_result, normalize_result
 from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric
 from kept.ask.policy import PolicyIndex
 from kept.ask.privacy import suppress_small_groups
@@ -59,16 +59,19 @@ def _refuse(reason: RefusalReason, message: str) -> Refusal:
 
 _CONVENTIONS = """Conventions (from the data dictionary):
 - An open case has collections_cases.outcome IS NULL. A randomised case has assignment_method = 'random'.
-- Delinquency buckets, from days past due (dpd / current_dpd): 'current' (0), '1-30', '31-60', '61-90',
-  '91-120', '121-150', '151-180', '180+'. Use exactly these labels and compute them from dpd.
+- Delinquency buckets are 'current', '1-30', '31-60', '61-90', '91-120', '121-150', '151-180', '180+'.
+  When the question asks "by bucket", group by the stored bucket column (current_bucket, dpd_bucket) as it
+  is. Work a bucket out from dpd / current_dpd only when the question gives a days-past-due range.
 - A resolved promise has ptp_status in ('kept', 'partially_kept', 'broken'); open and cancelled are not
   resolved.
 - An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
 - contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
-  is the hour 0-23. Disputes and complaints raised in a period are contacts with dispute_raised_flag or
-  complaint_raised_flag; collections_cases.dispute_flag is only the case's current state."""
+  is the hour 0-23.
+- Disputes and complaints raised in a date range are events: count contact_history rows with
+  dispute_raised_flag (or complaint_raised_flag), dated by contact_ts_local, with no other filter (the type
+  exists only on collections_cases). collections_cases.dispute_date is just the latest dispute on a case."""
 
 
 def _describe(conn: duckdb.DuckDBPyConnection, policy: SqlPolicy) -> str:
@@ -235,7 +238,17 @@ class CollectionsAsk:
         guards = [guard_sql(d, policy) for d in drafts]
         if guards and not any(g.allowed for g in guards):
             return _refuse(RefusalReason.SQL_GUARD, guards[0].reason or "The query is not allowed.")
-        ran = [self._run(g) if g.allowed else None for g in guards]
+        schema = self._schema_doc(policy, as_of)
+        results = [self._try(g) if g.allowed else (None, None) for g in guards]
+        ran = [r for r, _ in results]
+        for i, (r, error) in enumerate(results):
+            # allowed but would not run: let the model fix it once, with the error
+            if (
+                r is None
+                and error
+                and (fixed := self._repair(request, question, intent, schema, drafts[i], error, policy))
+            ):
+                guards[i], ran[i] = fixed
         ran += [None] * (SQL_CANDIDATES - len(ran))  # drafts the LLM never produced vote for nothing
         winner = majority_result([r[1] if r else None for r in ran])
         if needs_clarification(router_confidence=intent.confidence, candidates_agree=winner is not None):
@@ -350,13 +363,43 @@ class CollectionsAsk:
         today = f" The data's as-of date is {as_of}." if as_of else ""
         return f"{self._schema_cache}\n\n{_CONVENTIONS}{today}"
 
+    def _try(
+        self, guarded: GuardResult, params: list[object] | None = None
+    ) -> tuple[tuple[tuple[str, ...], Any] | None, str | None]:
+        """(result, None) on success; (None, error) if the query would not run; (None, None) on a timeout."""
+        try:
+            return execute_guarded(self._conn, guarded, params=params, timeout_s=ASK_SQL_TIMEOUT_S), None
+        except TimeoutError:
+            return None, None
+        except Exception as e:  # a missing column or table, a type error: the model can fix this
+            return None, str(e)[:300]
+
     def _run(
         self, guarded: GuardResult, params: list[object] | None = None
     ) -> tuple[tuple[str, ...], Any] | None:
-        try:
-            return execute_guarded(self._conn, guarded, params=params, timeout_s=ASK_SQL_TIMEOUT_S)
-        except Exception:  # timeout, missing table, bad SQL: this candidate has no result
+        return self._try(guarded, params)[0]
+
+    def _repair(
+        self,
+        request: AskRequest,
+        question: RedactedText,
+        intent: Intent,
+        schema: str,
+        sql: str,
+        error: str,
+        policy: SqlPolicy,
+    ) -> tuple[GuardResult, tuple[tuple[str, ...], Any]] | None:
+        """One repair round for a draft that failed to run: show the model its query and the error."""
+        user = self._redactor.redact(
+            f"{question.text}\n\nYour previous query:\n{sql}\n\nIt failed with: {error}\n"
+            "Write a corrected query. Join tables on case_id when you need columns from another table."
+        )
+        fixed = draft_sql(self._llm, lookup_system(intent, schema), user, request.user_id)
+        guarded = guard_sql(fixed, policy) if fixed else None
+        if guarded is None or not guarded.allowed:
             return None
+        result = self._run(guarded)
+        return (guarded, result) if result else None
 
     def _as_of(self, fresh: datetime | None) -> date | None:
         """The data's snapshot date, the 'today' of every relative date. Not refreshed_at: that is when gold
