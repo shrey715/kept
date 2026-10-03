@@ -148,6 +148,76 @@ def build_sql_policy(conn: duckdb.DuckDBPyConnection, contract: DataContract) ->
     )
 
 
+_WORD = re.compile(r"[a-z]+")
+_STOP = frozenset(
+    {
+        "customer",
+        "customers",
+        "more",
+        "much",
+        "many",
+        "should",
+        "we",
+        "so",
+        "first",
+        "because",
+        "they",
+        "every",
+        "a",
+        "an",
+        "and",
+        "are",
+        "by",
+        "can",
+        "did",
+        "do",
+        "does",
+        "for",
+        "from",
+        "how",
+        "in",
+        "is",
+        "it",
+        "last",
+        "list",
+        "me",
+        "of",
+        "on",
+        "or",
+        "our",
+        "per",
+        "show",
+        "the",
+        "their",
+        "them",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "which",
+        "who",
+        "why",
+        "with",
+    }
+)
+
+
+def nearest_question(question: str, metrics: dict[str, MetricDefinition]) -> str | None:
+    """The certified metric's example question that shares the most words with `question` (its name, synonyms
+    and example count), for "Try: ..." on a refusal. None when nothing overlaps (weather, sports)."""
+    words = set(_WORD.findall(question.lower())) - _STOP
+    best, score = None, 0
+    for d in metrics.values():
+        if not d.certified_flag or not d.example_question:
+            continue
+        text = " ".join((d.metric_name, *d.synonyms, d.example_question)).lower().replace("-", " ")
+        overlap = len(words & set(_WORD.findall(text)))
+        if overlap > score:
+            best, score = d.example_question, overlap
+    return best
+
+
 def _metric_hint(d: MetricDefinition, q: CertifiedQuery) -> str:
     """What the router needs to know about a metric: its names, defaults, allowed filters and group-bys."""
     return (
@@ -211,13 +281,13 @@ class CollectionsAsk:
         if (
             rule := rule_check(request, self._contract)
         ) is not None:  # protected, bulk, write, other people's cases
-            return refusal_for(rule, suggestion=None)
+            return refusal_for(rule, suggestion=nearest_question(request.question, self._metrics))
         if call := _CALL_SUMMARY.search(request.question):
             seen["intent"] = "call_summary"
             return self._call_summary(request, call[1].upper())
         decision = check_scope(request, self._contract, self._classifier)
         if not decision.in_scope:
-            return refusal_for(decision, suggestion=None)
+            return refusal_for(decision, suggestion=nearest_question(request.question, self._metrics))
         fresh = self._freshness()
         as_of = self._as_of(fresh)
         try:
