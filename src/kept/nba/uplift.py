@@ -1,10 +1,11 @@
 """Stage 4: one LightGBM model per action (T-learner) predicting paid_14d,
 trained on randomly assigned cases only; checked with Qini on the hold-out.
 
-Training rows are contact attempts (contact_history) with action = treatment_to_action(
-treatment_code, channel) and features as of contact_ts_utc. "Randomly assigned" comes from
-collections_cases.assignment_method == 'random' (146,573 cases on 28 Sep 2026; rule_based is
-not random). The random-only no_contact_holdout cell is the WAIT arm.
+Training rows (dbt features.training_rows) are contact attempts with action = treatment_to_action(
+treatment_code, channel), and WAIT = weekly check-in days with no outbound contact, all on
+randomly assigned cases (collections_cases.assignment_method == 'random'), with features a second
+before each decision. The no_contact_holdout cell delays contact rather than withholding it, so
+it is not a WAIT arm on its own.
 """
 
 from __future__ import annotations
@@ -19,12 +20,14 @@ import pandas as pd
 from kept.contracts.enums import Action, PayrollFrequency
 from kept.features.store import assert_no_denied
 
-# Small, regularised trees: the random-assignment rows are a minority of the data.
+# Small, regularised trees: per-arm models that overfit make the uplift (a difference of two
+# models) noisy. Chosen on real data (3 Oct): call Qini 0.0067 vs 0.0042 with 200 trees / 15 leaves.
 DEFAULT_PARAMS: dict[str, Any] = {
-    "n_estimators": 200,
+    "n_estimators": 100,
     "learning_rate": 0.05,
-    "num_leaves": 15,
-    "min_child_samples": 50,
+    "num_leaves": 7,
+    "min_child_samples": 300,
+    "reg_lambda": 5.0,
     "subsample": 0.8,
     "subsample_freq": 1,
     "colsample_bytree": 0.8,
