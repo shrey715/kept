@@ -309,3 +309,11 @@ def _canadian_recognizers(language: str) -> list[Any]:
 
 
 _DOB_WORDS = ["dob", "born", "birth", "birthday", "birthdate", "ddn", "naissance", "né", "née"]
+
+
+def stored_redacted(text: str, redactor_version: str) -> RedactedText:
+    """Rewrap text that PresidioRedactor already redacted and stored (text.redacted_notes Parquet),
+    so batch jobs don't redact twice. Only for that output: anything else goes through redact()."""
+    if not redactor_version.startswith("presidio-"):
+        raise ValueError(f"not Presidio output: redactor_version={redactor_version!r}")
+    return RedactedText(text=text, redactor_version=redactor_version)

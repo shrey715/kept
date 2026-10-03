@@ -200,6 +200,45 @@ def gate(args: argparse.Namespace) -> int:
     return 1 if run_gate(results) is Status.BLOCK else 0
 
 
+def extract(args: argparse.Namespace) -> int:
+    """Track C: notes/calls (or a note typed in now) -> redact -> LLM -> text.extractions."""
+    import time
+
+    from kept.text.live import extract_into, read_sources, typed_note, warehouse_path
+
+    path = warehouse_path()
+    if args.text is not None:
+        if not args.case_id:
+            print("kept extract: --text needs --case-id")
+            return 2
+        sources = [typed_note(args.text, case_id=args.case_id, source_id=args.source_id)]
+    else:
+        sources = read_sources(
+            path, note_ids=args.note_id, transcript_ids=args.transcript_id, new=args.new, limit=args.limit
+        )
+        missing = set(args.note_id) | set(args.transcript_id)
+        missing -= {s.source_id for s in sources}
+        for i in sorted(missing):
+            print(f"{i}  not found in silver")
+    t0, ok, errors = time.perf_counter(), 0, 0
+    for r in extract_into(path, sources):
+        if r.extraction is None:
+            errors += 1
+            print(f"{r.source_id}  error: {r.error}  {r.seconds:.1f}s")
+            continue
+        ok += 1
+        x = r.extraction
+        promise = "no"
+        if x.promise_intent.value:
+            promise = " ".join(str(v) for v in ("yes", x.promised_amount.value, x.promised_date.value) if v)
+        print(
+            f"{r.source_id}  hardship={x.hardship_signal.value.value}  promise={promise}  "
+            f"cease-suggested={'yes' if x.cease_request.value else 'no'}  {r.seconds:.1f}s"
+        )
+    print(f"{ok} extracted, {errors} errors, {time.perf_counter() - t0:.1f}s -> text.extractions in {path}")
+    return 1 if errors and not ok else 0
+
+
 # Each track adds its own handler here when its step works (plan K9).
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
@@ -208,6 +247,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "build": build,
     "gate": gate,
     "benchmark": benchmark,
+    "extract": extract,
 }
 
 
@@ -248,6 +288,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if name == "gate":
             p.add_argument("--report", type=Path, default=EXPORT_DIR / "quality" / "quality_report.md")
+        if name == "extract":
+            p.add_argument("--note-id", action="append", default=[], help="silver.agent_notes note_id")
+            p.add_argument(
+                "--transcript-id", action="append", default=[], help="silver.call_transcripts transcript_id"
+            )
+            p.add_argument("--new", action="store_true", help="every note with no text.extractions row")
+            p.add_argument(
+                "--limit", type=int, default=None, help="with --new: at most N notes, newest first"
+            )
+            p.add_argument("--text", default=None, help="a new note typed in now (not in silver)")
+            p.add_argument("--case-id", default=None, help="with --text: the note's case")
+            p.add_argument("--source-id", default=None, help="with --text: its id (default N-LIVE-<random>)")
         if name == "match":
             p.add_argument(
                 "--sample-mod", type=int, default=None, help="tune on 1/N of the records (hash of DOB)"

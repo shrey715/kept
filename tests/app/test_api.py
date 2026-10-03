@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -13,8 +14,11 @@ from kept.app.api import Services, create_app
 from kept.contracts import (
     Action,
     AskRequest,
+    AuditKind,
     Channel,
+    ExtractedValue,
     GoldenCustomer,
+    HardshipSignal,
     NBACard,
     Proposal,
     Refusal,
@@ -23,9 +27,11 @@ from kept.contracts import (
     ReleaseResult,
     ReleaseTier,
     Role,
+    StatedReason,
+    TextExtraction,
 )
 
-from ..fakes import DictC360Reader, InMemoryAuditLog
+from ..fakes import DictC360Reader, InMemoryAuditLog, InMemoryExtractionStore
 
 NOW = datetime(2026, 10, 2, 22, 0, tzinfo=UTC)
 
@@ -154,3 +160,99 @@ def test_openapi_lists_every_route(client: TestClient) -> None:
         "/steward/items/{item_id}",
         "/extractions/{source_id}/confirm",
     } <= paths
+
+
+def _extraction() -> TextExtraction:
+    def nothing(v: object) -> ExtractedValue[Any]:
+        return ExtractedValue(value=v, confidence=0.9)
+
+    return TextExtraction(
+        source_id="N-1",
+        case_id="C-118204",
+        hardship_signal=nothing(HardshipSignal.NONE),
+        stated_reason=nothing(StatedReason.NONE),
+        promise_intent=nothing(False),
+        promised_date=nothing(None),
+        promised_amount=nothing(None),
+        dispute=nothing(False),
+        cease_request=nothing(False),
+        third_party_present=nothing(False),
+        extractor="llm:prompt-v1",
+        extracted_at=NOW,
+    )
+
+
+Confirm = tuple[TestClient, InMemoryExtractionStore, InMemoryAuditLog]
+
+
+@pytest.fixture
+def confirm_setup(make_customer: Callable[..., GoldenCustomer]) -> Confirm:
+    store, log = InMemoryExtractionStore(), InMemoryAuditLog()
+    store.put(_extraction())
+    services = Services(
+        engine=FakeEngine(),
+        release_gate=FakeGate(),
+        ask=FakeAsk(),
+        c360=DictC360Reader({"G-004817": make_customer()}),
+        audit_log=log,
+        clock=lambda: NOW,
+        extractions=store,
+    )
+    return TestClient(create_app(services)), store, log
+
+
+def test_confirm_extraction_sets_agent_and_audits(confirm_setup: Confirm) -> None:
+    client, store, log = confirm_setup
+    r = client.post("/extractions/N-1/confirm", json={"agent_id": "agent-7"})
+    assert r.status_code == 200
+    assert TextExtraction.model_validate(r.json()).confirmed_by_agent_id == "agent-7"
+    saved = store.get("N-1")
+    assert saved is not None and saved.confirmed_by_agent_id == "agent-7"
+    (e,) = log.read(kind=AuditKind.OVERRIDE)
+    assert e.actor_id == "agent-7" and e.payload["source_id"] == "N-1" and e.payload["edited_fields"] == []
+
+
+def test_confirm_extraction_with_edit(confirm_setup: Confirm) -> None:
+    client, store, _ = confirm_setup
+    body = {"agent_id": "agent-7", "edits": {"promised_amount": "140.00"}}
+    assert client.post("/extractions/N-1/confirm", json=body).status_code == 200
+    saved = store.get("N-1")
+    assert saved is not None
+    assert saved.promised_amount.value == Decimal("140.00") and saved.promised_amount.confidence == 1.0
+
+
+def test_confirm_cease_request(confirm_setup: Confirm) -> None:
+    client, store, log = confirm_setup
+    body = {"agent_id": "agent-7", "edits": {"cease_request": True}}
+    assert client.post("/extractions/N-1/confirm", json=body).status_code == 200
+    saved = store.get("N-1")
+    # confirmed + cease true is what turns text_signals.cease_request_flag on
+    assert (
+        saved is not None and saved.cease_request.value is True and saved.confirmed_by_agent_id == "agent-7"
+    )
+    assert log.read()[0].payload["edited_fields"] == ["cease_request"]
+
+
+@pytest.mark.parametrize("edits", [{"not_a_field": 1}, {"promised_date": "not a date"}])
+def test_confirm_bad_edit_422(confirm_setup: Confirm, edits: dict[str, Any]) -> None:
+    client, store, log = confirm_setup
+    r = client.post("/extractions/N-1/confirm", json={"agent_id": "agent-7", "edits": edits})
+    assert r.status_code == 422
+    saved = store.get("N-1")
+    assert saved is not None and saved.confirmed_by_agent_id is None and not log.read()
+
+
+def test_confirm_unknown_extraction_404(confirm_setup: Confirm) -> None:
+    client, _, _ = confirm_setup
+    assert client.post("/extractions/N-404/confirm", json={"agent_id": "agent-7"}).status_code == 404
+
+
+def test_confirm_other_agent_403(confirm_setup: Confirm) -> None:
+    client, store, _ = confirm_setup
+    assert client.post("/extractions/N-1/confirm", json={"agent_id": "agent-8"}).status_code == 403
+    saved = store.get("N-1")
+    assert saved is not None and saved.confirmed_by_agent_id is None
+
+
+def test_confirm_without_store_503(client: TestClient) -> None:
+    assert client.post("/extractions/N-1/confirm", json={"agent_id": "agent-7"}).status_code == 503

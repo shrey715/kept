@@ -55,4 +55,26 @@ def eligible_programs(
     dpd <= max_dpd, months_on_book >= min_months_on_book, uses_last_12m < max_uses_12m,
     and neither exclusion fires. None limits are not checked. Only the current version
     of each program_id can be returned."""
-    raise NotImplementedError("Track C")
+    current: dict[str, HardshipProgram] = {}
+    for p in programs:
+        live = p.effective_from <= as_of and (p.effective_to is None or as_of < p.effective_to)
+        if live and (p.program_id not in current or p.effective_from > current[p.program_id].effective_from):
+            current[p.program_id] = p  # overlapping versions: the newest one wins
+    return sorted(
+        (p for p in current.values() if _qualifies(case, p)), key=lambda p: (p.program_id, p.version)
+    )
+
+
+_LEVEL = {HardshipSignal.NONE: 0, HardshipSignal.POSSIBLE: 1, HardshipSignal.CLEAR: 2}
+
+
+def _qualifies(case: ProgramCase, p: HardshipProgram) -> bool:
+    return (
+        case.product_type in p.product_types
+        and _LEVEL[case.hardship_level] >= _LEVEL[p.min_hardship_level]
+        and (p.max_dpd is None or case.dpd <= p.max_dpd)
+        and (p.min_months_on_book is None or case.months_on_book >= p.min_months_on_book)
+        and (p.max_uses_12m is None or case.uses_last_12m < p.max_uses_12m)
+        and not (p.excludes_insolvency and case.insolvency)
+        and not (p.excludes_broken_plan_90d and case.broken_plan_90d)
+    )
