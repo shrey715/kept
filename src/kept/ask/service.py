@@ -13,7 +13,7 @@ from typing import Any
 
 import duckdb
 
-from kept.ask.grounding import extract_numbers, is_grounded, needs_clarification
+from kept.ask.grounding import extract_numbers, needs_clarification, ungrounded_numbers
 from kept.ask.lookup import draft_sql, generate_candidates, lookup_system, majority_result, normalize_result
 from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric
 from kept.ask.policy import PolicyIndex
@@ -46,7 +46,10 @@ from kept.contracts.interfaces import AuditLog, LLMGateway, Redactor
 
 _NARRATE = """You explain a query result to a collections analyst in one to three plain sentences.
 Use only numbers that appear in the data below. Never add, estimate or compute new numbers.
-A column of ratios between 0 and 1 may be written as a percentage. Do not mention SQL.
+Only a column whose name ends in _rate, _share or _pct is a ratio (0 to 1) that may be written as a
+percentage. Amounts and costs (cost_per_contact, amounts in CAD) are dollars: never turn them into
+percentages. To compare two values, say which is higher or lower in words and do not state the
+difference. Do not mention SQL.
 No data? Say there is nothing to show."""
 _NARRATE_POLICY = """You answer a collections agent's policy question from the excerpts below, in one to three
 plain sentences.
@@ -76,8 +79,10 @@ _CONVENTIONS = """Conventions (from the data dictionary):
   resolved.
 - An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
 - Charge-offs: rows of card_accounts and loan_accounts with chargeoff_flag = TRUE, dated by chargeoff_date,
-  amount in chargeoff_amount. "By product": cards are one product, 'card'; loans use product_type. A 12-month
-  window ends on the data's as-of date.
+  amount in chargeoff_amount. "By product": cards are one product, 'card'; loans use product_type.
+- "The N months to <date>" is the N months ending on that date: after the date N months earlier, up to and
+  including <date>. The 12 months to 28 September 2026 is chargeoff_date > DATE '2025-09-28' AND
+  chargeoff_date <= DATE '2026-09-28' (the start day is not included).
 - contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
@@ -404,17 +409,27 @@ class CollectionsAsk:
         allow: frozenset[Decimal],
         system: str = _NARRATE,
     ) -> str:
-        try:
-            reply = self._llm.complete(
-                system=system,
-                user=self._redactor.redact(f"Question: {question.text}\nData: {data}"),
-                purpose=Purpose.ASK_NARRATE,
-                actor_id=request.user_id,
+        text = f"Question: {question.text}\nData: {data}"
+        for _ in range(2):  # a second try when the first used a number the data does not hold
+            try:
+                reply = self._llm.complete(
+                    system=system,
+                    user=self._redactor.redact(text),
+                    purpose=Purpose.ASK_NARRATE,
+                    actor_id=request.user_id,
+                )
+            except Exception:
+                break
+            said = reply.text.strip()
+            if not said:
+                break
+            if not (extra := ungrounded_numbers(said, rows, allow=allow)):
+                return said
+            text += (
+                f"\n\nYour answer used numbers that are not in the data: {', '.join(map(str, extra))}. "
+                "Answer again with only numbers that appear in the data. To compare, say higher or lower "
+                "in words; do not state a difference."
             )
-            if reply.text.strip() and is_grounded(reply.text, rows, allow=allow):
-                return reply.text.strip()
-        except Exception:
-            pass
         return _FALLBACK  # numbers only from rows: an ungrounded or missing narration is dropped
 
     def _sql_policy(self) -> SqlPolicy:

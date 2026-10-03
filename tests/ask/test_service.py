@@ -379,3 +379,21 @@ def test_a_failing_summariser_is_a_polite_refusal_not_a_crash(build_with_calls) 
 
     svc, _ = build_with_calls(boom)
     assert isinstance(svc.ask(_req(CALL_Q)), Refusal)
+
+
+def test_a_narration_with_an_invented_number_gets_one_retry(build) -> None:  # type: ignore[no-untyped-def]
+    """The first narration states a difference that is not in the rows; told so, the second does not."""
+    svc, llm = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [GOOD_SQL],
+            Purpose.ASK_NARRATE: [
+                "Card has 30 cases, 12 more than nothing at all.",
+                "Both products have 30 cases each.",
+            ],
+        }
+    )
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and a.narrative == "Both products have 30 cases each."
+    second = [c for c in llm.calls if c["purpose"] == Purpose.ASK_NARRATE][1]
+    assert "not in the data: 12" in second["user"].text

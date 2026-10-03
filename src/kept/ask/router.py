@@ -30,10 +30,13 @@ what happened on a day and why a number changed (an outage, an incident, a relea
 the policy, incident and release documents. Otherwise "lookup" (a custom query over the data).
 For a metric set metric_id to exactly one of the metrics below. filters maps column names to values;
 group_by lists only the columns the question breaks the result down by ("by card product" is
-product_code, nothing else); date_from and date_to are ISO dates (inclusive). Leave out what the question
-does not say. For a metric use only the filter and group_by columns listed for it, and never repeat its
-default filters (they are already applied). A question about randomised cases needs the filter
-assignment_method = "random" where the metric allows it.
+product_code, nothing else). date_from and date_to are ISO dates (inclusive), only when the question names
+dates or a period ("in September", "last quarter"). "30-day" or "14-day" names the window a measure uses:
+it is not a date range. Leave out what the question does not say. For a metric use only the filter and
+group_by columns listed for it, and never repeat its default filters (they are already applied). To
+compare groups ("is it higher for A than for B", "do X achieve more than the rest") group by that column; do
+not filter down to one group. A question
+about randomised cases needs the filter assignment_method = "random" where the metric allows it.
 {metrics}
 confidence is 0 to 1: how sure you are of the whole intent.{as_of}"""
 
