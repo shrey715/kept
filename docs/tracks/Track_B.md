@@ -64,6 +64,7 @@ Person: Garimella Sai Abhishek · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Log
 Times are IST, newest first. Earlier entries are reconstructed from file and commit times.
+- 2026-10-04 00:33: Satvik's `month_end_date_raw` (PR #36) merged and verified (his counts match mine); roll rate now equals the reference for all 7 products; one repair round for lookup drafts that fail to run. Dev **83% (15 of 18), recall 100%**: both targets met. Scorecard refreshed.
 - 2026-10-03 23:55: teammate's Gemini key (a different project, fresh 500/day) works; full 35-question rerun with the final code: dev 78% (14 of 18), recall 100%, 109 calls; scorecard refreshed. Track B G3 ready.
 - 2026-10-03 23:40: Mistral key tested (14B 44%, codestral 39% vs Gemini 78%); router accepts null filters; Ask stays on Gemini.
 - 2026-10-03 23:30: Gemini free quota exhausted (500 per day per project per model); stopped the benchmark run; scorecard from the 23:11 run committed; waiting for a Mistral key.
