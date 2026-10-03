@@ -11,10 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kept import __version__
@@ -24,8 +22,6 @@ from kept.contracts.features import TextExtraction
 from kept.contracts.interfaces import AskService, AuditLog, C360Reader, NBAEngine, ReleaseGate
 from kept.contracts.nba import NBACard, ReleaseDecision, ReleaseResult
 from kept.governance.access import can_view_case
-
-PAGE = Path(__file__).parent / "static" / "index.html"
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,11 +70,6 @@ def create_app(services: Services) -> FastAPI:
     POST /extractions/{source_id}/confirm         200 TextExtraction
     """
     app = FastAPI(title="Kept", version=__version__)
-
-    @app.get("/", include_in_schema=False)
-    def page() -> FileResponse:
-        """The card page (S7): NBA card, Ask box and steward queue. Static, no framework."""
-        return FileResponse(PAGE, media_type="text/html")
 
     @app.get("/health", response_model=HealthResponse)
     def health() -> HealthResponse:

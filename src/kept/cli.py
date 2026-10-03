@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 COMMANDS = {
     "land": "Track A: land data/raw into bronze",
@@ -21,13 +21,39 @@ COMMANDS = {
 }
 
 
+def serve(args: argparse.Namespace) -> int:
+    """Track D. Until the real services are wired (G4), only --demo runs."""
+    import uvicorn
+
+    from kept.app.api import create_app
+
+    if not args.demo:
+        print("kept serve: the real services are wired at G4; use `kept serve --demo` until then.")
+        return 2
+    from kept.app.demo import demo_services
+
+    uvicorn.run(create_app(demo_services()), host=args.host, port=args.port)
+    return 0
+
+
+# Each track adds its own handler here when its step works (plan K9).
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {"serve": serve}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kept")
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
-        sub.add_parser(name, help=help_text)
+        p = sub.add_parser(name, help=help_text)
+        if name == "serve":
+            p.add_argument("--demo", action="store_true", help="three in-memory cases, no warehouse needed")
+            p.add_argument("--host", default="127.0.0.1")
+            p.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
-    raise NotImplementedError(f"kept {args.command}: {COMMANDS[args.command]}")
+    handler = HANDLERS.get(args.command)
+    if handler is None:
+        raise NotImplementedError(f"kept {args.command}: {COMMANDS[args.command]}")
+    return handler(args)
 
 
 if __name__ == "__main__":

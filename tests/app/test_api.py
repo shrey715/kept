@@ -91,12 +91,6 @@ def test_health(client: TestClient) -> None:
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
-def test_card_page_served(client: TestClient) -> None:
-    r = client.get("/")
-    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
-    assert 'id="card"' in r.text and "/cases/" in r.text and "/ask" in r.text and "/steward/queue" in r.text
-
-
 def test_naive_now_rejected(client: TestClient) -> None:
     r = client.get(
         "/cases/C-118204/nba", params={"user_id": "agent-7", "role": "agent", "now": "2026-10-02T22:00:00"}

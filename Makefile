@@ -1,4 +1,4 @@
-.PHONY: help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build serve
+.PHONY: help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build serve serve-demo web-setup web
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -59,5 +59,14 @@ typecheck:  ## mypy (strict)
 dbt-build:  ## build bronze -> silver -> gold -> features
 	cd dbt && uv run dbt build --profiles-dir . --project-dir .
 
-serve:  ## run the API
-	uv run kept serve  # Track D: wire Services into create_app
+serve:  ## run the API (real services from G4)
+	uv run kept serve
+
+serve-demo:  ## run the API on three in-memory demo cases (no warehouse needed)
+	uv run kept serve --demo
+
+web-setup:  ## install the Next.js frontend (web/)
+	cd web && pnpm install
+
+web:  ## run the frontend on :3000; it proxies /api to the API on :8000 (KEPT_API_URL)
+	cd web && pnpm dev
