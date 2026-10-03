@@ -345,8 +345,9 @@ class _Summary:
 def test_call_summary_is_answered_before_the_scope_check(build_with_calls) -> None:  # type: ignore[no-untyped-def]
     seen: list[str] = []
 
-    def summarise(case_id: str, *, llm: object) -> _Summary:
+    def summarise(case_id: str, **kw: object) -> _Summary:
         seen.append(case_id)
+        assert kw["conn"] is not None and kw["actor_id"] == "u1"  # the Ask's connection and the asker
         return _Summary()
 
     svc, llm = build_with_calls(summarise)
@@ -360,21 +361,21 @@ def test_call_summary_is_answered_before_the_scope_check(build_with_calls) -> No
 
 
 def test_call_summary_with_no_recorded_call_is_an_answer_not_a_refusal(build_with_calls) -> None:  # type: ignore[no-untyped-def]
-    svc, _ = build_with_calls(lambda case_id, *, llm: None)
+    svc, _ = build_with_calls(lambda case_id, **kw: None)
     a = svc.ask(_req(CALL_Q))
     assert isinstance(a, AskAnswer) and a.narrative == "There is no recorded call on case CS-2026-614370."
 
 
 def test_an_agent_cannot_summarise_a_call_on_someone_elses_case(build_with_calls) -> None:  # type: ignore[no-untyped-def]
     called: list[str] = []
-    svc, _ = build_with_calls(lambda case_id, *, llm: called.append(case_id))
+    svc, _ = build_with_calls(lambda case_id, **kw: called.append(case_id))
     req = AskRequest(question=CALL_Q, user_id="a1", role=Role.AGENT, own_case_ids=frozenset({"CS-1"}))
     r = svc.ask(req)
     assert isinstance(r, Refusal) and r.reason is RefusalReason.OTHER_PEOPLES_CASES and called == []
 
 
 def test_a_failing_summariser_is_a_polite_refusal_not_a_crash(build_with_calls) -> None:  # type: ignore[no-untyped-def]
-    def boom(case_id: str, *, llm: object) -> None:
+    def boom(case_id: str, **kw: object) -> None:
         raise RuntimeError("transcript store down")
 
     svc, _ = build_with_calls(boom)

@@ -130,3 +130,25 @@ def test_a_wide_answer_matches_the_gold_by_number() -> None:
     wide = _answer(("disputes_target_period", "disputes_prior_period", "n"), ((875, 566, 1441),))
     assert is_correct(_case("exact"), gold, wide) is True
     assert is_correct(_case("exact"), gold, _answer(("a", "b", "n"), ((875, 500, 1441),))) is False
+
+
+def test_a_call_summary_is_checked_against_its_transcript_and_figures() -> None:
+    gold = {
+        "gold_answer": "Customer reports illness; promised $95 on 14 Oct; next step: hardship plan review.",
+        "gold_sources": '["transcript 5010384"]',
+    }
+    cite = Citation(  # type: ignore[arg-type]
+        document_id="text.redacted_notes",
+        section="transcript 5010384",
+        effective_from="2026-09-20",
+        snippet="x",
+    )
+    said = "Customer reports illness; promised $95 on 14 Oct; next step: hardship plan review."
+    assert is_correct(_case(None), gold, _answer((), (), said, citations=(cite,))) is True
+    other = Citation(
+        document_id="text.redacted_notes", section="transcript 999", effective_from="2026-09-20", snippet="x"
+    )  # type: ignore[arg-type]
+    assert is_correct(_case(None), gold, _answer((), (), said, citations=(other,))) is False  # the wrong call
+    assert (
+        is_correct(_case(None), gold, _answer((), (), "Promised $50 on 2 Nov.", citations=(cite,))) is False
+    )

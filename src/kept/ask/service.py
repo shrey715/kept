@@ -331,7 +331,7 @@ class CollectionsAsk:
         No recorded call is an answer, not a refusal."""
         try:
             summarise = self._summarise_call or _kept_summarise_call()
-            result = summarise(case_id, llm=self._llm)
+            result = summarise(case_id, llm=self._llm, conn=self._conn, actor_id=request.user_id)
         except Exception:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "I couldn't read that call just now.")
         citations: tuple[Citation, ...] = ()
