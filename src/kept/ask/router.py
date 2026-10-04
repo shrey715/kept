@@ -51,16 +51,22 @@ def route(
     actor_id: str,
     as_of: date | None = None,
     metric_hints: Mapping[str, str] | None = None,
+    date_hints: str = "",
 ) -> Intent:
     """Ask the LLM for an Intent. Reject (ValueError) a METRIC intent whose metric_id is
     not in known_metric_ids, or any reply that fails Intent validation.
     `as_of` is the data's snapshot date, so "last month" means the same thing every time.
     `metric_hints` maps metric_id to a one-line description (what it is, allowed filters and group-bys)."""
-    system = _SYSTEM.format(
-        metrics="\n".join(
-            f"- {m}: {(metric_hints or {}).get(m, '')}".rstrip(": ") for m in sorted(known_metric_ids)
-        ),
-        as_of=f" Relative dates (today, this month, last quarter) are relative to {as_of}." if as_of else "",
+    system = (
+        _SYSTEM.format(
+            metrics="\n".join(
+                f"- {m}: {(metric_hints or {}).get(m, '')}".rstrip(": ") for m in sorted(known_metric_ids)
+            ),
+            as_of=f" Relative dates (today, this month, last quarter) are relative to {as_of}."
+            if as_of
+            else "",
+        )
+        + date_hints
     )
     reply = llm.complete(
         system=system,
