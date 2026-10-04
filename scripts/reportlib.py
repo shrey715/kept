@@ -1,11 +1,10 @@
 # ruff: noqa: E501  (chart labels)
-"""Shared bits for the report PDFs in docs/reports/: one chart style and one Markdown -> LaTeX -> PDF build.
+"""Shared bits for the reports in docs/reports/: one chart style, and the compile step.
 
-    from reportlib import build_pdf, hbar, plt, style   # scripts/ is on sys.path when a script runs
-
-Every report script writes its Markdown to data/exports/reports/ (a build artifact, not committed), then
-build_pdf() turns it into docs/reports/<name>.tex and docs/reports/<name>.pdf with the shared LaTeX header.
-Charts: one blue for a single series, ink text, a faint grid, value labels at the bar tips.
+The reports are hand-written LaTeX (docs/reports/<name>.tex, house style kept-report.sty). The report scripts only
+query the data, cache the numbers in data/exports/reports/ and draw the figures into docs/reports/figures/.
+    uv run python scripts/reportlib.py            # compile every report (QUALITY_REPORT.pdf goes to the repo root)
+Charts: Open Sans, one blue for a single series, ink text, a faint grid, value labels at the bar tips.
 """
 
 from __future__ import annotations
@@ -42,6 +41,7 @@ def style() -> None:
             "xtick.color": MUTED,
             "ytick.color": INK,
             "text.color": INK,
+            "font.family": ["Open Sans", "DejaVu Sans"],  # DejaVu covers arrows and math signs
             "axes.spines.top": False,
             "axes.spines.right": False,
         }
@@ -96,31 +96,32 @@ def hbar(
     return save(fig, name)
 
 
-def build_pdf(markdown: str, name: str, *, toc: bool = True) -> Path:
-    """Markdown (with a YAML title block) -> docs/reports/<name>.tex -> docs/reports/<name>.pdf (XeLaTeX, twice
-    for the contents). Figures resolve from the repo root. Returns the PDF path."""
-    BUILD.mkdir(parents=True, exist_ok=True)
-    src = BUILD / f"{name}.md"
-    src.write_text(markdown)
-    tex, pdf = REPORTS / f"{name}.tex", REPORTS / f"{name}.pdf"
-    opts = ["geometry:margin=2cm", "fontsize=10pt", "mainfont=Carlito", "monofont=Adwaita Mono"]
-    opts += ["colorlinks=true", "linkcolor=keptred", "urlcolor=keptred", "toccolor=black"]
-    cmd = ["pandoc", str(src), "-s", "-o", str(tex), "-H", str(HEADER)] + (
-        ["--toc", "--toc-depth=1"] if toc else []
-    )
-    subprocess.run(cmd + [x for o in opts for x in ("-V", o)], check=True)
+REPORTS_TEX = ("quality_report", "business_case", "fairness_report", "drift_report", "benchmark_report")
+
+
+def compile_report(name: str) -> Path:
+    """docs/reports/<name>.tex (hand-written, kept-report.sty) -> PDF via XeLaTeX, run twice for references.
+    The quality report is deliverable 4 and goes to the repo root as QUALITY_REPORT.pdf."""
     with tempfile.TemporaryDirectory() as out:
-        for _ in range(2 if toc else 1):
+        for _ in range(2):
             subprocess.run(
-                ["xelatex", "-interaction=nonstopmode", f"-output-directory={out}", str(tex)],
-                cwd=REPO,
+                ["xelatex", "-interaction=nonstopmode", f"-output-directory={out}", f"{name}.tex"],
+                cwd=REPORTS,
                 capture_output=True,
             )
         built = Path(out) / f"{name}.pdf"
         if not built.exists():
             log = Path(out) / f"{name}.log"
             raise RuntimeError(
-                "XeLaTeX produced no PDF:\n" + (log.read_text()[-2000:] if log.exists() else "")
+                "XeLaTeX produced no PDF:\n" + (log.read_text()[-3000:] if log.exists() else "")
             )
-        shutil.copy(built, pdf)
-    return pdf
+        dest = REPO / "QUALITY_REPORT.pdf" if name == "quality_report" else REPORTS / f"{name}.pdf"
+        shutil.copy(built, dest)
+    return dest
+
+
+if __name__ == "__main__":  # uv run python scripts/reportlib.py [name ...]: compile the hand-written reports
+    import sys
+
+    for n in sys.argv[1:] or REPORTS_TEX:
+        print(compile_report(n))

@@ -1,0 +1,131 @@
+% kept-report.sty: the house style for Kept's reports (XeLaTeX).
+% \title{...} \subtitle{...} \reportnumber{...} then \makereporttitle; boxes: \takeaway{...}, \insight{title}{...}
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{kept-report}
+
+\RequirePackage[a4paper, top=2.3cm, bottom=2.2cm, left=2.3cm, right=2.3cm, headheight=14pt]{geometry}
+\RequirePackage{fontspec}
+% static font files (the variable Noto Serif breaks xdvipdfmx)
+\setmainfont{NotoSerif}[Path=/usr/share/fonts/google-noto/, Extension=.ttf, UprightFont=*-Regular,
+  ItalicFont=*-Italic, BoldFont=*-Bold, BoldItalicFont=*-BoldItalic, Scale=0.95]
+\setsansfont{OpenSans}[Path=/usr/share/fonts/open-sans/, Extension=.ttf, UprightFont=*-Regular,
+  ItalicFont=*-Italic, BoldFont=*-Bold, BoldItalicFont=*-BoldItalic]
+\newfontfamily\headfont{OpenSans}[Path=/usr/share/fonts/open-sans/, Extension=.ttf, UprightFont=*-Regular,
+  ItalicFont=*-Italic, BoldFont=*-Bold, BoldItalicFont=*-BoldItalic]
+\setmonofont{NotoSansMono}[Path=/usr/share/fonts/google-noto/, Extension=.ttf, UprightFont=*-Regular,
+  BoldFont=*-Bold, Scale=0.85]
+% glyphs these fonts lack: typed as unicode in the reports, printed from the math font
+\begingroup
+  \catcode`\→=\active \gdef→{\ensuremath{\rightarrow}}
+  \catcode`\≥=\active \gdef≥{\ensuremath{\geq}}
+  \catcode`\≤=\active \gdef≤{\ensuremath{\leq}}
+  \catcode`\×=\active \gdef×{\ensuremath{\times}}
+  \catcode`\−=\active \gdef−{\ensuremath{-}}
+  \catcode`\≈=\active \gdef≈{\ensuremath{\approx}}
+\endgroup
+\AtBeginDocument{\catcode`\→=\active \catcode`\≥=\active \catcode`\≤=\active \catcode`\×=\active \catcode`\−=\active \catcode`\≈=\active}
+\RequirePackage{microtype}
+\RequirePackage{xcolor}
+\RequirePackage{graphicx}
+\RequirePackage{booktabs}
+\RequirePackage{tabularx}
+\RequirePackage{array}
+\RequirePackage{enumitem}
+\RequirePackage{caption}
+\RequirePackage{float}
+\RequirePackage{titlesec}
+\RequirePackage{fancyhdr}
+\RequirePackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc,fit,backgrounds,shapes.misc}
+\RequirePackage[hidelinks]{hyperref}
+
+\definecolor{kept}{HTML}{C8102E}
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{muted}{HTML}{6B7785}
+\definecolor{rule}{HTML}{D9DDE3}
+\definecolor{soft}{HTML}{F6F7F9}
+\definecolor{kblue}{HTML}{2A6FDB}
+\definecolor{kgreen}{HTML}{0E9F6E}
+\definecolor{korange}{HTML}{D97706}
+\definecolor{kviolet}{HTML}{7C3AED}
+\color{ink}
+
+\setlength{\parindent}{0pt}
+\raggedbottom
+\setlength{\parskip}{0.55em}
+\linespread{1.08}
+\setlist{itemsep=0.25em, topsep=0.3em, leftmargin=1.3em}
+\setlist[itemize]{label={\color{kept}\textbullet}}
+
+% headings: Open Sans, the section number in Kept red
+\titleformat{\section}{\headfont\Large\bfseries}{\color{kept}\thesection}{0.6em}{}
+\titleformat{\subsection}{\headfont\large\bfseries}{\color{kept}\thesubsection}{0.6em}{}
+\titleformat{\paragraph}[runin]{\headfont\bfseries}{}{0em}{}[.]
+\titlespacing*{\section}{0pt}{1.4em}{0.5em}
+\titlespacing*{\subsection}{0pt}{1.0em}{0.3em}
+
+% captions and tables
+\captionsetup{font={small,sf}, labelfont={bf,color=kept}, labelsep=period, justification=raggedright, singlelinecheck=false}
+\renewcommand{\arraystretch}{1.18}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{R}{>{\raggedleft\arraybackslash}r}
+
+% running header / footer
+\newcommand{\@runninghead}{}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{{\color{rule}\hrule width\headwidth height\headrulewidth}}
+\fancyhead[L]{\headfont\footnotesize\color{muted}\textbf{\color{kept}Kept}\ \ ·\ \ \@runninghead}
+\fancyhead[R]{\headfont\footnotesize\color{muted}Team Sharpe Shooters}
+\fancyfoot[R]{\headfont\footnotesize\color{muted}\thepage}
+\fancypagestyle{plain}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}\fancyfoot[R]{\headfont\footnotesize\color{muted}\thepage}}
+
+% title block
+\newcommand{\@subtitle}{}
+\newcommand{\subtitle}[1]{\renewcommand{\@subtitle}{#1}}
+\newcommand{\@reportnumber}{}
+\newcommand{\reportnumber}[1]{\renewcommand{\@reportnumber}{#1}}
+\newcommand{\runninghead}[1]{\renewcommand{\@runninghead}{#1}}
+\newcommand{\makereporttitle}{%
+  \thispagestyle{plain}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[kept] ([yshift=-0.0cm]current page.north west) rectangle ([yshift=-0.35cm]current page.north east);
+  \end{tikzpicture}
+  \vspace*{0.1cm}
+  {\headfont\small\bfseries\color{kept}\MakeUppercase{\@reportnumber}}\par\vspace{0.5em}
+  {\headfont\fontsize{26}{30}\selectfont\bfseries\@title}\par\vspace{0.35em}
+  {\headfont\large\color{muted}\@subtitle}\par\vspace{0.6em}
+  {\headfont\small\color{muted}Team Sharpe Shooters · CIBC Collections Hackathon · \@date}\par
+  \vspace{0.4em}{\color{rule}\rule{\linewidth}{0.6pt}}\par\vspace{0.2em}
+}
+
+% boxes
+\newcommand{\takeaway}[1]{%
+  \par\vspace{0.4em}\noindent
+  \begin{tikzpicture}
+    \node[fill=kept!7, draw=none, rounded corners=4pt, inner sep=9pt, text width=\linewidth-18pt, align=left, font=\normalsize] (b) {#1};
+    \fill[kept] (b.north west) rectangle ([xshift=3pt]b.south west);
+  \end{tikzpicture}\par\vspace{0.3em}}
+\newcommand{\insight}[2]{%
+  \par\vspace{0.3em}\noindent
+  \begin{tikzpicture}
+    \node[fill=soft, draw=rule, rounded corners=4pt, inner sep=8pt, text width=\linewidth-16pt, align=left, font=\small] (b)
+      {{\headfont\bfseries\color{kblue}#1}\\[2pt]#2};
+  \end{tikzpicture}\par\vspace{0.2em}}
+
+% a row of headline numbers: \statrow{\stat{1.05M}{people}\stat{...}{...}}
+\newcommand{\stat}[2]{\begin{minipage}[t]{0.235\linewidth}\raggedright{\headfont\fontsize{19}{21}\selectfont\bfseries\color{kept}#1}\\[1pt]{\headfont\footnotesize\color{muted}#2}\end{minipage}\hfill}
+\newcommand{\statrow}[1]{\par\vspace{0.3em}\noindent#1\par\vspace{0.6em}}
+
+\newcommand{\fig}[3][\linewidth]{% \fig[width]{file}{caption}
+  \begin{figure}[H]\centering\includegraphics[width=#1]{figures/#2}\caption{#3}\label{fig:#2}\end{figure}}
+\newcommand{\breakunderscore}{\textunderscore\allowbreak}
+\newcommand{\code}[1]{\texttt{\let\_\breakunderscore #1}}  % long identifiers wrap after an underscore
+% a closing "how to rebuild this" block; paths wrap at / and _
+\newcommand{\reproduce}[2]{%
+  \par\vspace{1.2em}{\color{rule}\rule{\linewidth}{0.5pt}}\par\vspace{0.1em}
+  {\raggedright\footnotesize\color{muted}
+  {\headfont\bfseries Numbers}\quad #1\par\vspace{0.15em}
+  {\headfont\bfseries Rebuild}\quad #2\par}}
+\endinput

@@ -1,5 +1,6 @@
 # ruff: noqa: E501  (report prose and SQL)
-"""Deliverable 4, the data quality report: QUALITY_REPORT.pdf at the repo root (LaTeX source in docs/reports/).
+"""Numbers and figures for the data quality report (deliverable 4). The report itself is hand-written LaTeX,
+docs/reports/quality_report.tex, compiled to QUALITY_REPORT.pdf at the repo root by scripts/reportlib.py.
 
     uv run kept gate                                           # writes the gate table this reads
     uv run python scripts/quality_report_full.py               # collect (needs the warehouse: stop kept serve) + render
@@ -17,36 +18,17 @@ import glob
 import importlib.util
 import json
 import os
-import shutil
 import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
-from reportlib import BLUE, BUILD, INK, KEPT, MUTED, REPO, build_pdf, hbar, plt, save, style, tidy
+from reportlib import BLUE, BUILD, KEPT, REPO, hbar, plt, save, style, tidy
 
 RAW = REPO / "data" / "raw"
 EXPORTS = REPO / "data" / "exports"
 CACHE = BUILD / "quality_data.json"
-
-PIPELINE_TIKZ = r"""
-```{=latex}
-\begin{center}
-\begin{tikzpicture}[node distance=0.35cm]
-\node[step=2.2cm] (raw) {\textbf{Raw release}\\ 31 tables\\ 77M records};
-\node[step=2.2cm, right=of raw] (bronze) {\textbf{Bronze}\\ as delivered,\\ all text};
-\node[step=2.4cm, right=of bronze, hot] (silver) {\textbf{Silver}\\ tested rules;\\ unreadable → quarantine};
-\node[step=2.4cm, right=of silver, hot] (match) {\textbf{Match}\\ exact keys → Splink\\ → steward};
-\node[step=2.2cm, right=of match] (gold) {\textbf{Gold C360}\\ 1,052,300\\ people};
-\node[step=2.2cm, right=of gold, hot] (gate) {\textbf{Gate}\\ contract Q1–Q5\\ blocks publish};
-\foreach \a/\b in {raw/bronze, bronze/silver, silver/match, match/gold, gold/gate} \draw[go] (\a) -- (\b);
-\node[font=\scriptsize, text=edge, below=0.25cm of match, text width=15cm, align=center]
-  {checks at every step: dbt tests · Soda checks from the contract · the gate · a human for the 300-pair review and the steward queue};
-\end{tikzpicture}
-\end{center}
-```
-"""
 
 
 def _src(t: str) -> str:
@@ -290,19 +272,6 @@ def figures(d: dict) -> dict[str, str]:  # type: ignore[type-arg]
         title="Which rule linked each source key",
     )
 
-    fig, ax = plt.subplots(figsize=(7.2, 2.6))
-    xs, ys = [float(b) for b, _ in d["hist"]], [n for _, n in d["hist"]]
-    ax.bar(xs, ys, width=0.018, color=BLUE, align="edge")
-    ax.set_yscale("log")
-    for x, lab, c in ((0.95, " auto-link ≥ 0.95", INK), (0.80, " steward 0.80–0.95", MUTED)):
-        ax.axvline(x, color=c, linewidth=1, linestyle="--")
-        ax.text(x, max(ys) * 0.3, lab, fontsize=8, color=c, ha="right" if x > 0.9 else "left")
-    ax.set_xlabel("Splink match probability")
-    ax.set_ylabel("keys (log)")
-    ax.set_title("Splink is confident: almost everything it links sits near 1.0", loc="left")
-    tidy(ax, "y")
-    f["scores"] = save(fig, "q_scores")
-
     sizes = d["sizes"]
     f["sizes"] = hbar(
         [f"{n} key{'s' if n > 1 else ''}" for n, _ in sizes],
@@ -329,192 +298,11 @@ def figures(d: dict) -> dict[str, str]:  # type: ignore[type-arg]
     return f
 
 
-def render(d: dict) -> Path:  # type: ignore[type-arg]
-    f = figures(d)
-    s, rev = d["summary"], d["review"]
-    by = rev["by"]
-    ok = by.get("exact:True", 0) + by.get("splink:True", 0)
-    n = sum(by.values())
-    ex_ok, ex_n = by.get("exact:True", 0), by.get("exact:True", 0) + by.get("exact:False", 0)
-    sp_ok, sp_n = by.get("splink:True", 0), by.get("splink:True", 0) + by.get("splink:False", 0)
-    total = sum(p["rows"] for p in d["profile"])
-    gold_n, unlinked, dnc, hold = d["gold"]
-    case_crm = next(x for x in d["links"] if x["label"] == "Case → CRM record")
-    worst = max(d["issues"], key=lambda i: i["affected"] / i["total"] if i["total"] else 0)
-
-    def pct(a: int, b: int) -> str:
-        return f"{100 * a / b:.2f}%" if b else "–"
-
-    md = (
-        f"""---
-title: "Data quality report"
-subtitle: "Maple Bank collections release → Kept's golden C360 · deliverable 4"
-author: "Team Sharpe Shooters"
-date: "{d["written"]}"
----
-
-# TL;DR
-
-We took **{len(d["profile"])} tables / {total:,} records** of deliberately messy bank data and turned them into
-one trusted record per person. Every number here is a live query (`scripts/quality_report_full.py`); nothing's typed in.
-
-| | |
-|---|---|
-| Quality gate on the golden record | **{"PASS, all 8 rules" if d["gate_pass"] else "see §6"}** |
-| Source keys → people | **{s["keys"]:,} → {s["golden_ids"]:,} golden IDs** (biggest person: {s["largest_cluster"]} keys) |
-| Match precision, checked by a human | **{100 * ok / n:.1f}%** ({ok}/{n}; exact {ex_ok}/{ex_n}, Splink {sp_ok}/{sp_n}) |
-| Kinds of data issue found and handled | **{len(d["issues"])}** (worst: {worst["issue"].lower()}, {pct(worst["affected"], worst["total"])} of its table) |
-| Clusters we refused to auto-merge | {s["held_clusters"]:,} (two national IDs) + {s["held_reasons"]["too_many_keys"]} (more than 12 keys) |
-| Training vs live feature values | {d["parity"]} |
-| PII left in 785,594 redacted notes and calls | **0** |
-
-**The vibe:** never guess. If a rule can't read a value, it goes empty and into a quarantine table with the
-reason, instead of being "fixed" into something wrong. A wrong date of birth can merge two strangers into one
-customer, and in collections that means calling the wrong person about someone else's debt.
-
-# 1. How we checked
-
-"""
-        + PIPELINE_TIKZ
-        + f"""
-- **Land raw, clean after.** Bronze keeps every file exactly as it came, all columns as text, so nothing gets
-  silently converted (the README warns `NA` is a real outcome code and IDs have leading zeros; both survive).
-- **Small tested rules** in `kept.data.clean` / `kept.data.traps` do the cleaning: names, dates, phones, postal
-  codes, provinces, snapshots, the renamed column.
-- **Four layers of checks:** dbt tests on every model (gold types enforced), Soda checks generated from the data
-  contract, the contract gate (`kept gate`, blocks publishing), and a human for what code can't decide (300 sampled
-  matches, the steward queue).
-
-# 2. What's in the release
-
-![]({f["rows"]}){{ width=100% }}
-
-Missing values are mostly by design: a charge-off date only exists if the account was charged off, a reversal ID
-only if the transaction was reversed. So high numbers here aren't bugs; §3 is where the real problems are.
-
-![]({f["nulls"]}){{ width=100% }}
-
-| Table | Rows | Cols | Cols with gaps | Avg % missing | Emptiest columns |
-|---|--:|--:|--:|--:|---|
-"""
-        + "\n".join(
-            f"| `{p['table']}` | {p['rows']:,} | {p['cols']} | {p['cols_null']} | {p['mean_null']:.1f} | {', '.join(f'`{c}`' for c in p['worst']) or '–'} |"
-            for p in sorted(d["profile"], key=lambda p: -p["rows"])
-        )
-        + f"""
-
-# 3. The issues, and what we did about each
-
-![]({f["issues"]}){{ width=100% }}
-
-| Issue | Where | Records hit | Fix |
-|---|---|---|---|
-"""
-        + "\n".join(
-            f"| {i['issue']} | `{i['where']}` | {i['affected']:,} ({pct(i['affected'], i['total'])}) | {i['handled']} |"
-            for i in d["issues"]
-        )
-        + f"""
-
-**Schema drift.** `kept map` diffs every raw table's columns against the data dictionary. It flags
-`deposit_accounts.overdraft_dpd` / `overdraft_dpd_bucket` (the README mentions them, the dictionary sheet doesn't),
-`benchmark_questions`, and the transcript turn fields (they live in the JSON, not the CSV index).
-`contact_history.channel` → `channel_v2` (renamed 26 Sep) gets merged back in silver.
-
-# 4. Do the tables actually join?
-
-![]({f["links"]}){{ width=100% }}
-
-| Join | Child rows with a key | Orphans | Share | What happens |
-|---|--:|--:|--:|---|
-"""
-        + "\n".join(
-            f"| {x['label']} | {x['rows']:,} | {x['orphans']:,} | {pct(x['orphans'], x['rows'])} | {x['note']} |"
-            for x in d["links"]
-        )
-        + f"""
-
-The one worth flagging: **{case_crm["orphans"]:,} cases ({pct(case_crm["orphans"], case_crm["rows"])}) point at a CRM ID
-that isn't in `customers`.** They're not lost: card, loan and deposit keys plus Splink still put them on a person,
-and the gate checks that every *open* case resolves. The autopay/PAD numbers are high on purpose: most of those
-accounts are at other banks, so we never use them to link anyone.
-
-# 5. Identity resolution (the bit that can actually hurt someone)
-
-There's no shared customer ID across the five systems. We link in two passes:
-
-1. **Exact rules**: keys we can prove (the case's copy of the CRM ID, autopay/PAD → our deposit account, the same
-   national ID hash, CRM's own duplicate pointer, and the core-banking customer number shared by deposits and the
-   bureau file).
-2. **Splink** (Fellegi–Sunter) on what's left, comparing name, date of birth, phone and postal code. **≥ 0.95
-   links automatically, 0.80–0.95 goes to a data steward, lower stays apart.** A cluster with two national IDs or
-   more than 12 keys is never auto-merged.
-
-![]({f["rules"]}){{ width=100% }}
-
-![]({f["scores"]}){{ width=100% }}
-
-![]({f["sizes"]}){{ width=100% }}
-
-**The human check.** No ground-truth IDs came with the data, so a person reviewed {n} random predicted links,
-sorted into tiers by how many identifiers agree (tier 1: {rev["tiers"].get("1", 0)}, tier 2: {rev["tiers"].get("2", 0)},
-tier 3: {rev["tiers"].get("3", 0)}).
-
-![]({f["review"]}){{ width=100% }}
-
-Both wrong links ({", ".join(w["id"] for w in rev["wrong"])}) are Splink pairs where everything matched except the
-surname, and both scored {", ".join(w["score"] for w in rev["wrong"])}. A stricter threshold wouldn't have caught them;
-the human did. That's why the review sample stays in the pipeline.
-
-Golden IDs are stable run to run (last run: {s["ids_merged"]} merged, {s["ids_split"]} split). The golden record
-has {gold_n:,} people: {unlinked:,} are single keys nothing could link, {dnc:,} carry `do_not_contact` and
-{hold:,} `collections_hold`, each set if **any** linked record says so. Hardship status:
-{", ".join(f"{h} {c:,}" for h, c in d["hardship"])}.
-
-# 6. The contract gate
-
-`contracts/c360_customer.odcs.yaml` is built from the organisers' example DC-COLL-001 (owner, refresh, quality
-rules, allowed and not-allowed uses) and extended to ODCS v{d["contract_version"]}. Publishing is blocked unless:
-
-| Rule | Status | Detail |
-|---|---|---|
-"""
-        + "\n".join(f"| {g['rule']} | **{g['status']}** | {g['detail']} |" for g in d["gate"])
-        + f"""
-
-# 7. Text, features, monitoring
-
-- **Redaction first, always.** All 760,594 notes and 25,000 transcripts go through Presidio (English + French spaCy,
-  Canadian SIN and postal codes, mangled cards and dates of birth). Full scan after: **0** leftovers. The LLM
-  gateway won't even accept un-redacted text.
-- **Labels: public only.** Text models are tuned and tested on the release's 500 public labels per source (30%
-  held out). The rest are the organisers'.
-- **Parity:** {d["parity"]}
-- **Drift:** {d["drift"]}
-- **Missing stays missing.** Transactions only cover a sample of customers and 13 months; outside that, those
-  features are null, not 0.
-
-# 8. What we can't measure
-
-- **True match accuracy.** No ground truth; §5's human review and the exact-rule cross-check are the evidence.
-- **Monthly roll rates.** The account snapshot only has quarter-ends (Dec 2023–Jun 2026), so roll rates are quarterly.
-- **Generation rules.** The README says some fields were set by rule; we take them as given.
-
-# 9. If we owned the source systems
-
-1. Put one customer ID (or the CIF) in CRM: {dict(d["by_rule"]).get("exact:core_banking_cif", 0):,} of our links lean on a number only deposits and the bureau carry.
-2. One date-of-birth format on the entry screen: 12.7% of CRM DOBs are ambiguous today.
-3. Stop masking card phone numbers in the extract (58% are useless for matching).
-4. Ship schema changes (`channel_v2`, the overdraft columns) in the dictionary first.
-5. Keep a 300-link human review per release; it caught the only two bad links.
-
-*Rebuild:* `uv run kept gate && uv run python scripts/quality_report_full.py` (with `kept serve` stopped).
-"""
-    )
-    pdf = build_pdf(md, "quality_report")
-    return Path(shutil.move(pdf, REPO / "QUALITY_REPORT.pdf"))  # deliverable 4 lives at the repo root
+def render(d: dict) -> dict[str, str]:  # type: ignore[type-arg]
+    """Figures for docs/reports/quality_report.tex (the prose is hand-written there)."""
+    return figures(d)
 
 
 if __name__ == "__main__":
     data = json.loads(CACHE.read_text()) if "--render" in sys.argv else collect()
-    print(render(data))
+    print(render(data))  # then: uv run python scripts/reportlib.py quality_report

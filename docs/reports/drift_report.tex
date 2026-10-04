@@ -1,241 +1,165 @@
-% Options for packages loaded elsewhere
-\PassOptionsToPackage{unicode}{hyperref}
-\PassOptionsToPackage{hyphens}{url}
-\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
-\documentclass[
-  10pt,
-]{article}
-\usepackage{xcolor}
-\usepackage[margin=2cm]{geometry}
-\usepackage{amsmath,amssymb}
-\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
-\usepackage{iftex}
-\ifPDFTeX
-  \usepackage[T1]{fontenc}
-  \usepackage[utf8]{inputenc}
-  \usepackage{textcomp} % provide euro and other symbols
-\else % if luatex or xetex
-  \usepackage{unicode-math} % this also loads fontspec
-  \defaultfontfeatures{Scale=MatchLowercase}
-  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
-\fi
-\usepackage{lmodern}
-\ifPDFTeX\else
-  % xetex/luatex font selection
-  \setmainfont[]{Carlito}
-  \setmonofont[]{Adwaita Mono}
-\fi
-% Use upquote if available, for straight quotes in verbatim environments
-\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
-\IfFileExists{microtype.sty}{% use microtype if available
-  \usepackage[]{microtype}
-  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
-}{}
-\makeatletter
-\@ifundefined{KOMAClassName}{% if non-KOMA class
-  \IfFileExists{parskip.sty}{%
-    \usepackage{parskip}
-  }{% else
-    \setlength{\parindent}{0pt}
-    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
-}{% if KOMA class
-  \KOMAoptions{parskip=half}}
-\makeatother
-\usepackage{longtable,booktabs,array}
-\usepackage{calc} % for calculating minipage widths
-% Correct order of tables after \paragraph or \subparagraph
-\usepackage{etoolbox}
-\makeatletter
-\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
-\makeatother
-% Allow footnotes in longtable head/foot
-\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
-\makesavenoteenv{longtable}
-\usepackage{graphicx}
-\makeatletter
-\newsavebox\pandoc@box
-\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
-  \sbox\pandoc@box{#1}%
-  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
-  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
-  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
-  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
-  \else\usebox{\pandoc@box}%
-  \fi%
-}
-% Set default figure placement to htbp
-\def\fps@figure{htbp}
-\makeatother
-\setlength{\emergencystretch}{3em} % prevent overfull lines
-\providecommand{\tightlist}{%
-  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
-% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
-\usepackage{etoolbox}
-\AtBeginEnvironment{longtable}{\footnotesize}
-\let\oldunderscore\_
-\renewcommand{\_}{\oldunderscore\allowbreak}
-\usepackage{xcolor}
-\definecolor{keptred}{HTML}{C8102E}
-\usepackage{titlesec}
-\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
-\titleformat{\subsection}{\large\bfseries}{}{0em}{}
-\setlength{\parskip}{0.45em}
-\setlength{\parindent}{0pt}
-\renewcommand{\arraystretch}{1.15}
-\usepackage{bookmark}
-\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
-\urlstyle{same}
-\hypersetup{
-  pdftitle={Feature drift report},
-  pdfauthor={Team Sharpe Shooters},
-  colorlinks=true,
-  linkcolor={keptred},
-  filecolor={Maroon},
-  citecolor={Blue},
-  urlcolor={keptred},
-  pdfcreator={LaTeX via pandoc}}
-
-\title{Feature drift report}
-\usepackage{etoolbox}
-\makeatletter
-\providecommand{\subtitle}[1]{% add subtitle to \maketitle
-  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
-}
-\makeatother
-\subtitle{Is tonight's open book still the population the uplift model
-learned from?}
-\author{Team Sharpe Shooters}
-\date{04 October 2026}
+\documentclass[11pt]{article}
+\usepackage{kept-report}
+\title{Drift report}
+\subtitle{Has tonight's book moved away from what the model learned on?}
+\reportnumber{Governance · model monitoring}
+\runninghead{Drift}
+\date{4 October 2026}
 
 \begin{document}
-\maketitle
+\makereporttitle
 
-{
-\hypersetup{linkcolor=black}
-\setcounter{tocdepth}{1}
-\tableofcontents
-}
-\section{TL;DR}\label{tldr}
+\statrow{\stat{10 · 5 · 11}{drift · watch · stable, of 26 features}\stat{690K}{training rows (Sep 2025 – Sep 2026)}\stat{96K}{cases scored tonight}\stat{3}{payroll features the model has never seen}}
 
-\textbf{10 drift · 5 watch · 11 stable} across the 26 registered
-features, comparing 690,062 training rows with the 96,000 cases served
-tonight (features as of 2026-10-03 06:00:00+00:00).
+\takeaway{\textbf{The short version.} Ten features cross the drift line, but only one finding changes what we'd do.
+\begin{itemize}[leftmargin=1.2em, topsep=2pt]
+\item \textbf{The big one:} the three payroll features are blank in every training row. That's deliberate: the payroll source is a
+single snapshot, so filling past rows would leak the future. The model has never learned from Kept's core signal. The rules
+and Kept sizing use it; the model doesn't. Fix: keep dated payroll snapshots and retrain.
+\item \textbf{The loud but mostly mechanical ones:} cohort rates (PSI 5.5 and 4.0) and the delinquency features. Tonight is one
+snapshot of the open book, while training is a year of decision points. Within each cohort the kept rate is only 1–3 points below
+where training ended.
+\item \textbf{A silent one:} \code{promise\_intent} is a model input that is blank in both training and live. Its PSI of 0
+means ``nothing to compare'', not ``stable''.
+\end{itemize}}
 
-Two things are going on, and only one of them is a problem:
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  \textbf{The baseline is different by design.} Training rows are
-  \emph{every past decision since 2016}; tonight is \emph{today's open
-  book}. Open cases skew later-stage and bigger-balance, so delinquency
-  features (days past due, balance at risk, days in bucket) and cohort
-  rates look ``drifted'' just because it's a different slice of
-  customers, not because customers changed.
-\item
-  \textbf{The real finding:} \texttt{payroll\_delay\_days},
-  \texttt{pay\_change\_vs\_3m\_avg},
-  \texttt{estimated\_monthly\_spare\_cash} are \textbf{missing for every
-  training row} but filled for \textasciitilde20--25\% of tonight's
-  cases. The payroll history only lines up with recent decisions, so the
-  model never got to learn from them. They're the heart of Kept (payday,
-  spare cash), so the next retrain should backfill them for past
-  decisions. Until then the rules and Kept sizing use them; the model
-  just doesn't.
-\end{enumerate}
-
-\section{How to read PSI}\label{how-to-read-psi}
+\section{How to read PSI}
 
 PSI (population stability index) compares two distributions bin by bin:
-Σ (live\% − train\%) × ln(live\% / train\%). Numbers are cut at the
-training deciles, categories by value, and \textbf{missing values get
-their own bin}, so a feature that suddenly goes blank shows up too.
-Usual bank bands: \textbf{\textless{} 0.1 stable}, \textbf{0.1--0.25
-watch}, \textbf{≥ 0.25 drift} (investigate, then retrain).
+$\sum (\text{live\%} - \text{train\%}) \times \ln(\text{live\%} / \text{train\%})$. Numbers are cut at the training deciles,
+categories by value, and \textbf{missing values get their own bin}, so a feature that suddenly fills in or goes blank shows up
+too. We use the usual bank bands: \textbf{below 0.10 stable}, \textbf{0.10–0.25 watch}, \textbf{0.25 or more drift}
+(investigate, then decide on a retrain).
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/d_psi.png}
+\begin{center}
+\begin{tikzpicture}[node distance=0.45cm, every node/.style={font=\small\sffamily, align=center},
+  box/.style={draw=rule, fill=soft, rounded corners=3pt, inner sep=6pt, text width=3.1cm},
+  hot/.style={box, fill=kept!7, draw=kept!40},
+  go/.style={-{Stealth[length=2mm]}, draw=muted, line width=0.7pt}]
+\node[box] (t) {\textbf{features\_train}\\690,062 rows, one per past decision, point in time};
+\node[box, below=0.3cm of t] (l) {\textbf{features (tonight)}\\96,000 open cases, as of 3 Oct 06:00};
+\node[hot, anchor=west] (p) at ($(t.east)!0.5!(l.east)+(0.9,0)$) {\textbf{PSI per feature}\\deciles of training; blanks get a bin};
+\node[box, right=of p] (s) {\textbf{stable / watch / drift}\\0.10 and 0.25 bands};
+\draw[go] (t.east) -- (p); \draw[go] (l.east) -- (p); \draw[go] (p) -- (s);
+\end{tikzpicture}
+\end{center}
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/d_missing.png}
+\section{Which features moved}
 
-\section{Every feature}\label{every-feature}
+\fig[0.92\linewidth]{d_psi.png}{PSI of every registered feature, training vs tonight. Red is drift, orange is watch, blue is stable.}
 
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\raggedright
-Feature
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-PSI
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-Status
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Missing (train)
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Missing (tonight)
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-Model input
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-\texttt{cohort\_kept\_rate} & 5.460 & drift & 0\% & 0\% & yes \\
-\texttt{cohort\_recovery\_rate} & 4.003 & drift & 0\% & 0\% & yes \\
-\texttt{payroll\_delay\_days} & 1.977 & drift & 100\% & 76\% & yes \\
-\texttt{pay\_change\_vs\_3m\_avg} & 1.532 & drift & 100\% & 80\% &
-yes \\
-\texttt{estimated\_monthly\_spare\_cash} & 1.532 & drift & 100\% & 80\%
-& no \\
-\texttt{contacts\_last\_7d} & 0.784 & drift & 0\% & 0\% & no \\
-\texttt{days\_to\_next\_payroll} & 0.667 & drift & 76\% & 76\% & yes \\
-\texttt{days\_in\_bucket} & 0.488 & drift & 40\% & 12\% & yes \\
-\texttt{balance\_at\_risk} & 0.391 & drift & 0\% & 0\% & no \\
-\texttt{max\_dpd} & 0.350 & drift & 11\% & 7\% & yes \\
-\texttt{hardship\_signal} & 0.170 & watch & 50\% & 31\% & no \\
-\texttt{dispute\_flag} & 0.165 & watch & 50\% & 30\% & no \\
-\texttt{cease\_request\_flag} & 0.165 & watch & 50\% & 30\% & no \\
-\texttt{card\_utilisation\_trend} & 0.161 & watch & 44\% & 37\% & yes \\
-\texttt{cash\_flow\_trend} & 0.112 & watch & 57\% & 53\% & yes \\
-\texttt{kept\_promise\_ratio} & 0.065 & stable & 67\% & 55\% & yes \\
-\texttt{times\_30plus\_dpd\_12m} & 0.056 & stable & 11\% & 7\% & yes \\
-\texttt{answer\_rate\_after\_18h} & 0.046 & stable & 69\% & 60\% &
-yes \\
-\texttt{answer\_rate} & 0.038 & stable & 50\% & 42\% & yes \\
-\texttt{broken\_promises\_90d} & 0.036 & stable & 0\% & 0\% & yes \\
-\texttt{payment\_link\_usage} & 0.026 & stable & 32\% & 25\% & yes \\
-\texttt{pay\_frequency} & 0.000 & stable & 76\% & 76\% & yes \\
-\texttt{promise\_intent} & 0.000 & stable & 100\% & 100\% & yes \\
-\texttt{promised\_date} & 0.000 & stable & 100\% & 100\% & no \\
-\texttt{promised\_amount} & 0.000 & stable & 100\% & 100\% & no \\
-\texttt{third\_party\_present\_flag} & 0.000 & stable & 100\% & 100\% &
-no \\
-\end{longtable}
+\textbf{What the chart says.} The red bars fall into three groups, each with a different story.
 
-\section{What we do with this}\label{what-we-do-with-this}
+\paragraph{Cohort rates: loud, mostly mechanical} \code{cohort\_kept\_rate} (5.46) and
+\code{cohort\_recovery\_rate} (4.00) top the chart. Each is a cumulative rate per product × entry bucket, recomputed at every
+point in time. In training that gives 3,229 distinct values drifting slowly through the year. Tonight there is one as-of date,
+so there are only 6 values, one per cohort, and each lands in one or two training deciles. PSI punishes that heavily. The real
+movement is small:
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{Nightly:} \texttt{kept\ drift} runs after
-  \texttt{kept\ features}; a drifted \emph{model input} that isn't
-  explained by the open-book baseline is a reason to hold the new scores
-  and retrain.
-\item
-  \textbf{Next retrain:} backfill the three payroll features for past
-  decisions, then re-check that their PSI and missing share line up.
-\item
-  \textbf{Not a fairness check.} Drift says the population moved; the
-  fairness report says whether groups get treated differently. Different
-  questions.
-\end{itemize}
+\begin{table}[H]\small\centering
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Cohort (entry 1–30 days)} & \textbf{Last training value} & \textbf{Tonight} & \textbf{Training rows} & \textbf{Cases tonight} \\
+\midrule
+Card & 0.587 & 0.569 & 311,758 & 38,320 \\
+Personal loan & 0.478 & 0.450 & 143,749 & 23,960 \\
+Auto loan & 0.483 & 0.453 & 88,291 & 15,340 \\
+Line of credit & 0.524 & 0.497 & 66,003 & 10,540 \\
+Overdraft & 0.604 & 0.587 & 62,472 & 6,860 \\
+Mortgage & 0.646 & 0.640 & 17,789 & 980 \\
+\bottomrule
+\end{tabular}
+\caption{Promise-kept rate per cohort: the last value the model trained on vs tonight's.}
+\end{table}
 
-\emph{Rebuild:} \texttt{uv\ run\ python\ scripts/drift\_report.py} (with
-\texttt{kept\ serve} stopped).
+The direction is consistent, though. Across the training year the median rate slid from 0.64 (Q3 2025 to Q2 2026) to 0.59 (Q3 2026),
+and every cohort is a little lower again tonight. Promises are being kept slightly less often than a year ago. That's
+worth watching, but it's not a reason to stop scoring.
+
+\paragraph{Payroll features: the real finding} \code{payroll\_delay\_days}, \code{pay\_change\_vs\_3m\_avg} and
+\code{estimated\_monthly\_spare\_cash} are blank in 100\% of training rows and filled for 20–25\% of tonight's cases. The
+training build nulls them on purpose (\path{dbt/models/features/account_features.sql}): the deposit table is one snapshot
+with no history, so using it for a decision made in March would leak September's data. The point-in-time rule held, at a cost:
+\textbf{the model has never learned from payday or spare cash}, which is Kept's whole idea. The rules and Kept sizing use them
+live; the uplift model can't.
+
+\paragraph{Delinquency features: a different slice, as expected} \code{max\_dpd} (0.35), \code{balance\_at\_risk} (0.39) and
+\code{days\_in\_bucket} (0.49) moved because tonight is the open book, not a stream of decisions. The median open case is 46 days
+past due, against 29 at a training decision, and has \$437 at risk against \$135. \code{contacts\_last\_7d} (0.78) is the same
+effect: a training row is a moment the bank acted, usually mid-cadence, while tonight includes every open case, most with no
+contact this week (median 0, against 1).
+
+\section{What went blank, or filled in}
+
+\fig[0.92\linewidth]{d_missing.png}{Share of rows with no value: training (blue) vs tonight (green).}
+
+\textbf{What the chart says.} Most lines run right to left: features are \emph{more} complete tonight than in training. The
+payroll trio drops from 100\% blank to about 80\%. The text flags (\code{hardship\_signal}, \code{dispute\_flag},
+\code{cease\_request\_flag}) go from 50\% to 30\% blank: a blank here means no note on file, and more of tonight's open cases have a note than past
+decisions did. That fill-in is
+why those three are in ``watch'' at 0.16–0.17, not because customers changed. The four dots stuck at 100\% on both sides
+(\code{promise\_intent}, \code{promised\_date}, \code{promised\_amount}, \code{third\_party\_present\_flag}) are the silent
+problem. Their PSI is 0 because there's nothing to compare. \code{promise\_intent} is a model input that has never had a value.
+
+\section{Every feature}
+
+\begin{table}[H]\footnotesize\centering
+\begin{tabular}{@{}lrlrrc@{}}
+\toprule
+\textbf{Feature} & \textbf{PSI} & \textbf{Status} & \textbf{Blank, training} & \textbf{Blank, tonight} & \textbf{Model input} \\
+\midrule
+\code{cohort\_kept\_rate} & 5.46 & \textcolor{kept}{drift} & 0\% & 0\% & yes \\
+\code{cohort\_recovery\_rate} & 4.00 & \textcolor{kept}{drift} & 0\% & 0\% & yes \\
+\code{payroll\_delay\_days} & 1.98 & \textcolor{kept}{drift} & 100\% & 76\% & yes \\
+\code{pay\_change\_vs\_3m\_avg} & 1.53 & \textcolor{kept}{drift} & 100\% & 80\% & yes \\
+\code{estimated\_monthly\_spare\_cash} & 1.53 & \textcolor{kept}{drift} & 100\% & 80\% & \\
+\code{contacts\_last\_7d} & 0.78 & \textcolor{kept}{drift} & 0\% & 0\% & \\
+\code{days\_to\_next\_payroll} & 0.67 & \textcolor{kept}{drift} & 76\% & 76\% & yes \\
+\code{days\_in\_bucket} & 0.49 & \textcolor{kept}{drift} & 40\% & 12\% & yes \\
+\code{balance\_at\_risk} & 0.39 & \textcolor{kept}{drift} & 0\% & 0\% & \\
+\code{max\_dpd} & 0.35 & \textcolor{kept}{drift} & 11\% & 7\% & yes \\
+\code{hardship\_signal} & 0.17 & \textcolor{korange}{watch} & 50\% & 31\% & \\
+\code{dispute\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% & \\
+\code{cease\_request\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% & \\
+\code{card\_utilisation\_trend} & 0.16 & \textcolor{korange}{watch} & 44\% & 37\% & yes \\
+\code{cash\_flow\_trend} & 0.11 & \textcolor{korange}{watch} & 57\% & 53\% & yes \\
+\code{kept\_promise\_ratio} & 0.07 & stable & 67\% & 55\% & yes \\
+\code{times\_30plus\_dpd\_12m} & 0.06 & stable & 11\% & 7\% & yes \\
+\code{answer\_rate\_after\_18h} & 0.05 & stable & 69\% & 60\% & yes \\
+\code{answer\_rate} & 0.04 & stable & 50\% & 42\% & yes \\
+\code{broken\_promises\_90d} & 0.04 & stable & 0\% & 0\% & yes \\
+\code{payment\_link\_usage} & 0.03 & stable & 32\% & 25\% & yes \\
+\code{pay\_frequency} & 0.00 & stable & 76\% & 76\% & yes \\
+\code{promise\_intent} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & yes \\
+\code{promised\_date} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
+\code{promised\_amount} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
+\code{third\_party\_present\_flag} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
+\bottomrule
+\end{tabular}
+\caption{All 26 registered features. ``Empty'' rows have nothing to compare, so a PSI of 0 there means nothing.}
+\end{table}
+
+\section{What we do with this}
+
+\begin{enumerate}[leftmargin=1.5em]
+\item \textbf{Retrain with payroll.} Keep a dated copy of the deposit snapshot each night. After about 90 days of snapshots,
+the training build can fill payroll features point in time, and the model can finally learn the payday effect that the business
+case is built on. Until then the effect lives in the rules and sizing, which is where it's measured anyway.
+\item \textbf{Teach the check about cohorts.} Compare cohort rates to the last training value per cohort, with a tolerance
+of a few points, instead of using decile PSI. Today's check cries wolf on them every night.
+\item \textbf{Fill or drop the empty inputs.} The SetFit backfill only predicts hardship, so the promise fields can only come
+from the LLM extraction, and 0 of the 67,039 rows in \code{features.text\_features} carry one. Either wire it through or take it out of the model's inputs. A feature
+that's always blank is just noise in the registry.
+\item \textbf{Keep the nightly gate.} \code{kept drift} runs after \code{kept features}. A drifted \emph{model input} that
+none of the reasons above explains holds the new scores and pages the owner.
+\end{enumerate}
+
+\insight{Not a fairness check}{Drift asks whether the population moved; the fairness report asks whether groups are treated
+differently. Different questions with different reports, and both run nightly.}
+
+\reproduce{\path{scripts/drift_report.py} compares \code{features\_train.case\_features} with
+\path{data/exports/features/case_features.parquet} and caches the result in \path{data/exports/reports/drift_data.json}; the
+per-cohort table is a one-off query on the same tables.}{\code{uv run python scripts/drift\_report.py} (with \code{kept serve}
+stopped), then \code{uv run python scripts/reportlib.py drift\_report}}
 
 \end{document}

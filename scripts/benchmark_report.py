@@ -13,10 +13,9 @@ import argparse
 import csv
 import re
 from collections import Counter
-from datetime import UTC, datetime
 from pathlib import Path
 
-from reportlib import AQUA, BLUE, GRID, KEPT, MUTED, ORANGE, REPO, build_pdf, plt, save, style, tidy
+from reportlib import AQUA, BLUE, GRID, KEPT, MUTED, ORANGE, REPO, plt, save, style, tidy
 
 LADDER_TIKZ = r"""
 ```{=latex}
@@ -107,7 +106,7 @@ def main() -> None:
         ax.scatter([], [], marker="s", color=c, label=t)
     ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.32), ncol=4, frameon=False, fontsize=7.5)
     ax.set_title("All questions at a glance", loc="left")
-    grid_fig = save(fig, "b_grid")
+    save(fig, "b_grid")
 
     # 2. answer paths
     paths = Counter(path_of(answers[q]) for q in ids)
@@ -131,7 +130,7 @@ def main() -> None:
     ax.set_xlim(0, len(ids))
     ax.axis("off")
     ax.set_title("How each question got answered", loc="left")
-    paths_fig = save(fig, "b_paths")
+    save(fig, "b_paths")
 
     # 3. dev by type
     types = Counter()
@@ -155,59 +154,29 @@ def main() -> None:
     ax.set_xlabel("dev questions (blue = right)")
     ax.set_title("Dev split by kind of question", loc="left")
     tidy(ax)
-    dev_fig = save(fig, "b_dev")
+    save(fig, "b_dev")
 
     rows = "\n".join(
         f"| {q} | {qs[q]['split']} | {qs[q]['question_text'][:70].replace('|', '/')} | {path_of(answers[q])} | {label[q]} |"
         for q in ids
     )
-    md = (
-        f"""---
-title: "Collections Ask: benchmark report"
-subtitle: "{len(ids)} released questions, one run, no hand edits"
-author: "Team Sharpe Shooters"
-date: "{datetime.now(UTC):%d %B %Y}"
----
+    import json
 
-# TL;DR
-
-{headline.replace("Dev split:", "**Dev split:**")}
-
-The organisers score the hidden test split; here we can only show what the Ask did with it. Every refusal is on a
-question that asks for a protected attribute, bulk personal data or something outside the data.
-
-![]({grid_fig}){{ width=100% }}
-
-# How the Ask gets there
-
-A question climbs down a ladder and stops at the first step that can answer it:
-"""
-        + LADDER_TIKZ
-        + f"""
-
-1. **Rules** refuse protected attributes, bulk personal data, write actions and other people's cases, *before* any LLM.
-2. **Certified metrics and SQL templates**: reviewed SQL for the 15 official metrics plus our templates (charge-offs in a
-   window, 30-day cure rate, calls outside permitted hours). The LLM only picks one and fills filters, groups and dates.
-3. **Dates are worked out in code** ("the 12 months to 28 Sep 2026" → 2025-09-29..2026-09-28), never by the model.
-4. **Free SQL** only when nothing above fits: three drafts, the answer at least two agree on wins, with our own worked
-   examples and table context in the prompt, then a guard (SELECT only, 17 tables, no personal columns, row limit, 10 s).
-5. **Policy, incident and call questions** go to document search or the call's redacted transcript, with the source cited.
-6. **Grounding:** every number in the sentence has to be in the result rows, or the sentence is dropped.
-
-![]({paths_fig}){{ width=100% }}
-
-![]({dev_fig}){{ width=100% }}
-
-# Every question
-
-| ID | Split | Question | Path | Result |
-|---|---|---|---|---|
-{rows}
-
-*Rebuild:* run `kept benchmark` with `--out` and `--scorecard`, then `scripts/benchmark_report.py` on those files.
-"""
+    (REPO / "data" / "exports" / "reports" / "benchmark_data.json").write_text(
+        json.dumps(
+            {
+                "headline": headline,
+                "paths": dict(paths),
+                "types": dict(types),
+                "good": dict(good),
+                "rows": rows,
+            },
+            indent=1,
+        )
     )
-    print(build_pdf(md, "benchmark_report"))
+    print(
+        "figures + data/exports/reports/benchmark_data.json written; compile with: uv run python scripts/reportlib.py"
+    )
 
 
 if __name__ == "__main__":

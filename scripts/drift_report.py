@@ -14,7 +14,7 @@ import json
 import sys
 from datetime import UTC, datetime
 
-from reportlib import AQUA, BLUE, BUILD, INK, KEPT, ORANGE, REPO, build_pdf, plt, save, style, tidy
+from reportlib import AQUA, BLUE, BUILD, INK, KEPT, ORANGE, REPO, plt, save, style, tidy
 
 CACHE = BUILD / "drift_data.json"
 
@@ -88,7 +88,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     )
     ax.set_title("Which features moved since training", loc="left")
     tidy(ax)
-    psi_fig = save(fig, "d_psi")
+    save(fig, "d_psi")
 
     fig, ax = plt.subplots(figsize=(7.2, 0.27 * len(rows) + 1.1))
     for yi, r in zip(y, rows, strict=True):
@@ -104,69 +104,13 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     ax.set_yticks(y, [r["feature"] for r in rows])
     ax.scatter([], [], color=BLUE, label="training rows")
     ax.scatter([], [], color=AQUA, label="tonight")
-    ax.legend(loc="lower right", frameon=False, fontsize=8)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=2, frameon=False, fontsize=8)
     ax.set_xlabel("% of rows with no value")
     ax.set_title("Missing values, training vs tonight", loc="left")
     tidy(ax)
-    miss_fig = save(fig, "d_missing")
+    save(fig, "d_missing")
 
-    c = d["counts"]
-    table = "\n".join(
-        f"| `{r['feature']}` | {r['psi']:.3f} | {r['status']} | {100 * r['missing_train']:.0f}% | {100 * r['missing_live']:.0f}% | {'yes' if r['model_input'] else 'no'} |"
-        for r in rows
-    )
-    md = f"""---
-title: "Feature drift report"
-subtitle: "Is tonight's open book still the population the uplift model learned from?"
-author: "Team Sharpe Shooters"
-date: "{d["written"]}"
----
-
-# TL;DR
-
-**{c["drift"]} drift · {c["watch"]} watch · {c["stable"]} stable** across the {len(rows)} registered features, comparing
-{d["train_rows"]:,} training rows with the {d["live_rows"]:,} cases served tonight (features as of {d["live_as_of"]}).
-
-Two things are going on, and only one of them is a problem:
-
-1. **The baseline is different by design.** Training rows are *every past decision since 2016*; tonight is *today's
-   open book*. Open cases skew later-stage and bigger-balance, so delinquency features (days past due, balance at
-   risk, days in bucket) and cohort rates look "drifted" just because it's a different slice of customers, not
-   because customers changed.
-2. **The real finding:** {", ".join(f"`{u}`" for u in d["unseen"])} are **missing for every training row** but filled
-   for ~20–25% of tonight's cases. The payroll history only lines up with recent decisions, so the model never got to
-   learn from them. They're the heart of Kept (payday, spare cash), so the next retrain should backfill them for past
-   decisions. Until then the rules and Kept sizing use them; the model just doesn't.
-
-# How to read PSI
-
-PSI (population stability index) compares two distributions bin by bin: Σ (live% − train%) × ln(live% / train%).
-Numbers are cut at the training deciles, categories by value, and **missing values get their own bin**, so a
-feature that suddenly goes blank shows up too. Usual bank bands: **< {d["watch"]} stable**, **{d["watch"]}–{d["drift"]} watch**,
-**≥ {d["drift"]} drift** (investigate, then retrain).
-
-![]({psi_fig}){{ width=100% }}
-
-![]({miss_fig}){{ width=100% }}
-
-# Every feature
-
-| Feature | PSI | Status | Missing (train) | Missing (tonight) | Model input |
-|---|--:|---|--:|--:|---|
-{table}
-
-# What we do with this
-
-- **Nightly:** `kept drift` runs after `kept features`; a drifted *model input* that isn't explained by the
-  open-book baseline is a reason to hold the new scores and retrain.
-- **Next retrain:** backfill the three payroll features for past decisions, then re-check that their PSI and missing
-  share line up.
-- **Not a fairness check.** Drift says the population moved; the fairness report says whether groups get treated
-  differently. Different questions.
-
-*Rebuild:* `uv run python scripts/drift_report.py` (with `kept serve` stopped).
-"""
-    print(build_pdf(md, "drift_report"))
+    print("figures written; compile with: uv run python scripts/reportlib.py")
 
 
 if __name__ == "__main__":
