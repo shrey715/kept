@@ -10,11 +10,13 @@ import { Rise, Stagger, spring } from "@/components/motion";
 import { api, humanize, type AskResponse, type ChartChoice } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
+// released benchmark questions the Ask gets right on the dev split, one per path (metric, policy, comparison, guardrail)
 const EXAMPLES = [
-  "What is the promise kept rate by product for the last 90 days?",
-  "What is the kept rate by gender?",
+  "What is the average days past due of open cases by queue?",
+  "How many collections cases are open today, by current bucket?",
   "Among randomised cases, compare the promise-kept rate of the champion strategy with challenger_A and challenger_B.",
-  "Who approves a payment reduction?",
+  "How many call attempts can we make on a mid-stage account in a week?",
+  "List the gender and marital status of customers who broke a promise last month.",
 ];
 
 export default function AskPage() {
