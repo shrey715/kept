@@ -19,6 +19,7 @@ COMMANDS = {
     "parity": "Track A: offline/online parity test",
     "extract": "Track C: text extraction on new notes",
     "train": "Track D: train uplift models, log to MLflow",
+    "train-promises": "Track D: P(kept | promise) model for the card's promise line (#79)",
     "score": "Track D: score every open case",
     "benchmark": "Track B: run the Ask scorecard",
     "serve": "Track D: run the API",
@@ -421,6 +422,23 @@ def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = N
     return 0
 
 
+def train_promises(args: argparse.Namespace) -> int:
+    """#79: P(kept | promise) on resolved promises, time split; explains sized promises on the card."""
+    import duckdb
+
+    from kept.nba import promise_model as pm
+
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
+        conn.execute("set memory_limit = '3GB'; set threads = 2")
+        rows = pm.load(conn)
+    model, metrics = pm.train(rows)
+    pm.save(model, args.out)
+    for k, v in metrics.items():
+        print(f"{k:>22}  {v:.4f}")
+    print(f"model -> {args.out}")
+    return 0
+
+
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
     import duckdb
@@ -569,6 +587,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "features": features,
     "parity": parity,
     "score": score,
+    "train-promises": train_promises,
     "nightly": nightly,
     "map": map_,
     "drift": drift,
@@ -642,6 +661,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--now", type=datetime.fromisoformat, default=None, help="with a UTC offset (default: now)"
             )
+        if name == "train-promises":
+            p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
         if name == "train":
             p.add_argument(
                 "--cutoff",

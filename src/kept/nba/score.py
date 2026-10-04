@@ -32,6 +32,7 @@ from kept.data.c360_reader import _to_customer
 from kept.features.drift import load_alarm
 from kept.nba.context import CaseRow, KeptContextBuilder
 from kept.nba.engine import KeptEngine
+from kept.nba.promise_model import load_model
 from kept.nba.uplift import TLearnerUplift
 from kept.text.store import from_row
 
@@ -236,6 +237,7 @@ def score(
         audit_log=buffer,
         proposals=_NoStore(),
         drift_alarm=load_alarm(EXPORT_DIR / "features"),
+        promise_model=load_model(EXPORT_DIR / "models" / "promise.pkl"),
     )
     rows = [
         _row(engine.recommend(case_id, now), bulk.customers[case_id], now)

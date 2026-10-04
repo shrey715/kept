@@ -30,6 +30,7 @@ from kept.governance.access import mask_name
 from kept.hardship.programs import HardshipProgram, ProgramCase, eligible_programs
 from kept.nba.context import KeptContextBuilder, duckdb_case_reader
 from kept.nba.engine import KeptEngine
+from kept.nba.promise_model import load_model
 from kept.nba.release import Releaser
 from kept.text.store import DuckDBExtractionStore
 
@@ -78,6 +79,7 @@ def real_services(
         proposals=proposals,
         programs=_programs(conn),
         drift_alarm=load_alarm(EXPORT_DIR / "features"),
+        promise_model=load_model(EXPORT_DIR / "models" / "promise.pkl"),
     )
     typed: dict[str, str] = {}  # notes typed in this session: source_id -> text
 

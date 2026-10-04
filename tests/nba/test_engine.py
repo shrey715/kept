@@ -288,11 +288,13 @@ def test_programmes_lookup_failure_keeps_the_card(make_ctx) -> None:  # type: ig
 
 @pytest.mark.parametrize(
     ("hardship", "want"),
-    [(HardshipStatus.NONE, Action.CALL), (HardshipStatus.POSSIBLE, Action.HARDSHIP_REVIEW)],
+    # the call becomes a payday-dated ask when one can be sized (#79): this balance needs instalments
+    [(HardshipStatus.NONE, Action.PAYMENT_PLAN), (HardshipStatus.POSSIBLE, Action.HARDSHIP_REVIEW)],
 )
 def test_model_without_promise_plan_or_review_arms(make_ctx, hardship, want) -> None:  # type: ignore[no-untyped-def]
     """The real model only has the randomised arms: promise, plan and hardship review are calls and
-    take the call's P(paid); hardship review only when hardship protects the case."""
+    take the call's P(paid); hardship review only when hardship protects the case; a sizable call
+    asks for a payday-dated promise."""
     ctx = make_ctx(hardship_status=hardship)
     fv = FeatureVector(
         case_id=ctx.case_id,
@@ -395,6 +397,14 @@ def test_drift_alarm_sends_green_cards_to_a_person(make_ctx) -> None:  # type: i
 
     def tier(alarm):  # type: ignore[no-untyped-def]
         ctx = make_ctx()
+
+
+def test_a_call_asks_for_a_payday_promise_only_when_one_can_be_sized(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    """#79: same contact, a sized ask. Without payday or spare cash it stays a plain call."""
+    randomised = {a: PROBS[a] for a in ("wait", "email", "push", "sms_payment_link", "call")}
+
+    def card(**over):  # type: ignore[no-untyped-def]
+        ctx = make_ctx(**over)
         fv = FeatureVector(
             case_id=ctx.case_id,
             golden_customer_id=ctx.golden_customer_id,
@@ -414,3 +424,20 @@ def test_drift_alarm_sends_green_cards_to_a_person(make_ctx) -> None:  # type: i
 
     assert tier(()) is ReleaseTier.GREEN
     assert tier(("max_dpd",)) is ReleaseTier.AMBER
+
+
+            scorer=ConstantScorer(randomised),
+            audit_log=InMemoryAuditLog(),
+        )
+        return eng.recommend(ctx.case_id, NOW)
+
+    sized = card()
+    assert sized.proposal is not None and sized.proposal.action in (
+        Action.PROMISE_REQUEST,
+        Action.PAYMENT_PLAN,
+    )
+    assert sized.proposal.sizing is not None and sized.sizing_text
+    plain = card(expected_next_payroll_date=None)
+    assert (
+        plain.proposal is not None and plain.proposal.action is Action.CALL and plain.proposal.sizing is None
+    )
