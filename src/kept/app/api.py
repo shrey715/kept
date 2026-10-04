@@ -10,17 +10,21 @@ every handler applies kept.governance.access before returning data.
 
 from __future__ import annotations
 
+import csv
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from kept import __version__
 from kept.common.audit import new_event_id
+from kept.config import DATA_DIR, REPO_ROOT
 from kept.contracts.ask import AskRequest, AskResponse, Citation, SourceText
 from kept.contracts.audit import AuditEvent, AuditKind
 from kept.contracts.enums import Action, ReleaseTier, Role
@@ -116,6 +120,39 @@ class StewardVerdictIn(BaseModel):
 class NoteExtraction(BaseModel):
     note: str
     extraction: TextExtraction
+
+
+class BenchIn(BaseModel):
+    question: dict[str, str]  # one row of a benchmark_questions CSV (question_id, question_text, ...)
+    gold: dict[str, str] | None = (
+        None  # its row of a dev-answers CSV (gold_answer, gold_sources ...), if known
+    )
+
+
+class BenchOut(BaseModel):
+    response: AskResponse
+    row: dict[str, Any]  # the answers-CSV row, as `kept benchmark` writes it
+    rung: str  # which step of the Ask ladder answered (kept.ask.benchmark.RUNGS)
+    should_refuse: bool | None
+    correct: bool | None
+    ms: int
+
+
+class BenchSuite(BaseModel):
+    name: str
+    about: str
+    questions: list[dict[str, str]]
+    gold: list[dict[str, str]]
+
+
+# the question sets the bench page offers: (name, about, questions CSV, gold CSV)
+_RELEASED, _STRESS = DATA_DIR / "benchmark", REPO_ROOT / "benchmarks"
+BENCH_SUITES = (
+    ("Released benchmark", "The organisers' 35 questions; dev gold for 21 of them",
+     _RELEASED / "benchmark_questions.csv", _RELEASED / "benchmark_dev_answers.csv"),
+    ("Kept stress suite", "Our own harder questions, written the way we expect the hidden set; gold by hand",
+     _STRESS / "stress_questions.csv", _STRESS / "stress_gold.csv"),
+)  # fmt: skip
 
 
 class SourceIn(BaseModel):
@@ -325,6 +362,40 @@ def create_app(services: Services) -> FastAPI:
         if src is None:
             raise HTTPException(404, f"{c.document_id} (effective {c.effective_from}) isn't in the index")
         return src
+
+    @app.get("/bench/suites", response_model=list[BenchSuite])
+    def bench_suites() -> list[BenchSuite]:
+        """The question sets on this machine (the released one lives under data/, which isn't committed)."""
+
+        def rows(p: Path) -> list[dict[str, str]]:
+            with p.open(encoding="utf-8", newline="") as f:
+                return list(csv.DictReader(f))
+
+        return [
+            BenchSuite(name=n, about=a, questions=rows(q), gold=rows(g) if g.exists() else [])
+            for n, a, q, g in BENCH_SUITES
+            if q.exists()
+        ]
+
+    @app.post("/bench/question", response_model=BenchOut)
+    def bench_question(body: BenchIn) -> BenchOut:
+        """One benchmark question, asked and written up exactly as `kept benchmark` does it."""
+        from kept.ask.benchmark import bench_one
+
+        t0 = time.perf_counter()
+        try:
+            r = bench_one(services.ask, dict(body.question), body.gold)
+        except (KeyError, ValueError) as e:
+            raise HTTPException(422, f"not a benchmark question row: {e}") from None
+        ms = round((time.perf_counter() - t0) * 1000)
+        return BenchOut(
+            response=r.response,
+            row=r.row,
+            rung=r.rung,
+            should_refuse=r.should_refuse,
+            correct=r.correct,
+            ms=ms,
+        )
 
     @app.get("/steward/queue", response_model=list[StewardItemOut])
     def steward_queue() -> list[StewardItemOut]:

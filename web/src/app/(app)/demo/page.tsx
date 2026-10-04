@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Code, Flex, Grid, Heading, Kbd, Text, TextArea } from "@radix-ui/themes";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Kbd, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
+import { CitedText, Sources, useVerify } from "@/components/citations";
 import { CustomerPanel } from "@/components/customer-panel";
 import { spring } from "@/components/motion";
 import { NbaCard } from "@/components/nba-card";
@@ -19,9 +20,11 @@ const AGENT_PERSONA = as("agent-7"), SPECIALIST = as("hs-1"), LEAD = as("tl-1"),
 const DEMO_CASE = { caseId: "CS-2026-118204", agent: AGENT_PERSONA };
 const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId: REAL_USER_IDS["agent-7"] } };
 
+const QUESTIONS = ["What is the promise kept rate by product for the last 90 days?", "What is the kept rate by gender?"];
+
 const STEPS = [
   { title: "One customer, one ID", who: COMPLIANCE, says: "Five systems each keep their own customer key. Kept resolves them to one golden ID, with the weakest match shown." },
-  { title: "Ask in plain English", who: ANALYST, says: "A certified metric answered with its SQL, and a question about a protected attribute refused with a safer suggestion." },
+  { title: "Ask in plain English", who: ANALYST, says: "A certified metric answered with its SQL and sources, and a question about a protected attribute refused with a safer suggestion. Try your own." },
   { title: "The next best action", who: AGENT_PERSONA, says: "Rules first, then the model: a call in the customer's own calling hours, with the three reasons that drove it." },
   { title: "A new note changes everything", who: AGENT_PERSONA, says: "The agent logs that shifts were cut. Hardship turns possible, aggressive actions drop out, and the case goes Red." },
   { title: "Two people release it", who: SPECIALIST, says: "A hardship specialist approves first, a team lead second. Every safety rule is rechecked at release." },
@@ -33,7 +36,10 @@ export default function DemoPage() {
   const { caseId: CASE, agent: AGENT } = health?.demo === false ? REAL_CASE : DEMO_CASE;
   const [step, setStep] = useState(0);
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [answers, setAnswers] = useState<AskResponse[]>([]);
+  const [answers, setAnswers] = useState<{ q: string; r: AskResponse }[]>([]);
+  const [own, setOwn] = useState("");
+  const [nonce, setNonce] = useState(0); // bumped by Retry: reloads the open step
+  const [verify, verifyDialog] = useVerify();
   const [card, setCard] = useState<NBACard | null>(null);
   const [note, setNote] = useState("Customer says shifts were cut at the plant since August; can't afford the full amount.");
   const [busy, setBusy] = useState(false);
@@ -61,11 +67,8 @@ export default function DemoPage() {
       step === 0 && !customer
         ? api.customer(CASE, COMPLIANCE).then((c) => live && setCustomer(c))
         : step === 1 && !answers.length
-          ? Promise.all([
-              api.ask("What is the promise kept rate by product for the last 90 days?", ANALYST),
-              api.ask("What is the kept rate by gender?", ANALYST),
-            ]).then((a) => live && setAnswers(a))
-          : step === 2 && !card
+          ? Promise.all(QUESTIONS.map((q) => api.ask(q, ANALYST))).then((a) => live && setAnswers(a.map((r, i) => ({ q: QUESTIONS[i], r }))))
+          : step >= 2 && step <= 4 && !card
             ? api.card(CASE, AGENT).then((c) => live && setCard(c))
             : step === 5
               ? api.audit(COMPLIANCE, { caseId: CASE }).then((e) => live && setEvents(e))
@@ -74,7 +77,25 @@ export default function DemoPage() {
     return () => {
       live = false;
     };
-  }, [step, customer, answers.length, card, health, CASE, AGENT]);
+  }, [step, customer, answers.length, card, health, CASE, AGENT, nonce]);
+
+  // Retry: drop what the open step loaded (or half-loaded) and fetch it again
+  const retry = () => {
+    setError(null);
+    if (step === 0) setCustomer(null);
+    if (step === 1) setAnswers([]);
+    if (step >= 2 && step <= 4) {
+      setCard(null);
+      setResults([]);
+    }
+    setNonce((n) => n + 1);
+  };
+  const askOwn = (q: string) =>
+    run(async () => {
+      const r = await api.ask(q, ANALYST);
+      setAnswers((a) => [...a, { q, r }]);
+      setOwn("");
+    });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -127,7 +148,14 @@ export default function DemoPage() {
             </Flex>
             <Heading size="8">{s.title}</Heading>
             <Text as="p" size="4" color="gray" mt="2" mb="5" style={{ maxWidth: 720 }}>{s.says}</Text>
-            {error && <Callout.Root color="red" mb="4"><Callout.Text>{error}</Callout.Text></Callout.Root>}
+            {error && (
+              <Callout.Root color="red" mb="4">
+                <Callout.Text>
+                  {error}{" "}
+                  <Button size="1" variant="soft" color="red" ml="2" onClick={retry}><ReloadIcon /> Retry</Button>
+                </Callout.Text>
+              </Callout.Root>
+            )}
 
             {step === 0 && customer && (
               <Grid columns={{ initial: "1", lg: "1fr 1fr" }} gap="4">
@@ -137,22 +165,46 @@ export default function DemoPage() {
             )}
             {step === 1 && (
               <Flex direction="column" gap="3">
-                {answers.map((a, i) => (
-                  <motion.div key={i} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i * 0.25 }}>
+                {answers.map(({ q, r: a }, i) => (
+                  <motion.div key={`${i}-${q}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: i < 2 ? i * 0.25 : 0 }}>
                     <Card size="3">
+                      <Flex align="center" gap="2" mb="3">
+                        <ChatBubbleIcon />
+                        <Text size="2" color="gray">{ANALYST.name.split(" ")[0]} asks</Text>
+                        <Text size="2" weight="medium">“{q}”</Text>
+                      </Flex>
                       {a.kind === "answer" && (
                         <>
-                          <Text as="p" size="5" className="serif" weight="medium">{a.narrative}</Text>
-                          <Code variant="soft" style={{ display: "block", whiteSpace: "pre-wrap", padding: 12, marginTop: 12 }}>{a.sql}</Code>
+                          <CitedText text={a.narrative} citations={a.citations} onOpen={verify} />
+                          <Sources r={a} onOpen={verify} />
                         </>
                       )}
                       {a.kind === "refusal" && (
-                        <Callout.Root color="amber"><Callout.Text><Text weight="bold">Refused.</Text> {a.message} {a.suggestion}</Callout.Text></Callout.Root>
+                        <Callout.Root color="amber">
+                          <Callout.Text>
+                            <Text weight="bold">Refused.</Text> {a.message}
+                          </Callout.Text>
+                          {a.suggestion && (
+                            <Box>
+                              <Button size="1" variant="soft" color="amber" disabled={busy} onClick={() => void askOwn(a.suggestion!.replace(/^Try:\s*/, ""))}>{a.suggestion}</Button>
+                            </Box>
+                          )}
+                        </Callout.Root>
                       )}
-                      {a.kind === "clarification" && <Text>{a.question}</Text>}
+                      {a.kind === "clarification" && <Callout.Root color="gray"><Callout.Text>{a.question}</Callout.Text></Callout.Root>}
                     </Card>
                   </motion.div>
                 ))}
+                {answers.length > 0 && (
+                  <Card size="2">
+                    <form onSubmit={(e) => { e.preventDefault(); if (own.trim()) void askOwn(own); }}>
+                      <Flex gap="2">
+                        <TextField.Root style={{ flex: 1 }} placeholder="Ask your own: a metric, a policy, or try a protected attribute" value={own} onChange={(e) => setOwn(e.target.value)} aria-label="Your question" />
+                        <Button loading={busy} disabled={!own.trim()}>Ask</Button>
+                      </Flex>
+                    </form>
+                  </Card>
+                )}
               </Flex>
             )}
             {(step === 2 || step === 3) && card && (
@@ -198,6 +250,11 @@ export default function DemoPage() {
               </Grid>
             )}
             {step === 5 && <Card size="3"><AuditTimeline events={events} /></Card>}
+            {(step === 3 || step === 4) && card && (
+              <Flex justify="end" mt="3">
+                <Button size="1" variant="ghost" color="gray" onClick={retry}><ReloadIcon /> Reload the case</Button>
+              </Flex>
+            )}
 
             <Flex justify="between" mt="6">
               <Button variant="soft" color="gray" disabled={step === 0} onClick={() => setStep(step - 1)}><ArrowLeftIcon /> Back</Button>
@@ -205,6 +262,7 @@ export default function DemoPage() {
             </Flex>
           </motion.div>
         </AnimatePresence>
+        {verifyDialog}
       </Box>
     </Grid>
   );
