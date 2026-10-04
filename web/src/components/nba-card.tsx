@@ -198,6 +198,7 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
         </motion.div>
       )}
       {card.similar_cases_text && <Text size="2" color="gray">{card.similar_cases_text}</Text>}
+      {card.legacy_text && <Text size="2" color="gray">{card.legacy_text}</Text>}
     </Flex>
   );
 }

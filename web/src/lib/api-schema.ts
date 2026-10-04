@@ -807,6 +807,8 @@ export interface components {
             sizing_text?: string | null;
             /** Similar Cases Text */
             similar_cases_text?: string | null;
+            /** Legacy Text */
+            legacy_text?: string | null;
             /**
              * Checks
              * @default []
