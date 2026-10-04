@@ -205,9 +205,13 @@ class KeptEngine:
             # if no contact pays more in 14 days. Red tier: a specialist still decides.
             best = next((s for s in ranked if s.action is Action.HARDSHIP_REVIEW), best)
         probs = _alternatives(best.action, ranked)
+        legacy = _legacy_text(ctx.legacy_action, best.action, proba, model_of, allowed)
         if best.action is Action.WAIT:
             return self._no_action(
-                ctx, "Best action is to wait: no contact beats waiting today.", probabilities=probs
+                ctx,
+                "Best action is to wait: no contact beats waiting today.",
+                probabilities=probs,
+                legacy_text=legacy,
             )
 
         reasons = []  # stage 7
@@ -233,6 +237,7 @@ class KeptEngine:
             reasons=tuple(reasons),
             sizing_text=proposal.sizing.rationale if proposal.sizing else None,
             similar_cases_text=similar_cases(fv, best.action),
+            legacy_text=legacy,
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
@@ -318,6 +323,7 @@ class KeptEngine:
         *,
         hard_stop: object = None,
         probabilities: tuple[Alternative, ...] = (),
+        legacy_text: str | None = None,
     ) -> NBACard:
         return NBACard.model_validate(
             {
@@ -331,11 +337,36 @@ class KeptEngine:
                 "hardship_banner": self._banner(ctx),
                 "hard_stop": hard_stop,
                 "no_action_reason": reason,
+                "legacy_text": legacy_text,
             }
         )
 
 
 # ------------------------------------------------------------------ helpers
+def _legacy_text(
+    legacy: Action | None,
+    ours: Action,
+    proba: pd.Series,
+    model_of: Mapping[Action, Action],
+    allowed: Sequence[Action],
+) -> str:
+    """One line comparing the bank's current strategy (nba_recommendation_last) with our choice,
+    in the same model's chance of payment within 14 days."""
+
+    def chance(a: Action) -> str:
+        return f"{proba[model_of[a].value]:.0%}" if a in model_of else "not modelled"
+
+    if legacy is None:
+        return "The bank's current strategy has no action for this case."
+    if legacy is ours:
+        return "Same as the bank's current strategy."
+    old = f"The bank's current strategy would: {_LABEL[legacy].lower()} "
+    old += f"({chance(legacy)} chance of payment in 14 days"
+    if legacy not in allowed:
+        old += ", but it isn't allowed for this customer today"
+    return f"{old}). Ours: {_LABEL[ours].lower()} ({chance(ours)})."
+
+
 _CALL_CONVERSATIONS = (Action.PROMISE_REQUEST, Action.PAYMENT_PLAN, Action.HARDSHIP_REVIEW)
 
 

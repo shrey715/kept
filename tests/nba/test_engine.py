@@ -371,3 +371,19 @@ def test_similar_cases_line(make_ctx) -> None:  # type: ignore[no-untyped-def]
     assert similar_cases(empty, Action.PROMISE_REQUEST) and "payday" in similar_cases(
         empty, Action.PROMISE_REQUEST
     )  # type: ignore[operator]
+
+
+def test_card_compares_with_the_banks_current_strategy(engine) -> None:  # type: ignore[no-untyped-def]
+    """Issue #90: one line with the legacy action and both chances of payment."""
+    eng, _ = engine(legacy_action=Action.SMS_PAYMENT_LINK)
+    card = eng.recommend("C-118204", NOW)
+    assert card.proposal is not None and card.proposal.action is not Action.SMS_PAYMENT_LINK
+    assert card.legacy_text is not None
+    assert "text a payment link (30% chance" in card.legacy_text and card.legacy_text.endswith("%).")
+    same, _ = engine(legacy_action=card.proposal.action)
+    assert same.recommend("C-118204", NOW).legacy_text == "Same as the bank's current strategy."
+    none, _ = engine(legacy_action=None)
+    assert (
+        none.recommend("C-118204", NOW).legacy_text
+        == "The bank's current strategy has no action for this case."
+    )
