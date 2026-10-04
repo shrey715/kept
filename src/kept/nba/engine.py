@@ -394,7 +394,7 @@ def _banner(ctx: CaseContext) -> str | None:
     return None
 
 
-# Resolved promises by days since the customer's last salary credit (scripts/payday_timing.py, release data):
+# Resolved promises by days since the customer's last salary credit (scripts/business_case.py, release data):
 # due 0-2 days after payday 54.3% kept (8,359), 8+ days after 46.3% (16,045). Descriptive, not causal.
 PAYDAY_KEPT_PCT, LATE_KEPT_PCT = 54, 46
 

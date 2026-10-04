@@ -24,7 +24,7 @@ COMMANDS = {
     "serve": "Track D: run the API",
     "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
     "map": "Track A: schema drift of data/raw against the data dictionary; --draft: LLM mapping drafts",
-    "drift": "Track D: feature drift (PSI) of tonight's features against training -> docs/drift_report.md",
+    "drift": "Track D: feature drift (PSI) against training (PDF: scripts/drift_report.py)",
 }
 
 
@@ -349,7 +349,7 @@ def score(args: argparse.Namespace) -> int:
     return 0
 
 
-# The nightly run, in order (A's order for land..gate, docs/tracks/Track_A.md). Each step is its own
+# The nightly run, in order (A's order for land..gate, docs/team/tracks/Track_A.md). Each step is its own
 # `kept` process, so its memory is freed before the next (land peaks at 7 GB), and the run stops at
 # the first failure: a blocked quality gate must not publish features or cards.
 NIGHTLY = (
@@ -461,7 +461,7 @@ def map_(args: argparse.Namespace) -> int:
     from kept.config import DATA_DIR, REPO_ROOT
     from kept.data.mapping_assistant import dictionary_columns, draft_mapping, raw_columns, schema_drift
 
-    expected = dictionary_columns(REPO_ROOT / "docs" / "CIBC Hackathon - Data Dictionary.xlsx")
+    expected = dictionary_columns(REPO_ROOT / "docs" / "brief" / "CIBC Hackathon - Data Dictionary.xlsx")
     drifts = schema_drift(expected, raw_columns(DATA_DIR / "raw", sorted(expected)))
     if not drifts:
         print("kept map: every raw table matches the data dictionary")
@@ -515,7 +515,8 @@ def drift(args: argparse.Namespace) -> int:
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as con:
         train = con.execute("select * from features_train.case_features").df()
     rows = drift_report(train, live, [f.name for f in FEATURES])
-    out = REPO_ROOT / "docs" / "drift_report.md"
+    out = REPO_ROOT / "data" / "exports" / "reports" / "drift_report.md"  # the PDF: scripts/drift_report.py
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         to_markdown(rows, train_rows=len(train), live_rows=len(live), live_as_of=str(live["as_of"].max()))
     )

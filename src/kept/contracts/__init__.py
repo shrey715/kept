@@ -3,7 +3,7 @@
 Rules for this package:
   * No logic beyond validation. Implementations live in the layer packages.
   * Every change needs a PR approved by the owners of every track that imports
-    the changed symbol (see docs/TEAM_PLAN.md, "Changing a contract").
+    the changed symbol (see docs/team/TEAM_PLAN.md, "Changing a contract").
   * Additive changes (new optional field, new enum member) are cheap.
     Renames and removals are breaking: bump CONTRACT_VERSION.
   * tests/contracts/ must stay green at all times.

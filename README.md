@@ -1,11 +1,61 @@
 # Kept
 
-A guarded next best action for promises customers can keep.
-Team Sharpe Shooters, CIBC Collections Hackathon.
+**A guarded next best action for promises customers can keep.** Team Sharpe Shooters · CIBC Collections Hackathon.
 
-- Design: [`docs/SharpeShooters_SystemDesign.pdf`](docs/SharpeShooters_SystemDesign.pdf)
-- Data dictionary: [`docs/CIBC Hackathon - Data Dictionary.xlsx`](docs/)
-- **Who builds what, phases, integration gates, interfaces: [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md)**
+Collections data at Maple Bank is spread over 31 tables in five systems, none sharing a customer ID, and the facts that
+matter most ("lost shifts, can pay 50 on the 15th") sit in free-text notes and calls. So treatment is generic and
+promises fall due before payday, then break. Kept unifies the data into one record per person, lets anyone ask it
+questions in plain English, and recommends the next best action per case: **safety rules first, then an uplift model,
+then a promise sized to the customer's payday and spare cash. A person releases every action.**
+
+![Kept architecture](docs/architecture/architecture.png)
+
+Full-size: [`docs/architecture/architecture.pdf`](docs/architecture/architecture.pdf) (TikZ source: `architecture.tex`;
+orange border = changed from our 2 Oct [design](docs/design/SharpeShooters_SystemDesign.pdf)).
+
+## Deliverables
+
+| # | What | Where |
+|---|---|---|
+| 1 | Code repo + this README (run it · what changed · AI tools) | here; [run](#run-it) · [changed](#what-changed-from-the-design-and-why) · [AI tools](#ai-tools-we-used-and-for-what) |
+| 2 | Architecture diagram | [`docs/architecture/architecture.png`](docs/architecture/architecture.png) / [`.pdf`](docs/architecture/architecture.pdf) |
+| 3 | Data contract for the golden C360 | [`contracts/c360_customer.odcs.yaml`](contracts/c360_customer.odcs.yaml): built from the release's example **DC-COLL-001** (owner → `team`, refresh → `slaProperties`, quality rules → `quality` Q1–Q5, allowed uses → `description.usage`, not allowed → `description.limitations`), extended to ODCS v3 with the schema, classifications and protected/PII/proxy lists |
+| 4 | Data quality report | [`QUALITY_REPORT.pdf`](QUALITY_REPORT.pdf): 31 tables profiled, 19 issues with counts and fixes, joins, identity resolution, the contract gate |
+| 5 | Benchmark answers | `data/benchmark/answers.csv` from `kept benchmark` (19:00 run, all questions incl. the extras, no hand edits); [`docs/reports/benchmark_report.pdf`](docs/reports/benchmark_report.pdf) |
+| 6 | Demo video | link in the submission form |
+| 7 | Pitch deck | [`docs/deck/Kept_pitch_deck.pdf`](docs/deck/Kept_pitch_deck.pdf) |
+
+More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs/reports/fairness_report.pdf) ·
+[feature drift](docs/reports/drift_report.pdf).
+
+## Results (real data, 4 Oct)
+
+| Area | Result |
+|---|---|
+| Identity | 3,840,513 source keys → **1,052,300 golden IDs**; match precision **99.3%** on 300 human-reviewed links |
+| Data quality | contract gate **PASS** on all 8 rules; 19 data issues found, counted and handled |
+| Privacy | 785,594 notes and calls redacted before any model, **0** leaks in a full scan |
+| Text | 6 of 7 extracted fields pass the F1 ≥ 0.80 gate; hardship recall **0.98 / 0.99** (notes / calls, held out) |
+| Features | 26 features; training vs live parity **0 of 56,000** cells off |
+| Model | uplift Qini for calls **0.0073 vs 0.0017** for the bank's current strategy |
+| Decisions | **96,000** cards a night (~7 min end to end); agent card loads in 0.21 s |
+| Ask | dev benchmark **94%** accuracy, refusal recall **100%**, refusal precision **100%** |
+| Fairness | contact-action ratio across every protected group **0.86–1.00** (four-fifths flags only on rare calls and protective reviews) |
+| Business | promises dated to payday: **62% vs 52%** of the money paid; base case **$2.2M a year**, year-1 ROI **3.8x**, payback **~2 months** |
+
+## How it works, in one breath
+
+1. **Data product factory** (DuckDB, dbt, Splink, Soda): land raw → clean with tested rules (never guess) → exact keys
+   then Splink to one golden ID per person → golden C360 with lineage → contract gate blocks bad loads.
+2. **Collections Ask** (LiteLLM, sqlglot, LanceDB): rules refuse protected / bulk / write questions first; certified
+   metrics and reviewed SQL templates before any free SQL; dates worked out in code; SQL guarded; every number in the
+   answer must be in the result rows; policy, incident and call answers cite their source.
+3. **Text + features** (Presidio, local Gemma 3 12B, SetFit, Feast): redact first; extract hardship / promises /
+   disputes with a verbatim quote per value; backfill history with SetFit; cash-flow hardship rule; point-in-time
+   features, same values online, parity and drift checks.
+4. **Decisioning** (LightGBM, TreeSHAP, MLflow, FastAPI, Next.js): hard stops → permissions → hardship override (all
+   rules, no AI) → uplift model → Kept sizing → rank → three plain-English reasons + a release tier. Red needs a
+   specialist plus a second person; everything is re-checked at release and audited.
 
 ## Run it
 
@@ -101,15 +151,19 @@ latest 06:00 UTC run, so cards are never stale.
 | parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
 | score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
 
-**Monitoring and reports** (run with `kept serve` stopped where they read the warehouse):
+**Reports and monitoring.** Each report is a LaTeX PDF with charts in `docs/reports/` (sources alongside),
+built by a script from live queries. Stop `kept serve` first for the ones that read the warehouse.
 
-| Command | What it writes |
+| Command | Writes |
 |---|---|
-| `kept gate` then `uv run python scripts/quality_report.py` | `docs/quality_report.md` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
-| `kept drift` | `docs/drift_report.md`: PSI per feature, tonight's features against training |
-| `kept map [--draft]` | schema drift of `data/raw` against the data dictionary; `--draft` asks the local LLM for a mapping an engineer reviews (reads files only) |
-| `uv run python scripts/business_case.py` | `docs/business_case.md`: the dollar case for payday-dated promises (reads files only) |
-| `uv run python scripts/eval_qa.py 100` | QA call scoring (`kept.text.qa`) against the release's QA labels |
+| `kept gate` then `uv run python scripts/quality_report_full.py` | `QUALITY_REPORT.pdf` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
+| `uv run python scripts/business_case.py` | `docs/reports/business_case.pdf` (raw files only, runs next to `kept serve`) |
+| `uv run python scripts/drift_report.py` | `docs/reports/drift_report.pdf`: PSI per feature, tonight vs training |
+| `uv run python scripts/fairness_report.py` | `docs/reports/fairness_report.pdf` (compliance-only inputs) |
+| `kept benchmark --out … --scorecard …` then `scripts/benchmark_report.py` | the answers CSV (deliverable 5) and `docs/reports/benchmark_report.pdf` |
+| `kept map [--draft]` | schema drift of `data/raw` vs the data dictionary; `--draft` asks the local LLM for a mapping an engineer reviews |
+| `uv run python scripts/eval_qa.py 100` · `scripts/eval_call_summary.py 100` | QA scoring and call summaries against the release's public labels |
+| Add `--render` to the quality, drift and fairness scripts | re-render the PDF from cached numbers, no warehouse needed |
 
 **Start it for a demo** (after the first run; each time the machine starts). Stop `kept serve` before any
 batch step (`kept nightly`, `kept gate` ...): the API holds the warehouse while it runs.
@@ -241,7 +295,7 @@ cd web && pnpm lint && npx tsc --noEmit
   data" in it); a case with no recorded call gets "there is no recorded call", not a refusal. "Why did X
   change on that day" is answered from the incident reports and the operations-events table (indexed with
   the policies).
-- **Fairness report on the real cards (B):** `docs/fairness_report.md` compares recommendations across the
+- **Fairness report on the real cards (B):** `docs/reports/fairness_report.pdf` compares recommendations across the
   protected attributes in `gold.c360_restricted` (compliance only); a blank attribute is reported, not
   treated as a group.
 
@@ -268,29 +322,39 @@ cd web && pnpm lint && npx tsc --noEmit
 ## Layout
 
 ```text
-contracts/c360_customer.odcs.yaml   data contract (ODCS): golden record, quality rules, protected/PII lists
+QUALITY_REPORT.pdf                  deliverable 4
+contracts/c360_customer.odcs.yaml   deliverable 3: data contract (ODCS, from DC-COLL-001)
+docs/
+  architecture/   deliverable 2: architecture.png / .pdf, drawn in TikZ (architecture.tex)
+  reports/        business case, fairness, drift, benchmark, quality: PDFs + LaTeX sources + figures
+  deck/           deliverable 7: the pitch deck
+  design/         our 2 Oct system design
+  brief/          the organisers' brief, build instructions and data dictionary
+  team/           TEAM_PLAN.md and each track's log (how we split and integrated the work)
 src/kept/
   contracts/      fixed API between tracks: models, enums, Protocols, feature registry
   config.py       every threshold the design commits to
   common/         LLM gateway (LiteLLM), audit log, DuckDB connection
-  data/           Layer 1  Data Product Factory: ingest, clean, traps, identity/, gold, quality   (A)
-  ask/            Layer 2  Collections Ask: scope, router, metrics, lookup, policy, SQL guard     (B)
-  text/           Layer 3  redaction, extraction, call summaries, SetFit backfill, F1 gate        (C)
-  hardship/       hardship combination, cash-flow rule, programme eligibility                     (C)
+  data/           Layer 1  ingest, clean, traps, identity/, gold, quality, mapping assistant   (A)
+  ask/            Layer 2  scope, router, metrics, templates, lookup, policy, SQL guard        (B)
+  text/           Layer 3  redaction, extraction, call summaries, QA scoring, SetFit backfill  (C)
+  hardship/       hardship combination, cash-flow rule, programme eligibility                  (C)
   governance/     lineage CI check, fairness (C); role access and masking (D)
-  features/       Layer 3  feature definitions, Feast provider (D); parity (A)
-  nba/            Layer 4  rules, uplift, sizing, ranking, explain, tiers, release, engine        (D)
-  app/            FastAPI routes for the cards (D, routes per owner)
-  cli.py          `uv run kept <step>` for the nightly pipeline
-dbt/                bronze -> silver -> gold -> features (DuckDB)
-feature_repo/       Feast
-soda/               Soda checks, generated from the contract
-tests/              mirrors src/; tests/fakes.py has a fake for every interface
-data/               local data only (git-ignored)
+  features/       Layer 3  feature definitions, Feast provider, drift (D); parity (A)
+  nba/            Layer 4  rules, uplift, sizing, ranking, explain, tiers, release, engine     (D)
+  app/            FastAPI routes
+  cli.py          `uv run kept <step>`
+scripts/          report builders (reportlib.py + one per report), evaluations, one-off jobs
+dbt/              bronze -> silver -> gold -> features (DuckDB)
+feature_repo/     Feast
+soda/             Soda checks, generated from the contract
+web/              Next.js app (queue, card, approvals, Ask, steward, audit, guided demo)
+tests/            mirrors src/; tests/fakes.py has a fake for every interface
+data/             local data only (git-ignored)
 ```
 
 ## Stack
 
-DuckDB, dbt, Splink, Soda (Layer 1) · LiteLLM, sqlglot, LanceDB (Layer 2) ·
-Presidio, SetFit, Feast (Layer 3) · LightGBM, SHAP, MLflow, FastAPI (Layer 4).
-Python 3.12, managed with `uv`; each track's libraries are an optional extra in `pyproject.toml`.
+DuckDB, dbt, Splink, Soda (Layer 1) · LiteLLM, sqlglot, LanceDB (Layer 2) · Presidio, spaCy, Gemma 3 (Ollama), SetFit,
+Feast (Layer 3) · LightGBM, TreeSHAP, MLflow, FastAPI, Next.js (Layer 4) · pandoc + XeLaTeX for the reports.
+Python 3.12 with `uv`; each track's libraries are an optional extra in `pyproject.toml`.

@@ -60,7 +60,7 @@ coverage.xml
 
 # Notebooks
 .ipynb_checkpoints/
-notebooks/**/*.ipynb_checkpoints
+
 
 # Editors / OS
 .vscode/
@@ -71,3 +71,11 @@ notebooks/**/*.ipynb_checkpoints
 # Logs (audit log in dev is local; prod is append-only storage)
 logs/
 *.log
+
+# LaTeX build leftovers (reports, deck, architecture)
+*.aux
+*.nav
+*.snm
+*.toc
+*.out
+docs/**/*.log

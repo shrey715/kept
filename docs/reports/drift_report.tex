@@ -1,0 +1,241 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  10pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+  \setmainfont[]{Carlito}
+  \setmonofont[]{Adwaita Mono}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize}
+\let\oldunderscore\_
+\renewcommand{\_}{\oldunderscore\allowbreak}
+\usepackage{xcolor}
+\definecolor{keptred}{HTML}{C8102E}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries}{}{0em}{}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.15}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Feature drift report},
+  pdfauthor={Team Sharpe Shooters},
+  colorlinks=true,
+  linkcolor={keptred},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={keptred},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Feature drift report}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{Is tonight's open book still the population the uplift model
+learned from?}
+\author{Team Sharpe Shooters}
+\date{04 October 2026}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{1}
+\tableofcontents
+}
+\section{TL;DR}\label{tldr}
+
+\textbf{10 drift · 5 watch · 11 stable} across the 26 registered
+features, comparing 690,062 training rows with the 96,000 cases served
+tonight (features as of 2026-10-03 06:00:00+00:00).
+
+Two things are going on, and only one of them is a problem:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{The baseline is different by design.} Training rows are
+  \emph{every past decision since 2016}; tonight is \emph{today's open
+  book}. Open cases skew later-stage and bigger-balance, so delinquency
+  features (days past due, balance at risk, days in bucket) and cohort
+  rates look ``drifted'' just because it's a different slice of
+  customers, not because customers changed.
+\item
+  \textbf{The real finding:} \texttt{payroll\_delay\_days},
+  \texttt{pay\_change\_vs\_3m\_avg},
+  \texttt{estimated\_monthly\_spare\_cash} are \textbf{missing for every
+  training row} but filled for \textasciitilde20--25\% of tonight's
+  cases. The payroll history only lines up with recent decisions, so the
+  model never got to learn from them. They're the heart of Kept (payday,
+  spare cash), so the next retrain should backfill them for past
+  decisions. Until then the rules and Kept sizing use them; the model
+  just doesn't.
+\end{enumerate}
+
+\section{How to read PSI}\label{how-to-read-psi}
+
+PSI (population stability index) compares two distributions bin by bin:
+Σ (live\% − train\%) × ln(live\% / train\%). Numbers are cut at the
+training deciles, categories by value, and \textbf{missing values get
+their own bin}, so a feature that suddenly goes blank shows up too.
+Usual bank bands: \textbf{\textless{} 0.1 stable}, \textbf{0.1--0.25
+watch}, \textbf{≥ 0.25 drift} (investigate, then retrain).
+
+\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/d_psi.png}
+
+\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/d_missing.png}
+
+\section{Every feature}\label{every-feature}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}
+  >{\raggedright\arraybackslash}p{(\linewidth - 10\tabcolsep) * \real{0.1667}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Feature
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+PSI
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Status
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Missing (train)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Missing (tonight)
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Model input
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{cohort\_kept\_rate} & 5.460 & drift & 0\% & 0\% & yes \\
+\texttt{cohort\_recovery\_rate} & 4.003 & drift & 0\% & 0\% & yes \\
+\texttt{payroll\_delay\_days} & 1.977 & drift & 100\% & 76\% & yes \\
+\texttt{pay\_change\_vs\_3m\_avg} & 1.532 & drift & 100\% & 80\% &
+yes \\
+\texttt{estimated\_monthly\_spare\_cash} & 1.532 & drift & 100\% & 80\%
+& no \\
+\texttt{contacts\_last\_7d} & 0.784 & drift & 0\% & 0\% & no \\
+\texttt{days\_to\_next\_payroll} & 0.667 & drift & 76\% & 76\% & yes \\
+\texttt{days\_in\_bucket} & 0.488 & drift & 40\% & 12\% & yes \\
+\texttt{balance\_at\_risk} & 0.391 & drift & 0\% & 0\% & no \\
+\texttt{max\_dpd} & 0.350 & drift & 11\% & 7\% & yes \\
+\texttt{hardship\_signal} & 0.170 & watch & 50\% & 31\% & no \\
+\texttt{dispute\_flag} & 0.165 & watch & 50\% & 30\% & no \\
+\texttt{cease\_request\_flag} & 0.165 & watch & 50\% & 30\% & no \\
+\texttt{card\_utilisation\_trend} & 0.161 & watch & 44\% & 37\% & yes \\
+\texttt{cash\_flow\_trend} & 0.112 & watch & 57\% & 53\% & yes \\
+\texttt{kept\_promise\_ratio} & 0.065 & stable & 67\% & 55\% & yes \\
+\texttt{times\_30plus\_dpd\_12m} & 0.056 & stable & 11\% & 7\% & yes \\
+\texttt{answer\_rate\_after\_18h} & 0.046 & stable & 69\% & 60\% &
+yes \\
+\texttt{answer\_rate} & 0.038 & stable & 50\% & 42\% & yes \\
+\texttt{broken\_promises\_90d} & 0.036 & stable & 0\% & 0\% & yes \\
+\texttt{payment\_link\_usage} & 0.026 & stable & 32\% & 25\% & yes \\
+\texttt{pay\_frequency} & 0.000 & stable & 76\% & 76\% & yes \\
+\texttt{promise\_intent} & 0.000 & stable & 100\% & 100\% & yes \\
+\texttt{promised\_date} & 0.000 & stable & 100\% & 100\% & no \\
+\texttt{promised\_amount} & 0.000 & stable & 100\% & 100\% & no \\
+\texttt{third\_party\_present\_flag} & 0.000 & stable & 100\% & 100\% &
+no \\
+\end{longtable}
+
+\section{What we do with this}\label{what-we-do-with-this}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Nightly:} \texttt{kept\ drift} runs after
+  \texttt{kept\ features}; a drifted \emph{model input} that isn't
+  explained by the open-book baseline is a reason to hold the new scores
+  and retrain.
+\item
+  \textbf{Next retrain:} backfill the three payroll features for past
+  decisions, then re-check that their PSI and missing share line up.
+\item
+  \textbf{Not a fairness check.} Drift says the population moved; the
+  fairness report says whether groups get treated differently. Different
+  questions.
+\end{itemize}
+
+\emph{Rebuild:} \texttt{uv\ run\ python\ scripts/drift\_report.py} (with
+\texttt{kept\ serve} stopped).
+
+\end{document}

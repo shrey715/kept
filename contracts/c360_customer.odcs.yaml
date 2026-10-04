@@ -6,6 +6,15 @@
 # matches kept.contracts.identity.GoldenCustomer and dbt/models/gold/schema.yml.
 # Frozen at G3: the columns, types, classifications and quality rules change only with a version bump and
 # the breaking-change notice below. Decisions that were open on build day 1 are under customProperties.decisions.
+#
+# Built from the organisers' example contract DC-COLL-001 (release files/docs/data_contracts/DC-COLL-001_v1.0_EN.md),
+# extended to ODCS v3. Where each of its fields lives here:
+#   Owner         -> team (business owner, technical owner, data steward)
+#   Refresh       -> slaProperties (daily, published by 06:00 ET; consent, cease and hold changes within 15 minutes)
+#   Quality rules -> quality (Q1-Q5, with warn and block thresholds; run nightly by `kept gate`)
+#   Allowed uses  -> description.usage
+#   Not allowed   -> description.limitations
+#   (schema, classifications and the protected / PII / proxy lists are additions DC-COLL-001 doesn't have)
 
 apiVersion: v3.0.2
 kind: DataContract
@@ -168,6 +177,8 @@ quality:
     severity: block
 
 customProperties:
+  - property: basedOn
+    value: DC-COLL-001 v1.0 (Maple Bank example data contract)
   # The 12 protected attributes, exactly as the data dictionary marks them (sheet Columns, Sensitivity).
   - property: protectedAttributes
     value:
@@ -308,7 +319,7 @@ customProperties:
       - text.redacted_notes
   - property: decisions
     value:
-      - "Ground-truth IDs: the organisers provided none. Match precision is evidenced by the checks in docs/quality_report.md section 4 and a steward's review of 300 predicted links (target 98%)."
+      - "Ground-truth IDs: the organisers provided none. Match precision is evidenced by the checks in QUALITY_REPORT.pdf section 5 and a steward's review of 300 predicted links (target 98%)."
       - "Roll rate: the certified metric and its SQL are in kept/ask/certified.py (Track B)."
       - "Random assignment: collections_cases.assignment_method = 'random' (Track D)."
       - "Autopay/PAD accounts at other banks: ignored for linking (nothing to link to); left untouched in silver."

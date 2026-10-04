@@ -1,0 +1,24 @@
+% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize}
+\let\oldunderscore\_
+\renewcommand{\_}{\oldunderscore\allowbreak}
+\usepackage{xcolor}
+\definecolor{keptred}{HTML}{C8102E}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries}{}{0em}{}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.15}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\definecolor{edge}{HTML}{7B8794}
+\definecolor{kblue}{HTML}{2A78D6}
+\definecolor{korange}{HTML}{E8833A}
+\tikzset{
+  step/.style={draw=edge, rounded corners=3pt, fill=white, align=center, font=\footnotesize, inner sep=4pt, text width=#1, minimum height=1.1cm},
+  step/.default=2.6cm,
+  hot/.style={draw=korange, line width=1.1pt},
+  go/.style={-{Stealth[length=2mm]}, edge, line width=0.8pt},
+}
