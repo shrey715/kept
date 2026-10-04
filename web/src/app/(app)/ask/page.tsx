@@ -13,7 +13,7 @@ import { useSession } from "@/lib/session";
 const EXAMPLES = [
   "What is the promise kept rate by product for the last 90 days?",
   "What is the kept rate by gender?",
-  "Which strategy worked best for unsecured loans in the last 90 days?",
+  "Among randomised cases, compare the promise-kept rate of the champion strategy with challenger_A and challenger_B.",
   "Who approves a payment reduction?",
 ];
 
