@@ -28,7 +28,8 @@ RAW = HERE.parent / "data" / "raw"
 LABELS = HERE.parent.parent / "maple_data" / "maple_collections_release" / "labels"
 AS_OF = "2026-09-28"
 
-# (id, question, difficulty, metric_id, tolerance, kind, gold) where gold is SQL for "sql", else
+# Document gold keeps only the key facts and numbers, as the released gold does (the scorer needs every gold
+# number in the answer and the cited document id). (id, question, difficulty, metric_id, tolerance, kind, gold) where gold is SQL for "sql", else
 # (answer, sources) for "doc", a transcript id for "call", a reason for "refuse"; then the trap note.
 # fmt: off
 Q: list[tuple[str, str, str, str, str, str, object, str]] = [
@@ -150,45 +151,45 @@ Q: list[tuple[str, str, str, str, str, str, object, str]] = [
     # ----------------------------------------------------------- documents: versions, languages, incidents
     ("KS-021", "Before the March 2026 policy change, how much did the reduced-payment programme reduce the payment, and for how long?",
      "hard", "", "", "doc",
-     ("40% for 2 months, with income evidence required (POL-COLL-004 v4.1); v4.2 from 1 March 2026 changed it to 50% for 3 months.",
+     ("40% for 2 months (POL-COLL-004 v4.1, before v4.2 changed it to 50% for 3 months).",
       ["POL-COLL-004 §4.2"]),
      "the superseded version is the answer here; the current one is not (POL-0301)"),
     ("KS-022", "Can an agent ask a vulnerable customer for payment before offering hardship options?",
      "easy", "", "", "doc",
-     ("No. Never pressure for payment; offer hardship options first (SCR-VUL-EN, POL-COLL-004 §4.5).", ["SCR-VUL-EN"]),
+     ("No. Never pressure for payment; offer hardship options first.", ["SCR-VUL-EN"]),
      "the vulnerable-customer script, not the standard one"),
     ("KS-023", "Combien de tentatives d'appel sortant sont permises par période de 7 jours ?",
      "medium", "", "", "doc",
-     ("Au plus 3 tentatives d'appel sortant par période de 7 jours (POL-COLL-001 §5.2).", ["POL-COLL-001 §5.2"]),
+     ("Au plus 3 tentatives d'appel sortant par période de 7 jours.", ["POL-COLL-001 §5.2", "POL-COLL-001-FR §5.2"]),
      "asked in French; the French policy and the English one agree on 3"),
     ("KS-024", "A customer says a payment was not applied. What happens to collection on that amount?",
      "easy", "", "", "doc",
-     ("The agent opens a dispute and pauses payment requests for the disputed amount until it is resolved (PRC-COLL-012 §6.1).",
+     ("The agent opens a dispute and pauses payment requests for the disputed amount until it is resolved.",
       ["PRC-COLL-012 §6.1"]),
      ""),
     ("KS-025", "Do customers have to prove they paid to get a late fee charged during the 14 September 2026 app outage reversed?",
      "medium", "", "", "doc",
-     ("No. Fees charged because of a bank system incident are reversed without proof of payment (PRC-COLL-012 §6.2, IR-2026-0914).",
+     ("No. Fees charged because of a bank system incident are reversed without proof of payment.",
       ["PRC-COLL-012 §6.2", "IR-2026-0914"]),
      "incident and procedure together"),
     ("KS-026", "Why is the channel column in contact_history mostly empty from 26 September 2026?",
      "easy", "", "", "doc",
-     ("The upstream platform renamed channel to channel_v2 from the 26 September 2026 extract; use COALESCE(channel_v2, channel) (REL-0926).",
+     ("The upstream platform renamed channel to channel_v2; use COALESCE(channel_v2, channel).",
       ["REL-0926"]),
      "a release note, not an incident"),
     ("KS-027", "Are collection calls allowed on Sundays for customers in Quebec?",
      "medium", "", "", "doc",
-     ("No. In Quebec there are no collection calls on Sundays, and service is in French by default (REG-SUM-001-QC).",
+     ("No. In Quebec there are no collection calls on Sundays.",
       ["REG-SUM-001-QC"]),
      "the Quebec annex is in French and overrides the national 13:00-17:00 Sunday window"),
     ("KS-028", "When does a promise count as partially kept rather than kept?",
      "easy", "", "", "doc",
-     ("Kept when the full amount arrives by the due date plus 2 business days; partially kept when only some of it arrives (PRC-COLL-010 §3.3).",
+     ("Partially kept when some but not all of the promised amount is received by the due date plus the grace period.",
       ["PRC-COLL-010 §3.3"]),
      ""),
     ("KS-029", "Can we call a customer on 30 September 2026?",
      "medium", "", "", "doc",
-     ("No. No collection contact on statutory holidays, such as 30 September, National Day for Truth and Reconciliation (POL-COLL-001 §5.1).",
+     ("No. No collection contact on statutory holidays, such as 30 September.",
       ["POL-COLL-001 §5.1"]),
      "a date question that is really a policy question"),
     # ----------------------------------------------------------- call transcripts (gold from the public labels)

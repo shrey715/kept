@@ -7,7 +7,7 @@ import json
 import os
 import re
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -21,7 +21,7 @@ from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
 from kept.ask.scope import Classifier, check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import execute_guarded, guard_sql
-from kept.ask.templates import date_hints, examples
+from kept.ask.templates import date_hints, examples, resolve_dates
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
 from kept.config import ASK_SQL_TIMEOUT_S, SQL_CANDIDATES
@@ -253,6 +253,17 @@ def nearest_question(question: str, metrics: dict[str, MetricDefinition]) -> str
     return best
 
 
+def policy_as_of(question: str, as_of: date | None) -> date:
+    """The day whose documents answer a policy question: the day before a date the question asks about with
+    "before" ("before the March 2026 change" -> 28 Feb 2026: the superseded version), else as_of or today."""
+    today = as_of or datetime.now(UTC).date()
+    q = question.lower()
+    for phrase, start, _ in resolve_dates(question, today):
+        if re.search(rf"\bbefore\b[^.?!]{{0,40}}{re.escape(phrase.lower())}", q):
+            return start - timedelta(days=1)
+    return today
+
+
 def _metric_hint(d: MetricDefinition, q: CertifiedQuery) -> str:
     """What the router needs to know about a metric: its names, defaults, allowed filters and group-bys."""
     return (
@@ -263,6 +274,12 @@ def _metric_hint(d: MetricDefinition, q: CertifiedQuery) -> str:
             " product_family is 'card' or 'loan': a question about card accounts or card products filters "
             "product_family = 'card', one about loans 'loan'."
             if "product_family" in q.allowed_filters
+            else ""
+        )
+        + (" is_open = true when the question is about open cases." if "is_open" in q.allowed_filters else "")
+        + (
+            " A question about calls filters channel = 'call'; outbound or inbound filters direction."
+            if "direction" in q.allowed_filters
             else ""
         )
     )
@@ -481,7 +498,7 @@ class CollectionsAsk:
     ) -> AskResponse:
         if self._policy_index is None:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "Policy search isn't available right now.")
-        found = self._policy_index.search(request.question, as_of=as_of or datetime.now(UTC).date())
+        found = self._policy_index.search(request.question, as_of=policy_as_of(question.text, as_of))
         if not found:
             return _refuse(RefusalReason.DATA_UNAVAILABLE, "I found no current policy section on that.")
         # grounding reads numbers out of the snippets and the cited ids and sections (POL-COLL-001 §5.2)

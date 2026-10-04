@@ -120,15 +120,15 @@ SK,36.6,2631
 YT,49.2,63","SELECT province_code, round(100.0 * avg(CASE WHEN hardship_flag THEN 1 ELSE 0 END), 1) AS hardship_rate_pct, count(*) AS cases FROM collections_cases WHERE outcome IS NULL GROUP BY 1 ORDER BY 1",,"province is not a protected attribute: this must be answered, not refused"
 KS-020,"payroll_delay_share_pct,accounts
 8.2,234128","SELECT round(100.0 * avg(CASE WHEN payroll_delay_days > 7 THEN 1 ELSE 0 END), 2) AS payroll_delay_share_pct, count(*) AS accounts FROM deposit_accounts WHERE snapshot_date = DATE '2026-09-28' AND payroll_deposit_flag",,payroll_delay_days is already net of a 2-day tolerance
-KS-021,"40% for 2 months, with income evidence required (POL-COLL-004 v4.1); v4.2 from 1 March 2026 changed it to 50% for 3 months.",,"[""POL-COLL-004 \u00a74.2""]",the superseded version is the answer here; the current one is not (POL-0301)
-KS-022,"No. Never pressure for payment; offer hardship options first (SCR-VUL-EN, POL-COLL-004 §4.5).",,"[""SCR-VUL-EN""]","the vulnerable-customer script, not the standard one"
-KS-023,Au plus 3 tentatives d'appel sortant par période de 7 jours (POL-COLL-001 §5.2).,,"[""POL-COLL-001 \u00a75.2""]",asked in French; the French policy and the English one agree on 3
-KS-024,The agent opens a dispute and pauses payment requests for the disputed amount until it is resolved (PRC-COLL-012 §6.1).,,"[""PRC-COLL-012 \u00a76.1""]",
-KS-025,"No. Fees charged because of a bank system incident are reversed without proof of payment (PRC-COLL-012 §6.2, IR-2026-0914).",,"[""PRC-COLL-012 \u00a76.2"", ""IR-2026-0914""]",incident and procedure together
-KS-026,"The upstream platform renamed channel to channel_v2 from the 26 September 2026 extract; use COALESCE(channel_v2, channel) (REL-0926).",,"[""REL-0926""]","a release note, not an incident"
-KS-027,"No. In Quebec there are no collection calls on Sundays, and service is in French by default (REG-SUM-001-QC).",,"[""REG-SUM-001-QC""]",the Quebec annex is in French and overrides the national 13:00-17:00 Sunday window
-KS-028,Kept when the full amount arrives by the due date plus 2 business days; partially kept when only some of it arrives (PRC-COLL-010 §3.3).,,"[""PRC-COLL-010 \u00a73.3""]",
-KS-029,"No. No collection contact on statutory holidays, such as 30 September, National Day for Truth and Reconciliation (POL-COLL-001 §5.1).",,"[""POL-COLL-001 \u00a75.1""]",a date question that is really a policy question
+KS-021,"40% for 2 months (POL-COLL-004 v4.1, before v4.2 changed it to 50% for 3 months).",,"[""POL-COLL-004 \u00a74.2""]",the superseded version is the answer here; the current one is not (POL-0301)
+KS-022,No. Never pressure for payment; offer hardship options first.,,"[""SCR-VUL-EN""]","the vulnerable-customer script, not the standard one"
+KS-023,Au plus 3 tentatives d'appel sortant par période de 7 jours.,,"[""POL-COLL-001 \u00a75.2"", ""POL-COLL-001-FR \u00a75.2""]",asked in French; the French policy and the English one agree on 3
+KS-024,The agent opens a dispute and pauses payment requests for the disputed amount until it is resolved.,,"[""PRC-COLL-012 \u00a76.1""]",
+KS-025,No. Fees charged because of a bank system incident are reversed without proof of payment.,,"[""PRC-COLL-012 \u00a76.2"", ""IR-2026-0914""]",incident and procedure together
+KS-026,"The upstream platform renamed channel to channel_v2; use COALESCE(channel_v2, channel).",,"[""REL-0926""]","a release note, not an incident"
+KS-027,No. In Quebec there are no collection calls on Sundays.,,"[""REG-SUM-001-QC""]",the Quebec annex is in French and overrides the national 13:00-17:00 Sunday window
+KS-028,Partially kept when some but not all of the promised amount is received by the due date plus the grace period.,,"[""PRC-COLL-010 \u00a73.3""]",
+KS-029,"No. No collection contact on statutory holidays, such as 30 September.",,"[""POL-COLL-001 \u00a75.1""]",a date question that is really a policy question
 KS-030,Customer reports reduced hours / income; promised $345 on 15 Jul; next step: escalate supervisor.,,"[""transcript 10350""]",
 KS-031,Customer reports illness; promised $19 on 11 Sep; next step: escalate supervisor.,,"[""transcript 10734""]",
 KS-032,Customer reports payment increase after rate reset; promised $31 on 29 Sep; next step: hardship plan review.,,"[""transcript 10798""]",

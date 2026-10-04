@@ -151,6 +151,7 @@ def benchmark(args: argparse.Namespace) -> int:
         responses = run_benchmark(build_ask(conn, audit), cases)
     finally:
         conn.close()
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     write_answers(
         str(args.out), [answer_row(c.question_id, r) for c, r in zip(cases, responses, strict=True)]
     )
@@ -588,7 +589,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--dev-answers", type=Path, default=Path("data/benchmark/benchmark_dev_answers.csv")
             )
-            p.add_argument("--out", type=Path, default=Path("data/benchmark/answers.csv"))
+            p.add_argument("--out", type=Path, default=Path("submission/benchmark_answers.csv"))
             p.add_argument("--scorecard", type=Path, default=None, help="write the dev scorecard (markdown)")
             p.add_argument(
                 "--only", nargs="+", default=None, metavar="ID", help="ask only these question ids"
