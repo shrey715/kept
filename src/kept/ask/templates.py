@@ -215,6 +215,28 @@ EXAMPLES: tuple[tuple[str, str], ...] = (
         "FROM silver.contact_history WHERE complaint_raised_flag",
     ),
     (
+        # a dispute is raised in a contact (call, message): count contact_history rows, of any dispute type
+        "How many disputes were raised between 1 and 7 September 2026, compared with the 7 days before?",
+        "SELECT count(*) FILTER (WHERE CAST(contact_ts_local AS DATE) BETWEEN DATE '2026-09-01' AND DATE '2026-09-07')"
+        " AS disputes_period,\n"
+        "       count(*) FILTER (WHERE CAST(contact_ts_local AS DATE) BETWEEN DATE '2026-08-25' AND DATE '2026-08-31')"
+        " AS disputes_before\n"
+        "FROM silver.contact_history WHERE dispute_raised_flag",
+    ),
+    (
+        # every link sent counts, clicked or not: no filter on what happened after the click
+        "What share of payment links sent by SMS in August 2026 were clicked?",
+        "SELECT round(100.0 * avg(CASE WHEN link_clicked_flag THEN 1 ELSE 0 END), 2) AS clicked_pct, count(*) AS links\n"
+        "FROM silver.contact_history\n"
+        "WHERE channel = 'sms' AND payment_link_id IS NOT NULL\n"
+        "  AND CAST(contact_ts_local AS DATE) BETWEEN DATE '2026-08-01' AND DATE '2026-08-31'",
+    ),
+    (
+        "How many open cases have a dispute flag, by queue?",
+        "SELECT queue, count(*) AS cases FROM silver.collections_cases\n"
+        "WHERE outcome IS NULL AND dispute_flag GROUP BY queue ORDER BY queue",
+    ),
+    (
         "How much was paid against promises due in August 2026, by product?",
         "SELECT product, sum(amount_paid_against) AS paid_cad, count(*) AS n FROM silver.promises_to_pay\n"
         "WHERE ptp_due_date BETWEEN DATE '2026-08-01' AND DATE '2026-08-31' GROUP BY product ORDER BY product",
