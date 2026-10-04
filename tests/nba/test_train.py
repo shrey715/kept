@@ -57,3 +57,17 @@ def test_train_learns_uplift_and_splits_on_time() -> None:
     hi = model.uplift(serving)["call"].iloc[0]
     lo = model.uplift(serving.assign(answer_rate=0.1))["call"].iloc[0]
     assert hi - lo > 0.2
+
+
+def test_champion_challenger_gate() -> None:
+    """#83: promote only beyond noise on calls or any contact, never if either loses beyond noise."""
+    from kept.nba.train import promote
+
+    def m(call: float, anyc: float) -> dict[str, float]:
+        return {"qini_call": call, "noise_call": 0.001, "qini_any_contact": anyc, "noise_any_contact": 0.001}
+
+    champ = m(0.010, 0.005)
+    assert promote(m(0.010, 0.005), None) == (True, "no champion yet")
+    assert promote(m(0.0105, 0.0055), champ)[0] is False  # within noise
+    assert promote(m(0.013, 0.005), champ)[0] is True  # calls better by 3 noise, any contact level
+    assert promote(m(0.013, 0.002), champ)[0] is False  # any contact worse beyond noise

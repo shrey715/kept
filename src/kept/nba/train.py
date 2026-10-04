@@ -45,7 +45,6 @@ def load_rows(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 
 def train(rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0) -> tuple[TLearnerUplift, dict[str, float]]:
     """Fit on rows before cutoff; metrics on rows from cutoff (see the module docstring)."""
-    rng = np.random.default_rng(seed)
     X = rows[list(model_inputs())]
     early = (rows.decision_at < cutoff).to_numpy()
     model = TLearnerUplift(ACTIONS, seed=seed).fit(
@@ -54,6 +53,17 @@ def train(rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0) -> tuple[TLear
         paid_14d=rows.paid_14d[early],
         is_random_assignment=pd.Series(True, index=rows.index[early]),
     )
+    return model, evaluate(model, rows, cutoff=cutoff, seed=seed)
+
+
+def evaluate(
+    model: TLearnerUplift, rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0
+) -> dict[str, float]:
+    """The test-split metrics for any fitted model, so a champion and a challenger are judged on the
+    same rows (decisions from cutoff on)."""
+    rng = np.random.default_rng(seed)
+    X = rows[list(model_inputs())]
+    early = (rows.decision_at < cutoff).to_numpy()
     late = rows[~early]
     lift = model.uplift(late[X.columns])
     legacy = late["nba_recommendation_last"].map(lambda c: (a := legacy_to_action(c)) and a.value)
@@ -76,7 +86,26 @@ def train(rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0) -> tuple[TLear
             np.std([qini_coefficient(rng.random(len(t)), t, yy) for _ in range(100)])
         )
     metrics["paid_rate_test"] = float(np.mean(late.paid_14d)) if len(late) else float("nan")
-    return model, metrics
+    return metrics
+
+
+def promote(challenger: dict[str, float], champion: dict[str, float] | None) -> tuple[bool, str]:
+    """Champion/challenger gate (#83): the challenger goes live only if it beats the champion by more
+    than twice the noise on calls or on any contact, and loses by no more than that on the other."""
+    if champion is None:
+        return True, "no champion yet"
+    gains = {
+        k: (challenger[f"qini_{k}"] - champion[f"qini_{k}"], 2 * challenger[f"noise_{k}"])
+        for k in ("call", "any_contact")
+        if f"qini_{k}" in challenger and f"qini_{k}" in champion
+    }
+    if not gains:
+        return False, "no comparable metrics: champion kept"
+    if any(gain < -margin for gain, margin in gains.values()):
+        return False, "worse than the champion beyond noise: champion kept"
+    if any(gain > margin for gain, margin in gains.values()):
+        return True, "better than the champion beyond noise"
+    return False, "within noise of the champion: champion kept"
 
 
 def _qini_ties(
@@ -90,18 +119,31 @@ def _qini_ties(
     )
 
 
-def run(conn: duckdb.DuckDBPyConnection, *, cutoff: datetime, out: Path, seed: int = 0) -> dict[str, Any]:
-    """Load, train, pickle the model to `out`, log params/metrics/model to MLflow
-    (MLFLOW_TRACKING_URI; sqlite:///mlflow.db when unset)."""
+def run(
+    conn: duckdb.DuckDBPyConnection, *, cutoff: datetime, out: Path, seed: int = 0, force: bool = False
+) -> dict[str, Any]:
+    """Load, train, write the challenger next to `out`, judge it against the champion at `out` on
+    the same test rows, and replace the champion only if `promote` says so (or `force`). Params,
+    metrics, the decision and the model go to MLflow (MLFLOW_TRACKING_URI; sqlite:///mlflow.db when unset)."""
     import mlflow
 
     rows = load_rows(conn)
     model, metrics = train(rows, cutoff=cutoff, seed=seed)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(pickle.dumps(model))
+    challenger = out.with_name(f"{out.stem}_challenger{out.suffix}")
+    challenger.write_bytes(pickle.dumps(model))
+    champion = (
+        evaluate(pickle.loads(out.read_bytes()), rows, cutoff=cutoff, seed=seed) if out.exists() else None
+    )
+    promoted, why = (True, "forced (--promote)") if force else promote(metrics, champion)
+    if promoted:
+        out.write_bytes(challenger.read_bytes())
     mlflow.set_experiment("kept-uplift")
     with mlflow.start_run(run_name=model.model_version):
         mlflow.log_params({**model.params, "cutoff": cutoff.isoformat(), "features": len(model_inputs())})
         mlflow.log_metrics(metrics)
-        mlflow.log_artifact(str(out))
-    return {"model_version": model.model_version, **metrics}
+        if champion:
+            mlflow.log_metrics({f"champion_{k}": v for k, v in champion.items()})
+        mlflow.set_tags({"promoted": str(promoted), "decision": why})
+        mlflow.log_artifact(str(challenger))
+    return {"model_version": model.model_version, **metrics, "promoted": promoted, "decision": why}
