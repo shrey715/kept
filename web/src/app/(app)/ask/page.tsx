@@ -1,12 +1,13 @@
 "use client";
 
 import { ExclamationTriangleIcon, MagicWandIcon, QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Flex, Heading, Table, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, Flex, Heading, Table, Tabs, Text, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import { AnswerChart } from "@/components/answer-chart";
 import { CitedText, Sources, useVerify } from "@/components/citations";
 import { Rise, Stagger, spring } from "@/components/motion";
-import { api, humanize, type AskResponse } from "@/lib/api";
+import { api, humanize, type AskResponse, type ChartChoice } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 const EXAMPLES = [
@@ -22,6 +23,7 @@ export default function AskPage() {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<{ q: string; r: AskResponse } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [chart, setChart] = useState<ChartChoice | null>(null); // the Chart tab; null = table only
   const [verify, verifyDialog] = useVerify();
 
   async function ask(question: string) {
@@ -30,7 +32,16 @@ export default function AskPage() {
     setBusy(true);
     setError(null);
     try {
-      setRes({ q: question, r: await api.ask(question, me) });
+      setChart(null);
+      const r = await api.ask(question, me);
+      setRes({ q: question, r });
+      if (r.kind === "answer" && r.rows.length > 0) {
+        // the chart is extra: if picking one fails, the answer and its table still stand
+        api.chart({ question: r.question, sql: r.sql ?? null, columns: r.columns, rows: r.rows }, me).then(
+          (c) => setChart(c.option.kind === "table" ? null : c),
+          () => setChart(null),
+        );
+      }
     } catch (e) {
       setError((e as Error).message);
       setRes(null);
@@ -108,7 +119,24 @@ export default function AskPage() {
                 </Flex>
                 <CitedText text={r.narrative} citations={r.citations} onOpen={verify} />
                 {r.columns.length > 0 && (
-                  <Table.Root mt="4" variant="surface" size="1">
+                  <Tabs.Root key={res.q + (chart ? "-chart" : "")} defaultValue={chart ? "chart" : "table"} mt="4">
+                    <Tabs.List size="1">
+                      {chart && <Tabs.Trigger value="chart">Chart</Tabs.Trigger>}
+                      <Tabs.Trigger value="table">Table</Tabs.Trigger>
+                    </Tabs.List>
+                    {chart && (
+                      <Tabs.Content value="chart">
+                        <Box pt="3">
+                          <AnswerChart option={chart.option} columns={r.columns} rows={r.rows} />
+                          <Text as="p" size="1" color="gray" mt="1">
+                            {chart.source === "llm" ? "Chart picked by the model from the options the data supports" : "Chart picked by rules from the data's shape"}
+                          </Text>
+                        </Box>
+                      </Tabs.Content>
+                    )}
+                    <Tabs.Content value="table">
+                      <Box pt="3">
+                        <Table.Root variant="surface" size="1">
                     <Table.Header>
                       <Table.Row>{r.columns.map((c) => <Table.ColumnHeaderCell key={c}>{c}</Table.ColumnHeaderCell>)}</Table.Row>
                     </Table.Header>
@@ -120,6 +148,9 @@ export default function AskPage() {
                       ))}
                     </Table.Body>
                   </Table.Root>
+                      </Box>
+                    </Tabs.Content>
+                  </Tabs.Root>
                 )}
                 <Sources r={r} onOpen={verify} />
               </Card>
