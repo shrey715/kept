@@ -13,6 +13,8 @@ export type Clarification = S["Clarification"];
 export type AskResponse = AskAnswer | Refusal | Clarification;
 export type Citation = S["Citation"];
 export type SourceText = S["SourceText"];
+export type BenchOut = S["BenchOut"];
+export type BenchSuite = S["BenchSuite"];
 export type StewardItem = S["StewardItemOut"];
 export type QueueItem = S["QueueItem"];
 export type ApprovalItem = S["ApprovalItem"];
@@ -81,6 +83,9 @@ export const api = {
       post({ agent_id: agentId, edits }),
     ),
   ask: (question: string, w: Who) => call<AskResponse>("/ask", post({ question, user_id: w.userId, role: w.role })),
+  benchSuites: () => call<BenchSuite[]>("/bench/suites"),
+  benchQuestion: (question: Record<string, string>, gold?: Record<string, string>) =>
+    call<BenchOut>("/bench/question", post({ question, gold: gold ?? null })),
   askSource: (citation: Citation, w: Who) => call<SourceText>("/ask/source", post({ citation, user_id: w.userId, role: w.role })),
   stewardQueue: () => call<StewardItem[]>("/steward/queue"),
   stewardResolve: (itemId: string, verdict: string, stewardId: string) =>

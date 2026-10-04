@@ -12,7 +12,7 @@ from typing import Any
 
 from kept.ask.metrics import as_bool, json_array
 from kept.config import ASK_ACCURACY_TARGET, ASK_REFUSAL_RECALL_TARGET
-from kept.contracts.ask import AskAnswer, AskRequest, AskResponse, Refusal
+from kept.contracts.ask import AskAnswer, AskRequest, AskResponse, IntentKind, Refusal
 from kept.contracts.enums import Role
 
 
@@ -255,6 +255,58 @@ def run_benchmark(
         ask.ask(AskRequest(question=c.question_text, user_id=user_id, role=role, clarification_round=1))
         for c in cases
     ]
+
+
+RUNGS = ("refused", "clarify", "certified", "template", "free_sql", "documents", "call")
+
+
+def rung(response: AskResponse) -> str:
+    """Which step of the Ask ladder produced the response: one of RUNGS (the bench page's lanes)."""
+    from kept.ask.templates import TEMPLATES
+
+    if isinstance(response, Refusal):
+        return "refused"
+    if not isinstance(response, AskAnswer):
+        return "clarify"
+    if any(c.kind == "transcript" for c in response.citations):
+        return "call"
+    if response.intent.kind is IntentKind.POLICY:
+        return "documents"
+    if response.intent.kind is IntentKind.METRIC:
+        return "template" if response.intent.metric_id in TEMPLATES else "certified"
+    return "free_sql"
+
+
+@dataclass(frozen=True, slots=True)
+class BenchResult:
+    response: AskResponse
+    row: dict[str, object]  # the answers-CSV row, exactly as `kept benchmark` writes it
+    rung: str
+    should_refuse: bool | None  # None without a gold answer
+    correct: bool | None  # in scope: matches gold; should refuse: refused. None without a gold answer
+
+
+def bench_one(ask: Any, question: dict[str, object], gold: dict[str, str] | None = None) -> BenchResult:
+    """One benchmark question through the Ask the way `kept benchmark` asks it (one questions-CSV row,
+    plus its gold row when there is one), scored like the dev split."""
+    case = load_benchmark([question])[0]
+    if gold is not None:
+        case = apply_gold([case], {case.question_id: gold})[0]
+    response = run_benchmark(ask, [case])[0]
+    refused = not isinstance(response, AskAnswer)
+    if gold is None:
+        correct = None
+    elif case.should_refuse or refused:  # refusing an in-scope question is wrong, as in score()
+        correct = refused == case.should_refuse
+    else:
+        correct = is_correct(case, gold, response)
+    return BenchResult(
+        response=response,
+        row=answer_row(case.question_id, response),
+        rung=rung(response),
+        should_refuse=None if gold is None else case.should_refuse,
+        correct=correct,
+    )
 
 
 def scorecard_markdown(

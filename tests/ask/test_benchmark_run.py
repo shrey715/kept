@@ -152,3 +152,38 @@ def test_a_call_summary_is_checked_against_its_transcript_and_figures() -> None:
     assert (
         is_correct(_case(None), gold, _answer((), (), "Promised $50 on 2 Nov.", citations=(cite,))) is False
     )
+
+
+def test_rung_names_the_step_that_answered() -> None:
+    from datetime import date
+
+    from kept.ask.benchmark import bench_one, rung
+
+    call = Citation(document_id="text.redacted_notes", section="transcript 1", effective_from=date(2026, 9, 1),
+                    snippet="s", kind="transcript")  # fmt: skip
+    assert rung(Refusal(reason=RefusalReason.PROTECTED_ATTRIBUTE, message="no")) == "refused"
+    assert rung(Clarification(question="which month?")) == "clarify"
+    assert rung(_answer((), (), citations=(call,))) == "call"
+    assert rung(_answer((), ())) == "free_sql"
+    metric = _answer((), ()).model_copy(
+        update={"intent": Intent(kind=IntentKind.METRIC, metric_id="chargeoffs", confidence=1)}
+    )
+    assert rung(metric) == "template"
+    assert (
+        rung(
+            metric.model_copy(
+                update={"intent": Intent(kind=IntentKind.METRIC, metric_id="rpc_rate", confidence=1)}
+            )
+        )
+        == "certified"
+    )
+
+    class Asker:  # refuses everything: a should-refuse question scores correct, an in-scope one wrong
+        def ask(self, request: object) -> Refusal:
+            return Refusal(reason=RefusalReason.PROTECTED_ATTRIBUTE, message="no")
+
+    q = {"question_id": "Q-1", "question_text": "rank by gender"}
+    assert bench_one(Asker(), q, {"question_id": "Q-1", "gold_answer": "Refuse: protected"}).correct is True
+    assert bench_one(Asker(), q, {"question_id": "Q-1", "gold_answer": "12"}).correct is False
+    out = bench_one(Asker(), q)
+    assert out.correct is None and out.row["refused"] is True and out.rung == "refused"

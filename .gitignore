@@ -10,6 +10,7 @@ data/**
 *.duckdb.wal
 *.parquet
 *.csv
+!benchmarks/*.csv
 !tests/fixtures/**/*.csv
 *.jsonl
 !tests/fixtures/**/*.jsonl

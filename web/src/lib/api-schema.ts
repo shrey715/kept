@@ -194,6 +194,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bench/suites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bench Suites
+         * @description The question sets on this machine (the released one lives under data/, which isn't committed).
+         */
+        get: operations["bench_suites_bench_suites_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bench/question": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bench Question
+         * @description One benchmark question, asked and written up exactly as `kept benchmark` does it.
+         */
+        post: operations["bench_question_bench_question_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/steward/queue": {
         parameters: {
             query?: never;
@@ -349,6 +389,49 @@ export interface components {
          * @enum {string}
          */
         AuditKind: "ask_query" | "recommendation" | "release" | "override" | "llm_call" | "match_merge" | "match_split" | "steward_decision" | "hardship_change" | "kill_switch" | "proposal_cancelled";
+        /** BenchIn */
+        BenchIn: {
+            /** Question */
+            question: {
+                [key: string]: string;
+            };
+            /** Gold */
+            gold?: {
+                [key: string]: string;
+            } | null;
+        };
+        /** BenchOut */
+        BenchOut: {
+            /** Response */
+            response: components["schemas"]["AskAnswer"] | components["schemas"]["Refusal"] | components["schemas"]["Clarification"];
+            /** Row */
+            row: {
+                [key: string]: unknown;
+            };
+            /** Rung */
+            rung: string;
+            /** Should Refuse */
+            should_refuse: boolean | null;
+            /** Correct */
+            correct: boolean | null;
+            /** Ms */
+            ms: number;
+        };
+        /** BenchSuite */
+        BenchSuite: {
+            /** Name */
+            name: string;
+            /** About */
+            about: string;
+            /** Questions */
+            questions: {
+                [key: string]: string;
+            }[];
+            /** Gold */
+            gold: {
+                [key: string]: string;
+            }[];
+        };
         /**
          * Channel
          * @enum {string}
@@ -1396,6 +1479,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceText"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bench_suites_bench_suites_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchSuite"][];
+                };
+            };
+        };
+    };
+    bench_question_bench_question_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchOut"];
                 };
             };
             /** @description Validation Error */

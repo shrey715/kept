@@ -8,6 +8,7 @@ import { Box, Button, Callout, Card, Code, Dialog, Flex, Spinner, Text } from "@
 import { useEffect, useRef, useState } from "react";
 import { api, type AskAnswer, type Citation, type SourceText } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { inline, stripMarks } from "./rich-text";
 
 const day = (d?: string | null) =>
   d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString("en-CA", { dateStyle: "medium" }) : null;
@@ -43,19 +44,19 @@ export function CitedText({ text, citations, onOpen }: { text: string; citations
       .sort((a, b) => a.i - b.i)[0];
     if (!next) break;
     const end = next.i + next.c.mention!.length;
-    parts.push(text.slice(at, next.i));
+    parts.push(...inline(text.slice(at, next.i), `t${at}`));
     parts.push(
       <span key={next.i} style={{ textDecoration: "underline dotted var(--accent-8)", textUnderlineOffset: 3 }}>
-        {text.slice(next.i, end)}
+        {inline(text.slice(next.i, end), `m${next.i}`)}
         <Tag n={next.c.ref ?? 0} onClick={() => onOpen(next.c)} />
       </span>,
     );
     at = end;
   }
-  parts.push(text.slice(at));
+  parts.push(...inline(text.slice(at), `t${at}`));
   used.filter((c) => !c.mention).forEach((c) => parts.push(<Tag key={`end-${c.ref}`} n={c.ref ?? 0} onClick={() => onOpen(c)} />));
   return (
-    <Text as="p" size="5" className="serif" weight="medium">
+    <Text as="p" size="5" className="serif" weight="medium" style={{ whiteSpace: "pre-line" }}>
       {parts}
     </Text>
   );
@@ -74,7 +75,7 @@ function SourceCard({ c, muted, onOpen }: { c: Citation; muted?: boolean; onOpen
             <Text size="1" color="gray">{transcript ? `call on ${day(c.effective_from)}` : `in force from ${day(c.effective_from)}`}</Text>
           </Flex>
           <Text as="p" size="2" color="gray" mt="1" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {transcript ? `Summarised from the redacted transcript: ${c.snippet}` : `“${c.snippet.replace(/\*\*|`/g, "")}”`}
+            {transcript ? `Summarised from the redacted transcript: ${c.snippet}` : <>“{inline(c.snippet.replace(/^#+\s*/gm, "").replace(/\s*\n\s*/g, " "), "s")}”</>}
           </Text>
         </Box>
         <Button size="1" variant="soft" color={muted ? "gray" : undefined} onClick={() => onOpen(c)}>
@@ -148,18 +149,19 @@ function Marked({ c, s }: { c: Citation; s: SourceText }) {
   useEffect(() => {
     first.current?.scrollIntoView({ block: "center" });
   }, [s]);
+  const { plain: text, at: to } = stripMarks(s.text); // shown without markdown markers; spans move with it
   const parts: React.ReactNode[] = [];
   let at = 0;
-  spans(c, s).forEach(([a, b], i) => {
-    parts.push(s.text.slice(at, a));
+  spans(c, s).map(([a, b]): [number, number] => [to(a), to(b)]).forEach(([a, b], i) => {
+    parts.push(text.slice(at, a));
     parts.push(
       <mark key={a} ref={i === 0 ? first : undefined} style={{ background: "var(--accent-a4)", color: "inherit", borderRadius: 3, padding: "0 2px", boxShadow: "inset 0 -2px 0 var(--accent-8)" }}>
-        {s.text.slice(a, b)}
+        {text.slice(a, b)}
       </mark>,
     );
     at = b;
   });
-  parts.push(s.text.slice(at));
+  parts.push(text.slice(at));
   return (
     <Box style={{ maxHeight: "55vh", overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.7, padding: 12, borderRadius: 6, background: "var(--gray-a2)" }}>
       <Text size="2">{parts}</Text>

@@ -17,6 +17,7 @@ const NAV = [
   { href: "/approvals", label: "Approvals", show: can.approvals },
   { href: "/audit", label: "Audit", show: can.audit },
   { href: "/ask", label: "Ask", show: () => true },
+  { href: "/bench", label: "Bench", show: () => true },
   { href: "/steward", label: "Steward", show: can.steward },
   { href: "/demo", label: "Guided demo", show: () => true },
 ];
