@@ -30,7 +30,7 @@ from kept.nba.promise_model import PromiseModel, serving_row
 from kept.nba.ranking import is_close_call, score_actions
 from kept.nba.release import cancel_pending, is_stale
 from kept.nba.rules import allowed_actions, hard_stops, hardship_override
-from kept.nba.sizing import size_promise
+from kept.nba.sizing import promise_options, size_promise
 from kept.nba.tiers import assign_tier
 
 # Tuning knobs (CAD). Cost from contact_history.contact_cost_cad (call 2.40 in the dictionary);
@@ -122,6 +122,18 @@ class KeptEngine:
         self._programs = programs
         self._drift = tuple(drift_alarm)  # model inputs that shifted overnight (#86): Green goes to a person
         self._promise = promise_model  # explains a sized promise on the card, never ranks it (#79)
+
+    def payment_options(self, case_id: str, now: datetime) -> list[PromiseSizing]:
+        """Every payday-dated plan within spare cash (#89, the customer page). KeyError if unknown."""
+        ctx = self._context.build(case_id, now)
+        today = ctx.now.astimezone(ZoneInfo(ctx.time_zone)).date() if ctx.time_zone else ctx.now.date()
+        return promise_options(
+            balance_due=ctx.balance_at_risk,
+            spare_cash_monthly=ctx.estimated_monthly_spare_cash,
+            expected_payday=ctx.expected_next_payroll_date,
+            payroll_frequency=ctx.payroll_frequency,
+            today=today,
+        )
 
     def recommend(self, case_id: str, now: datetime) -> NBACard:
         """An unknown case (KeyError from the context builder) propagates. After that it never

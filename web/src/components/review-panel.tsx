@@ -101,6 +101,11 @@ export function ReviewPanel({
                 It&apos;s now in the team lead&apos;s approvals inbox.
               </Text>
             )}
+            {result.released && p.action === "sms_payment_link" && (
+              <Button asChild mt="4" variant="soft">
+                <a href={`/pay/${encodeURIComponent(p.proposal_id)}`} target="_blank" rel="noreferrer">Customer view: what the SMS opens</a>
+              </Button>
+            )}
             {!result.released && p.status === "pending" && (
               <Button mt="4" variant="soft" color="gray" onClick={() => setResult(null)}>
                 Back to review

@@ -39,7 +39,14 @@ from kept.contracts.interfaces import (
     NBAEngine,
     ReleaseGate,
 )
-from kept.contracts.nba import NBACard, Proposal, ProposalStatus, ReleaseDecision, ReleaseResult
+from kept.contracts.nba import (
+    NBACard,
+    PromiseSizing,
+    Proposal,
+    ProposalStatus,
+    ReleaseDecision,
+    ReleaseResult,
+)
 from kept.data.identity.steward import StewardQueue, StewardVerdict
 from kept.governance.access import can_view_case, masked_view
 from kept.text.extract import confirm
@@ -155,6 +162,17 @@ BENCH_SUITES = (
     ("Kept stress suite", "Our own harder questions, written the way we expect the hidden set; gold by hand",
      _STRESS / "stress_questions.csv", _STRESS / "stress_gold.csv"),
 )  # fmt: skip
+
+
+class PayOffer(BaseModel):
+    """What the customer's SMS link opens (#89): no name, account or case ID, only the plans."""
+
+    amount_due: Decimal | None  # None when no plan fits: the page then says "let's talk" and shows no amount
+    options: list[PromiseSizing]
+
+
+class PayChoiceIn(BaseModel):
+    installments: int
 
 
 class SourceIn(BaseModel):
@@ -347,6 +365,53 @@ def create_app(services: Services) -> FastAPI:
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
         return services.ask.ask(request)  # Track B: CollectionsAsk does the work
+
+    def pay_offer(proposal_id: str) -> tuple[Proposal, list[PromiseSizing]]:
+        p = services.proposals.get(proposal_id)
+        released = p is not None and p.status in (ProposalStatus.APPROVED, ProposalStatus.RELEASED)
+        if p is None or p.action is not Action.SMS_PAYMENT_LINK or not released:
+            raise HTTPException(404, "this link isn't active")
+        options: list[PromiseSizing] = getattr(services.engine, "payment_options", lambda *_: [])(
+            p.case_id, services.clock()
+        )
+        return p, options
+
+    # ponytail: the proposal ID is the link token for the demo; a signed, expiring token before any real SMS.
+    @app.get("/pay/{proposal_id}", response_model=PayOffer)
+    def pay(proposal_id: str) -> PayOffer:
+        """The customer's page (#89): plans Kept sized to payday and spare cash. Only a released SMS
+        proposal has one; the customer picks among them, never a free date."""
+        _, options = pay_offer(proposal_id)
+        # instalments round up to the cent, so the smallest total is the balance (exact when 1 fits)
+        return PayOffer(
+            amount_due=min((o.amount * o.installments for o in options), default=None), options=options
+        )
+
+    @app.post("/pay/{proposal_id}", response_model=PromiseSizing)
+    def pay_choose(proposal_id: str, body: PayChoiceIn) -> PromiseSizing:
+        p, options = pay_offer(proposal_id)
+        chosen = next(
+            (o for o in options if o.installments == body.installments), None
+        )  # never the client's amount
+        if chosen is None:
+            raise HTTPException(422, "that plan isn't on offer")
+        services.audit_log.append(
+            AuditEvent(
+                event_id=new_event_id(),
+                at=services.clock(),
+                kind=AuditKind.RELEASE,
+                actor_id="customer:self-serve",
+                subject_id=p.case_id,
+                payload={
+                    "source": "customer",
+                    "proposal_id": p.proposal_id,
+                    "installments": chosen.installments,
+                    "amount": str(chosen.amount),
+                    "due_date": chosen.due_date.isoformat(),
+                },
+            )
+        )
+        return chosen
 
     @app.post("/chart", response_model=ChartChoice)
     def chart(request: ChartRequest) -> ChartChoice:
