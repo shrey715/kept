@@ -349,6 +349,9 @@ def _scored_as(fitted: Iterable[str], *, protective: bool) -> dict[Action, Actio
     is the upgrade for promise and plan."""
     names = set(fitted)
     out = {a: a for a in Action if a.value in names}
+    if Action.EMAIL in out:  # a pooled "digital nudge" model (kept train --pool-nudges) scores all three
+        for a in (Action.PUSH, Action.SMS_PAYMENT_LINK):
+            out.setdefault(a, Action.EMAIL)
     if Action.CALL in out:
         for a in _CALL_CONVERSATIONS:
             if a not in out and (protective or a is not Action.HARDSHIP_REVIEW):
