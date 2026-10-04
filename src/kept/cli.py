@@ -23,6 +23,8 @@ COMMANDS = {
     "benchmark": "Track B: run the Ask scorecard",
     "serve": "Track D: run the API",
     "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
+    "map": "Track A: schema drift of data/raw against the data dictionary; --draft: LLM mapping drafts",
+    "drift": "Track D: feature drift (PSI) of tonight's features against training -> docs/drift_report.md",
 }
 
 
@@ -450,6 +452,77 @@ def parity(args: argparse.Namespace) -> int:
 
 
 # Each track adds its own handler here when its step works (plan K9).
+def map_(args: argparse.Namespace) -> int:
+    """Track A. Compare the columns each raw table arrived with to the data dictionary (schema drift). With
+    --draft the local LLM proposes which dictionary column each new column feeds, from column names and
+    types only, as a dbt select for an engineer to review. Exit 1 when anything drifted."""
+    import os
+
+    from kept.config import DATA_DIR, REPO_ROOT
+    from kept.data.mapping_assistant import dictionary_columns, draft_mapping, raw_columns, schema_drift
+
+    expected = dictionary_columns(REPO_ROOT / "docs" / "CIBC Hackathon - Data Dictionary.xlsx")
+    drifts = schema_drift(expected, raw_columns(DATA_DIR / "raw", sorted(expected)))
+    if not drifts:
+        print("kept map: every raw table matches the data dictionary")
+        return 0
+    llm = redactor = None
+    if args.draft:
+        from kept.common.audit import DuckDBAuditLog
+        from kept.common.llm import LiteLLMGateway
+        from kept.config import WAREHOUSE_PATH
+        from kept.text.redact import PresidioRedactor
+
+        audit = os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb"))
+        llm = LiteLLMGateway(
+            model=os.environ.get("KEPT_TEXT_LLM_MODEL", "ollama/gemma3:12b-it-qat"),
+            audit_log=DuckDBAuditLog(audit),
+            timeout_s=120,
+        )
+        redactor = PresidioRedactor()
+    for d in drifts:
+        print(f"\n{d.table}: new {list(d.new) or '-'}; missing {list(d.missing) or '-'}")
+        if llm is not None and redactor is not None and d.new:
+            targets = list(d.missing) or expected[d.table]
+            try:
+                draft = draft_mapping(d.table, d.new, d.table, targets, llm=llm, redactor=redactor)
+            except ValueError as e:  # an invented column or a bad reply: nothing is drafted
+                print(f"  no draft: {e}")
+                continue
+            print(f"  draft (for an engineer to review): {draft.rationale}")
+            print(
+                "  "
+                + (
+                    draft.sql().replace("\n", "\n  ")
+                    if draft.column_map
+                    else "no column maps to the dictionary"
+                )
+            )
+    return 1
+
+
+def drift(args: argparse.Namespace) -> int:
+    """Feature drift report: PSI per registered feature, training rows against tonight's served features.
+    Reads the warehouse, so run it with `kept serve` stopped. Exit 1 if any feature drifted."""
+    import duckdb
+    import pandas as pd
+
+    from kept.config import EXPORT_DIR, REPO_ROOT, WAREHOUSE_PATH
+    from kept.contracts.feature_registry import FEATURES
+    from kept.features.drift import drift_report, to_markdown
+
+    live = pd.read_parquet(EXPORT_DIR / "features" / "case_features.parquet")
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as con:
+        train = con.execute("select * from features_train.case_features").df()
+    rows = drift_report(train, live, [f.name for f in FEATURES])
+    out = REPO_ROOT / "docs" / "drift_report.md"
+    out.write_text(
+        to_markdown(rows, train_rows=len(train), live_rows=len(live), live_as_of=str(live["as_of"].max()))
+    )
+    print(f"kept drift: {out} ({sum(r.status == 'drift' for r in rows)} drifted of {len(rows)})")
+    return 1 if any(r.status == "drift" for r in rows) else 0
+
+
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
     "land": land,
@@ -463,6 +536,8 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "parity": parity,
     "score": score,
     "nightly": nightly,
+    "map": map_,
+    "drift": drift,
 }
 
 
@@ -481,6 +556,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if name in ("land", "match", "gate"):
             p.add_argument(
                 "--warehouse", type=Path, default=None, help="warehouse file (default: the project's)"
+            )
+        if name == "map":
+            p.add_argument(
+                "--draft", action="store_true", help="ask the local LLM for a mapping draft per drift"
             )
         if name == "land":
             p.add_argument("--raw-dir", type=Path, default=RAW_DIR)

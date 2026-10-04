@@ -57,3 +57,22 @@ def test_a_column_the_llm_invented_is_rejected() -> None:
     )  # no such source column
     with pytest.raises(ValueError, match="customer_number"):
         draft_mapping("crm_feed", SOURCE, "customers", TARGET, llm=llm, redactor=PassThroughRedactor())
+
+
+def test_schema_drift_finds_new_and_missing_columns(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import duckdb
+
+    from kept.data.mapping_assistant import Drift, raw_columns, schema_drift
+
+    (tmp_path / "contacts.csv").write_text("contact_id,channel,channel_v2\n1,call,\n")
+    part = tmp_path / "snapshots" / "year=2026"
+    part.mkdir(parents=True)
+    duckdb.connect().execute(
+        f"copy (select 1 as account_id, 2 as dpd) to '{part / 'p.parquet'}' (format parquet)"
+    )
+    expected = {"contacts": ["contact_id", "channel"], "snapshots": ["account_id", "dpd", "month_end_date"]}
+    got = schema_drift(expected, raw_columns(tmp_path, ["contacts", "snapshots", "absent"]))
+    assert got == [
+        Drift("contacts", {"channel_v2": "VARCHAR"}, ()),
+        Drift("snapshots", {}, ("month_end_date",)),  # the year=2026 partition key is not a column
+    ]

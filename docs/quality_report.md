@@ -1,21 +1,21 @@
 # Data quality report
 
-Contract: `kept-c360-customer` v1.0.0. Written 2026-10-03 17:41 UTC from the warehouse by `scripts/quality_report.py`: the record counts are queried; the few match-quality figures in the handling column (79% to 98%, 5,498 held clusters) are from Track A's checks, recorded in `docs/tracks/Track_A.md`.
+Contract: `kept-c360-customer` v1.0.0. Written 2026-10-03 23:56 UTC from the warehouse by `scripts/quality_report.py`: the record counts are queried; the few match-quality figures in the handling column (79% to 98%, 5,498 held clusters) are from Track A's checks, recorded in `docs/tracks/Track_A.md`.
 
 ## 1. The gate on the golden record
 
 The five contract rules (Q1-Q5), plus the hardship-text and review-precision checks, run on the real gold table by `kept gate`:
 
-Gate: **WARN**
+Gate: **PASS**
 
 | Rule | Status | Detail |
 |---|---|---|
 | Q1-unique-ids | PASS | 1,052,300 golden IDs unique; every active source key maps to one |
 | Q2-linkage | PASS | 98.66% of account keys linked; every open case resolves |
 | Q3-match-safety | PASS | every auto link scores >= 0.95; no cluster holds two national IDs |
-| Q3-review-precision | WARN | no pair reviewed yet (0 of 300 pairs reviewed) |
+| Q3-review-precision | PASS | precision 99.3% on 300 reviewed predicted links; 300 of 300 pairs reviewed |
 | Q4-contact-safety | PASS | 0 violations |
-| Q5-freshness | PASS | published 3.3h after the source extract |
+| Q5-freshness | PASS | published 0.1h after the source extract |
 | Q5-row-count | PASS | 1,052,300 rows, +0.0% vs the last load |
 | hardship-text | PASS | 785,594 extractions; 11,464 golden IDs rest on them |
 

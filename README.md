@@ -101,6 +101,16 @@ latest 06:00 UTC run, so cards are never stale.
 | parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
 | score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
 
+**Monitoring and reports** (run with `kept serve` stopped where they read the warehouse):
+
+| Command | What it writes |
+|---|---|
+| `kept gate` then `uv run python scripts/quality_report.py` | `docs/quality_report.md` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
+| `kept drift` | `docs/drift_report.md`: PSI per feature, tonight's features against training |
+| `kept map [--draft]` | schema drift of `data/raw` against the data dictionary; `--draft` asks the local LLM for a mapping an engineer reviews (reads files only) |
+| `uv run python scripts/business_case.py` | `docs/business_case.md`: the dollar case for payday-dated promises (reads files only) |
+| `uv run python scripts/eval_qa.py 100` | QA call scoring (`kept.text.qa`) against the release's QA labels |
+
 **Start it for a demo** (after the first run; each time the machine starts). Stop `kept serve` before any
 batch step (`kept nightly`, `kept gate` ...): the API holds the warehouse while it runs.
 
