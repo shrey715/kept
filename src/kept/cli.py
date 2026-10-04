@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -334,8 +335,8 @@ def features(args: argparse.Namespace) -> int:
         return 0
     served = EXPORT_DIR / "features" / "case_features.parquet"
     previous = served.with_name("case_features_prev.parquet")
-    if served.exists():
-        served.replace(previous)  # last night's, for the drift alarm
+    if served.exists():  # last night's, for the drift alarm; a copy, so a failed export keeps it served
+        shutil.copy2(served, previous)
     conn = duckdb.connect(str(WAREHOUSE_PATH))  # not read_only: dbt's connection in this process is open
     try:
         n = export_features(conn, served)

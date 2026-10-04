@@ -393,18 +393,22 @@ def _legacy_text(
     """One line comparing the bank's current strategy (nba_recommendation_last) with our choice,
     in the same model's chance of payment within 14 days."""
 
-    def chance(a: Action) -> str:
-        return f"{proba[model_of[a].value]:.0%}" if a in model_of else "not modelled"
+    def chance(a: Action) -> str | None:
+        return f"{proba[model_of[a].value]:.0%}" if a in model_of else None
 
     if legacy is None:
         return "The bank's current strategy has no action for this case."
     if legacy is ours:
         return "Same as the bank's current strategy."
-    old = f"The bank's current strategy would: {_LABEL[legacy].lower()} "
-    old += f"({chance(legacy)} chance of payment in 14 days"
+    p_old, p_ours = chance(legacy), chance(ours)
+    notes = [
+        f"{p_old} chance of payment in 14 days" if p_old else "our model doesn't score it for this customer"
+    ]
     if legacy not in allowed:
-        old += ", but it isn't allowed for this customer today"
-    return f"{old}). Ours: {_LABEL[ours].lower()} ({chance(ours)})."
+        notes.append("and it isn't allowed for this customer today")
+    ours_text = _LABEL[ours].lower() + (f" ({p_ours})" if p_ours else "")
+    old = f"The bank's current strategy would: {_LABEL[legacy].lower()} ({', '.join(notes)})"
+    return f"{old}. Ours: {ours_text}."
 
 
 _CALL_CONVERSATIONS = (Action.PROMISE_REQUEST, Action.PAYMENT_PLAN, Action.HARDSHIP_REVIEW)

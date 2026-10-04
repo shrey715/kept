@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from kept.config import PROPOSAL_TTL
@@ -20,7 +21,7 @@ from kept.contracts import (
     HardStop,
     ReleaseTier,
 )
-from kept.nba.engine import KeptEngine
+from kept.nba.engine import KeptEngine, _legacy_text
 
 from ..fakes import ConstantScorer, FixedContextBuilder, InMemoryAuditLog, StaticFeatureProvider
 
@@ -384,6 +385,17 @@ def test_card_compares_with_the_banks_current_strategy(engine) -> None:  # type:
     assert "text a payment link (30% chance" in card.legacy_text and card.legacy_text.endswith("%).")
     same, _ = engine(legacy_action=card.proposal.action)
     assert same.recommend("C-118204", NOW).legacy_text == "Same as the bank's current strategy."
+    unscored = _legacy_text(
+        Action.HARDSHIP_REVIEW,
+        Action.EMAIL,
+        pd.Series({"email": 0.29}),
+        {Action.EMAIL: Action.EMAIL},
+        [Action.EMAIL],
+    )
+    assert unscored == (
+        "The bank's current strategy would: call to start a hardship review (our model doesn't score it for "
+        "this customer, and it isn't allowed for this customer today). Ours: send a reminder email (29%)."
+    )
     none, _ = engine(legacy_action=None)
     assert (
         none.recommend("C-118204", NOW).legacy_text
@@ -397,14 +409,6 @@ def test_drift_alarm_sends_green_cards_to_a_person(make_ctx) -> None:  # type: i
 
     def tier(alarm):  # type: ignore[no-untyped-def]
         ctx = make_ctx()
-
-
-def test_a_call_asks_for_a_payday_promise_only_when_one_can_be_sized(make_ctx) -> None:  # type: ignore[no-untyped-def]
-    """#79: same contact, a sized ask. Without payday or spare cash it stays a plain call."""
-    randomised = {a: PROBS[a] for a in ("wait", "email", "push", "sms_payment_link", "call")}
-
-    def card(**over):  # type: ignore[no-untyped-def]
-        ctx = make_ctx(**over)
         fv = FeatureVector(
             case_id=ctx.case_id,
             golden_customer_id=ctx.golden_customer_id,
@@ -426,6 +430,21 @@ def test_a_call_asks_for_a_payday_promise_only_when_one_can_be_sized(make_ctx) -
     assert tier(("max_dpd",)) is ReleaseTier.AMBER
 
 
+def test_a_call_asks_for_a_payday_promise_only_when_one_can_be_sized(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    """#79: same contact, a sized ask. Without payday or spare cash it stays a plain call."""
+    randomised = {a: PROBS[a] for a in ("wait", "email", "push", "sms_payment_link", "call")}
+
+    def card(**over):  # type: ignore[no-untyped-def]
+        ctx = make_ctx(**over)
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
             scorer=ConstantScorer(randomised),
             audit_log=InMemoryAuditLog(),
         )
