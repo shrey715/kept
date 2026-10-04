@@ -7,7 +7,7 @@ and your track's phase in §5.
 ## Phase 6 (after G4, 4 Oct): read this first
 
 G0–G4 have passed and every track's code is on `main`. The track and phase rules below are history:
-don't ask which track or phase, and don't work on `track-a/b/c/d`. Follow `docs/NEXT_STEPS.md`:
+don't ask which track or phase, and don't work on `track-a/b/c/d`. The rules:
 - Branch off `main` for each change, named by purpose (`docs/...`, `fix/...`, `bench/...`); PR to `main`,
   CI green, merge commit (never squash or rebase), the owner merges.
 - New features and visual work (e.g. data viz) are welcome until the deadline: keep each one a small PR that
