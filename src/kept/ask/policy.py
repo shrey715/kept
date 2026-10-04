@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from kept.contracts.ask import Citation
+from kept.contracts.ask import Citation, SourceText
 
 _OPEN_END = "9999-12-31"  # effective_to of a document that is still current (ISO strings sort as dates)
 _SNIPPET_CHARS = 1500
@@ -131,6 +131,36 @@ class PolicyIndex:
             )
             for h in hits[:k]
         ]
+
+    def source(self, document_id: str, section: str, effective_from: date, snippet: str) -> SourceText | None:
+        """The whole document version a citation came from, with the cited passage located, so anyone can
+        check the quote is really there. None if that document version isn't indexed.
+        ponytail: scans the table (a few hundred chunks); filter in LanceDB if the corpus grows."""
+        if not self._has_table():
+            return None
+        start = effective_from.isoformat()
+        rows = [
+            r
+            for r in self._db.open_table("policy").to_arrow().to_pylist()  # insertion order = document order
+            if r["document_id"] == document_id and r["effective_from"] == start
+        ]
+        if not rows:
+            return None
+        text, at = "", None
+        for r in rows:
+            block = f"{r['section']}\n{r['text']}"
+            if at is None and r["section"] == section and snippet in r["text"]:
+                at = len(text) + len(r["section"]) + 1 + r["text"].index(snippet)
+            text += block + "\n\n"
+        end = rows[0]["effective_to"]
+        return SourceText(
+            title=document_id,
+            text=text.rstrip(),
+            highlight_start=at,
+            highlight_end=None if at is None else at + len(snippet),
+            effective_from=effective_from,
+            effective_to=None if end == _OPEN_END else date.fromisoformat(end),
+        )
 
 
 def build_policy_index(

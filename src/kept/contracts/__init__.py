@@ -21,6 +21,7 @@ from kept.contracts.ask import (
     Refusal,
     RefusalReason,
     ScopeDecision,
+    SourceText,
     SqlPolicy,
 )
 from kept.contracts.audit import AuditEvent, AuditKind
@@ -136,6 +137,7 @@ __all__ = [
     "Sensitivity",
     "SourceKey",
     "SourceSystem",
+    "SourceText",
     "SqlPolicy",
     "StatedReason",
     "TextExtraction",

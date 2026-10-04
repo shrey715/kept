@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from kept import __version__
 from kept.common.audit import new_event_id
-from kept.contracts.ask import AskRequest, AskResponse
+from kept.contracts.ask import AskRequest, AskResponse, Citation, SourceText
 from kept.contracts.audit import AuditEvent, AuditKind
 from kept.contracts.enums import Action, ReleaseTier, Role
 from kept.contracts.features import TextExtraction
@@ -116,6 +116,12 @@ class StewardVerdictIn(BaseModel):
 class NoteExtraction(BaseModel):
     note: str
     extraction: TextExtraction
+
+
+class SourceIn(BaseModel):
+    citation: Citation
+    user_id: str
+    role: Role
 
 
 class ExtractionConfirmIn(BaseModel):
@@ -301,6 +307,24 @@ def create_app(services: Services) -> FastAPI:
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
         return services.ask.ask(request)  # Track B: CollectionsAsk does the work
+
+    @app.post("/ask/source", response_model=SourceText)
+    def ask_source(body: SourceIn) -> SourceText:
+        """Verify a citation: the full source it came from, with the cited passage located in it."""
+        c = body.citation
+        lookup = getattr(services.ask, f"{c.kind}_source", None)  # only the real Ask indexes sources
+        if lookup is None:
+            raise HTTPException(503, "source lookup isn't available")
+        if c.kind == "transcript":
+            found: tuple[str, SourceText] | None = lookup(c.source_id or "")
+            if found is None:
+                raise HTTPException(404, "that transcript is gone")
+            guard_case(found[0], body.user_id, body.role)  # a transcript is case data: same rule as the case
+            return found[1]
+        src: SourceText | None = lookup(c)
+        if src is None:
+            raise HTTPException(404, f"{c.document_id} (effective {c.effective_from}) isn't in the index")
+        return src
 
     @app.get("/steward/queue", response_model=list[StewardItemOut])
     def steward_queue() -> list[StewardItemOut]:

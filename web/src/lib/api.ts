@@ -11,6 +11,8 @@ export type AskAnswer = S["AskAnswer"];
 export type Refusal = S["Refusal"];
 export type Clarification = S["Clarification"];
 export type AskResponse = AskAnswer | Refusal | Clarification;
+export type Citation = S["Citation"];
+export type SourceText = S["SourceText"];
 export type StewardItem = S["StewardItemOut"];
 export type QueueItem = S["QueueItem"];
 export type ApprovalItem = S["ApprovalItem"];
@@ -79,6 +81,7 @@ export const api = {
       post({ agent_id: agentId, edits }),
     ),
   ask: (question: string, w: Who) => call<AskResponse>("/ask", post({ question, user_id: w.userId, role: w.role })),
+  askSource: (citation: Citation, w: Who) => call<SourceText>("/ask/source", post({ citation, user_id: w.userId, role: w.role })),
   stewardQueue: () => call<StewardItem[]>("/steward/queue"),
   stewardResolve: (itemId: string, verdict: string, stewardId: string) =>
     call<{ status: string }>(`/steward/items/${encodeURIComponent(itemId)}`, post({ verdict, steward_id: stewardId })),

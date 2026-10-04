@@ -83,7 +83,23 @@ class Citation(_Frozen):
     document_id: str
     section: str
     effective_from: date
-    snippet: str
+    snippet: str  # verbatim from the source, so GET /ask/source can find and highlight it
+    kind: Literal["policy", "transcript"] = "policy"
+    ref: int = 0  # the [n] tag, 1-based, in the order the answer leans on them
+    used: bool = True  # the answer names this source; False = retrieved, but the answer doesn't rely on it
+    mention: str | None = None  # the exact words in the narrative that cite it ("POL-COLL-001 §7.3")
+    source_id: str | None = None  # a transcript's text.redacted_notes source_id
+
+
+class SourceText(_Frozen):
+    """A cited source in full, with the cited passage located in it: the "verify" view of a citation."""
+
+    title: str
+    text: str
+    highlight_start: int | None = None  # None when the snippet is no longer in the source
+    highlight_end: int | None = None
+    effective_from: date | None = None
+    effective_to: date | None = None  # None = still current
 
 
 class AskAnswer(_Frozen):
