@@ -21,7 +21,7 @@ orange border = changed from our 2 Oct [design](docs/design/SharpeShooters_Syste
 | 2 | Architecture diagram | [`docs/architecture/architecture.png`](docs/architecture/architecture.png) / [`.pdf`](docs/architecture/architecture.pdf) |
 | 3 | Data contract for the golden C360 | [`contracts/c360_customer.odcs.yaml`](contracts/c360_customer.odcs.yaml): built from the release's example **DC-COLL-001** (owner → `team`, refresh → `slaProperties`, quality rules → `quality` Q1–Q5, allowed uses → `description.usage`, not allowed → `description.limitations`), extended to ODCS v3 with the schema, classifications and protected/PII/proxy lists |
 | 4 | Data quality report | [`QUALITY_REPORT.pdf`](QUALITY_REPORT.pdf): 31 tables profiled, 19 issues with counts and fixes, joins, identity resolution, the contract gate |
-| 5 | Benchmark answers | `data/benchmark/answers.csv` from `kept benchmark` (19:00 run, all questions incl. the extras, no hand edits); [`docs/reports/benchmark_report.pdf`](docs/reports/benchmark_report.pdf) |
+| 5 | Benchmark answers | [`submission/benchmark_answers.csv`](submission/benchmark_answers.csv), in the format of `labels/benchmark_answers_template.csv`: every released question plus the 15 extras, written by `kept benchmark` with no hand edits ([how](#benchmark-answers)); [`docs/reports/benchmark_report.pdf`](docs/reports/benchmark_report.pdf) |
 | 6 | Demo video | link in the submission form |
 | 7 | Pitch deck | [`docs/deck/Kept_pitch_deck.pdf`](docs/deck/Kept_pitch_deck.pdf) |
 
@@ -196,6 +196,17 @@ make web                   # or the production build above
   a hardship note turns it Red. A possible cease request shows a red banner the assigned agent confirms.
 - The Ask answers with the free Gemini tier; policy questions cite the section.
 - Without Presidio installed (`make setup-c`) adding a note answers 503; everything else works.
+
+### Benchmark answers
+
+```bash
+# the released questions plus the 19:00 extras, one questions CSV (same columns as data/benchmark_questions.csv)
+uv run kept benchmark --questions data/benchmark/benchmark_questions.csv   # -> submission/benchmark_answers.csv
+```
+
+`kept benchmark` opens the warehouse read-only, so stop `kept serve` first (DuckDB allows one writer). With the server running,
+the **Bench** page in the web app does the same thing question by question (same rows, same format) and exports the CSV:
+load or drop a questions CSV, press Run, then *Answers CSV*. `benchmarks/` holds our own 42-question stress suite with gold.
 
 ### 5. Tests
 

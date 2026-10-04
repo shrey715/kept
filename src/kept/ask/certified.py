@@ -31,7 +31,11 @@ _PTP_COLS = frozenset(
     | {"prior_broken_ptp_count"}
 )
 _CASE_COLS = frozenset({"primary_product", "queue", "province_code", "current_bucket"})
+# what the case metrics read (the SQL guard rejects SELECT *)
+_CASE_SELECT = ", ".join(sorted(_CASE_COLS | {"hardship_flag", "current_dpd", "outcome", "case_open_date"}))
 _CONTACT_COLS = frozenset({"contact_hour_local", "agent_site", "test_cell", "strategy_code", "day_of_week"})
+# "on outbound calls" must narrow the metric, not be dropped: direction and channel are filters, not groups
+_CONTACT_FILTERS = _CONTACT_COLS | {"direction", "channel"}
 _ACCOUNTS = """(SELECT 'card' AS product_family, product_code, dpd, dpd_bucket, snapshot_date
       FROM silver.card_accounts WHERE account_status IN ('active', 'blocked') AND dpd IS NOT NULL
       UNION ALL
@@ -61,7 +65,7 @@ def _contacts(
         metric_id,
         f"SELECT {{group_by_select}} {value}, count(*) AS n FROM silver.contact_history WHERE 1=1 {{where}} {{group_by}}",
         where,
-        cols,
+        cols | _CONTACT_FILTERS,
         cols,
         "CAST(contact_ts_local AS DATE)",  # a timestamp <= date would drop the last day
     )
@@ -70,9 +74,11 @@ def _contacts(
 def _cases(metric_id: str, value: str, where: tuple[str, ...], date: str | None) -> CertifiedQuery:
     return CertifiedQuery(
         metric_id,
-        f"SELECT {{group_by_select}} {value}, count(*) AS n FROM silver.collections_cases WHERE 1=1 {{where}} {{group_by}}",
+        f"SELECT {{group_by_select}} {value}, count(*) AS n "
+        f"FROM (SELECT {_CASE_SELECT}, outcome IS NULL AS is_open FROM silver.collections_cases) "
+        f"WHERE 1=1 {{where}} {{group_by}}",
         where,
-        _CASE_COLS,
+        _CASE_COLS | {"is_open"},  # "open cases" -> is_open = true
         _CASE_COLS,
         date,
     )

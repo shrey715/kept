@@ -92,6 +92,14 @@ def load_metric_definitions(rows: list[dict[str, object]]) -> dict[str, MetricDe
     return out
 
 
+def _implied(col: str, value: object, q: CertifiedQuery) -> bool:
+    """True when the metric's own SQL already applies this filter, so asking for it again is a no-op."""
+    sql = " ".join((q.sql_template, *q.default_where)).lower()
+    if col == "is_open":
+        return value is True and "outcome is null" in sql
+    return isinstance(value, str) and f"{col} = '{value}'".lower() in sql
+
+
 def compile_metric(
     intent: Intent,
     definitions: dict[str, MetricDefinition],
@@ -108,14 +116,17 @@ def compile_metric(
     q = queries.get(intent.metric_id)
     if q is None:
         raise ValueError(f"no certified query for {intent.metric_id}")
-    bad = (set(intent.filters) - q.allowed_filters) | (set(intent.group_by) - q.allowed_group_by)
+    # a filter the metric already applies ("outbound" on a metric that only counts outbound calls) changes
+    # nothing: drop it instead of refusing the question
+    filters = {c: v for c, v in intent.filters.items() if c in q.allowed_filters or not _implied(c, v, q)}
+    bad = (set(filters) - q.allowed_filters) | (set(intent.group_by) - q.allowed_group_by)
     if bad:
         raise ValueError(f"not allowed for {intent.metric_id}: {sorted(bad)}")
 
     where = list(q.default_where)
     params: list[object] = []
-    for col in sorted(intent.filters):  # col is in allowed_filters: our identifiers, not user text
-        v = intent.filters[col]
+    for col in sorted(filters):  # col is in allowed_filters: our identifiers, not user text
+        v = filters[col]
         vals: list[object] = list(v) if isinstance(v, list) else [v]
         if not vals:
             raise ValueError(f"empty filter list for {col}")
