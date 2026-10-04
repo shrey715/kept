@@ -141,7 +141,7 @@ def write_answers(path: str, answers: Iterable[dict[str, object]]) -> None:
 # ratio columns of the certified metrics: the answer shows them as percentages, like the gold answers
 _PCT = frozenset(
     {"kept_rate", "broken_rate", "cure_rate", "rpc_rate", "ptp_rate", "hardship_rate"}
-    | {"delinquency_rate", "roll_rate", "payroll_delay_share"}
+    | {"delinquency_rate", "roll_rate", "payroll_delay_share", "out_of_hours_rate"}
 )
 
 

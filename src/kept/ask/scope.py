@@ -18,15 +18,15 @@ Classifier = Callable[[str], ScopeDecision]
 # contract lists it, so the contract stays the source of truth; its name (and name with spaces)
 # is always matched too. Add a phrase here when a refusal is missed.
 _ALIASES: dict[str, str] = {
-    "gender_code": r"gender|sex",
+    "gender_code": r"gender|sex|men|women|males?|females?",
     "marital_status": r"marital|married",
     "newcomer_program_flag": r"newcomers?|immigra\w+",
-    "citizenship_status": r"citizen\w*|permanent resident",
+    "citizenship_status": r"citizen\w*|permanent residents?|work permits?|study permits?|refugees?",
     "household_size": r"household",
-    "dependants_count": r"dependants?|dependents?",
-    "accessibility_needs_flag": r"accessibility|disabilit\w+",
+    "dependants_count": r"dependants?|dependents?|kids|children",
+    "accessibility_needs_flag": r"accessibility|disabilit\w+|disabled",
     "vulnerability_type": r"vulnerability type",
-    "ccb_deposit_flag": r"canada child benefit|ccb",
+    "ccb_deposit_flag": r"(?:canada )?child benefits?|ccb",
     "customer_accent_region": r"accents?",
     "age_band": r"age bands?|age groups?|customer age|by age|seniors?",
     "date_of_birth": r"dates? of birth|birthdays?",
