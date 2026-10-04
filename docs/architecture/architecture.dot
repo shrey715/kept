@@ -15,7 +15,7 @@ digraph kept {
     bronze [label=<<b>Bronze → Silver</b><br/>land raw (all VARCHAR); clean names, DOBs,<br/>phones, postal codes; data traps; quarantine>];
     ident  [label=<<b>Identity resolution</b><br/>exact keys (+ core-banking CIF rule), then Splink<br/>trained on a 20% DOB sample, scores all 3.84M keys<br/>≥0.95 auto · 0.80–0.95 steward · 2 national IDs held>, color="#e8833a", penwidth=1.6];
     gold   [label=<<b>Golden C360</b><br/>1,052,300 golden IDs · lineage per field<br/>hard_stop_flags · c360_restricted kept apart>];
-    gate   [label=<<b>Quality gate</b><br/>Soda checks from the data contract<br/>(ODCS) · quality report>];
+    gate   [label=<<b>Quality gate</b><br/>contract rules Q1–Q5 (ODCS, from DC-COLL-001)<br/>gate PASS · 300 links reviewed: 99.3%<br/>schema drift check (kept map)>, color="#e8833a", penwidth=1.6];
     bronze -> ident -> gold -> gate;
     {rank=same; bronze; ident; gold; gate}
   }
@@ -23,21 +23,21 @@ digraph kept {
   subgraph cluster_l2 {
     label=<<b>2 · COLLECTIONS ASK</b>  <font color="#666666">LiteLLM (Gemini Flash-Lite free tier) · sqlglot · LanceDB · Track B</font>>; style="rounded,filled"; fillcolor="#f4fbf6"; color="#b7dfc4";
     scope  [label=<<b>Scope check</b><br/>rules + LLM classifier; refuses protected,<br/>bulk-personal, out-of-role questions>];
-    router [label=<<b>Router</b><br/>LLM → JSON intent: certified metric,<br/>lookup SQL (3 candidates, majority) or policy>];
-    guard  [label=<<b>SQL guard</b><br/>sqlglot AST: SELECT only, 16 approved<br/>tables, no PII columns, row limit, timeout>];
-    answer [label=<<b>Answer + grounding</b><br/>SQL and sources shown; numbers only from<br/>results; policy cited (BM25 over current docs)>, color="#e8833a", penwidth=1.6];
+    router [label=<<b>Router + SQL ladder</b><br/>certified metrics + reviewed SQL templates first;<br/>dates worked out in code; free SQL last<br/>(3 drafts, majority, worked examples)>, color="#e8833a", penwidth=1.6];
+    guard  [label=<<b>SQL guard</b><br/>sqlglot AST: SELECT only, 17 approved<br/>tables, no PII columns, row limit, timeout>];
+    answer [label=<<b>Answer + grounding</b><br/>SQL / sources shown; numbers only from results;<br/>policy + incidents cited; call summaries<br/>dev benchmark 94% · refusal recall 100%>, color="#e8833a", penwidth=1.6];
     scope -> router -> guard -> answer;
     {rank=same; scope; router; guard; answer}
   }
 
   subgraph cluster_l3 {
     label=<<b>3 · FEATURES</b>  <font color="#666666">dbt · Feast · Presidio · Ollama (local, GPU) · SetFit · Tracks C + D</font>>; style="rounded,filled"; fillcolor="#fdf8f1"; color="#f0d9b5";
-    sqlf   [label=<<b>SQL features</b> (D)<br/>DPD, promises, contacts, payday, cohorts<br/>96,000 open cases · parity 200/200>];
+    sqlf   [label=<<b>SQL features</b> (D)<br/>DPD, promises, contacts, payday, cohorts<br/>26 features · 96,000 open cases>];
     redact [label=<<b>Presidio redaction</b> (C) of source notes + calls<br/>EN + FR spaCy · Canadian SIN, postal, cards<br/>785,594 notes + calls · leak scan: 0>, color="#e8833a", penwidth=1.6];
-    llm    [label=<<b>Local LLM extraction</b> (C)<br/>gemma3 12B on the GPU · a verbatim quote<br/>for every value · held-out F1 gate 6/7 pass>, color="#e8833a", penwidth=1.6];
+    llm    [label=<<b>Local LLM extraction</b> (C)<br/>gemma3 12B on the GPU · a verbatim quote<br/>for every value · F1 gate 6/7 pass<br/>+ call summaries + QA call scoring>, color="#e8833a", penwidth=1.6];
     setfit [label=<<b>SetFit backfill</b> (C)<br/>trained on 2k LLM labels · hardship for<br/>all 785K historical notes and calls>];
     signals[label=<<b>text.extractions → text_signals</b><br/>cease counts only once an agent confirms<br/>(cease failed the gate on precision)>, color="#e8833a", penwidth=1.6];
-    feast  [label=<<b>Feature store</b> (Feast)<br/>point-in-time for training, same values<br/>online; nightly parity test>];
+    feast  [label=<<b>Feature store</b> (Feast)<br/>point-in-time for training, same values<br/>online · parity 0 of 56,000 · drift (PSI)>, color="#e8833a", penwidth=1.6];
     redact -> llm -> setfit -> signals -> feast; sqlf -> feast [constraint=false];
     llm -> signals [constraint=false];
     {rank=same; redact; llm; setfit; signals; feast; sqlf}
@@ -48,18 +48,18 @@ digraph kept {
     stops  [label=<<b>Hard stops</b><br/>cease, insolvency,<br/>bankruptcy, deceased>];
     perm   [label=<<b>Permissions</b><br/>consent, local hours,<br/>7-day contact cap>];
     hship  [label=<<b>Hardship override</b><br/>possible/confirmed →<br/>protective actions only>];
-    uplift [label=<<b>Uplift model</b><br/>LightGBM T-learner on<br/>paid_14d · Qini vs legacy>];
-    size   [label=<<b>Kept sizing + rank</b><br/>due after payday, within<br/>spare cash · capacity>];
+    uplift [label=<<b>Uplift model</b><br/>LightGBM T-learner on paid_14d<br/>Qini 0.0073 vs legacy 0.0017>];
+    size   [label=<<b>Kept sizing + rank</b><br/>due 1–2 days after payday,<br/>within spare cash · capacity<br/>(payday promises: 62% vs 52% paid)>, color="#e8833a", penwidth=1.6];
     rel    [label=<<b>Release gate</b><br/>recheck at release; Red needs<br/>specialist + 2nd person>];
-    app    [label=<<b>NBA card + app</b><br/>Next.js: queue, card, Ask,<br/>steward, approvals, audit>, color="#e8833a", penwidth=1.6];
+    app    [label=<<b>NBA card + app</b><br/>Next.js: queue, card (reasons,<br/>similar cases), Ask, steward,<br/>approvals, audit · 96,000 cards>, color="#e8833a", penwidth=1.6];
     stops -> perm -> hship -> uplift -> size -> rel -> app;
     {rank=same; stops; perm; hship; uplift; size; rel; app}
   }
 
-  gov [label=<<b>Governance on every layer</b>: role-based access · PII redaction before any LLM · free LLMs only (local Gemma, Gemini free tier), every call audited<br/>no protected attributes or proxies (lineage CI check) · hardship protects, never scores · append-only audit log · fairness report · 5% hold-out>, fillcolor="#fff7e6", color="#d9a441"];
+  gov [label=<<b>Governance on every layer</b>: role-based access · PII redaction before any LLM · free LLMs only (local Gemma, Gemini free tier), every call audited<br/>no protected attributes or proxies (lineage CI check) · hardship protects, never scores · append-only audit log · fairness report · drift + schema monitoring · 5% hold-out + kill switch>, fillcolor="#fff7e6", color="#d9a441"];
 
   src -> bronze;
-  gate -> scope [xlabel="gold + silver (16 tables)", style=dashed, constraint=false];
+  gate -> scope [xlabel="gold + silver + redacted text (17 tables)", style=dashed, constraint=false];
   gold -> sqlf  [xlabel="C360 + crosswalk", constraint=false];
   signals -> gold [xlabel="hardship_status", style=dashed, constraint=false];
   feast -> stops [xlabel="features as of decision time", constraint=false];
