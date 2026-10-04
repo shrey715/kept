@@ -71,3 +71,11 @@ coverage.xml
 # Logs (audit log in dev is local; prod is append-only storage)
 logs/
 *.log
+
+# LaTeX build leftovers (reports, deck, architecture)
+*.aux
+*.nav
+*.snm
+*.toc
+*.out
+docs/**/*.log
