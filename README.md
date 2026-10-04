@@ -301,23 +301,16 @@ cd web && pnpm lint && npx tsc --noEmit
 
 ## AI tools we used, and for what
 
-- **Claude Code (D):** pair-programming the Track D code and tests, the web app, and the
-  dataset checks behind the legacy-code and random-assignment answers. Every change went through
-  the tests and a person's review before merging.
-
-- **Claude Code (C):** pair-programming the Track C code, tests and scripts (redaction,
-  extraction, backfill, cash-flow rule), running and monitoring the heavy jobs on the GPU machine,
-  and keeping the team plan, gates and PRs in step. Every change went through tests and a person's review.
-- **gemma3 12B (local, Ollama) (C):** extracts the text features from redacted notes, and labelled
-  1,604 notes to train SetFit. Tuned and gated on the release's public labels (30% held out).
-- **SetFit (`BAAI/bge-small-en-v1.5`) (C):** the fast classifier that backfills hardship for all history.
-
-- **Claude Code (B):** pair-programming the Track B code and tests, running the benchmark and tuning the
-  prompts and certified SQL from what it showed, and writing the scorecard and fairness notes. Every change
-  went through the tests and a person's review before merging.
-- **Gemini 3.5 Flash-Lite (hosted, free tier) (B):** the Ask's scope check, question routing, SQL drafting
-  for lookups, and plain-English narration of results. Its output is checked by code: the SQL guard before
-  anything runs, and the grounding check on every number.
+- **Claude (Claude Web and Claude Code):** pair-programming the code and tests across the stack (data
+  pipeline, Ask, text and hardship, NBA engine, web app), running and monitoring the heavy GPU jobs and the
+  benchmark, tuning prompts and certified SQL from what the benchmark showed, and writing the reports and deck.
+  Every change went through the tests and a person's review before merging.
+- **gemma3 12B (local, Ollama):** extracts the text features from redacted notes, and labelled 1,604 notes to
+  train SetFit. Tuned and gated on the release's public labels (30% held out).
+- **SetFit (`BAAI/bge-small-en-v1.5`):** the fast classifier that backfills hardship for all history.
+- **Gemini 3.5 Flash-Lite (hosted, free tier):** the Ask's scope check, question routing, SQL drafting for
+  lookups, and plain-English narration of results. Its output is checked by code: the SQL guard before anything
+  runs, and the grounding check on every number.
 
 ## Layout
 

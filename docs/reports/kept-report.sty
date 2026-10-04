@@ -21,8 +21,9 @@
   \catcode`\≤=\active \gdef≤{\ensuremath{\leq}}
   \catcode`\×=\active \gdef×{\ensuremath{\times}}
   \catcode`\−=\active \gdef−{\ensuremath{-}}
+  \catcode`\≈=\active \gdef≈{\ensuremath{\approx}}
 \endgroup
-\AtBeginDocument{\catcode`\→=\active \catcode`\≥=\active \catcode`\≤=\active \catcode`\×=\active \catcode`\−=\active}
+\AtBeginDocument{\catcode`\→=\active \catcode`\≥=\active \catcode`\≤=\active \catcode`\×=\active \catcode`\−=\active \catcode`\≈=\active}
 \RequirePackage{microtype}
 \RequirePackage{xcolor}
 \RequirePackage{graphicx}
@@ -50,6 +51,7 @@
 \color{ink}
 
 \setlength{\parindent}{0pt}
+\raggedbottom
 \setlength{\parskip}{0.55em}
 \linespread{1.08}
 \setlist{itemsep=0.25em, topsep=0.3em, leftmargin=1.3em}

@@ -179,9 +179,7 @@ def model(d: dict, i: int) -> dict[str, float]:  # type: ignore[type-arg]
         / 3600
         * AGENT_COST_PER_HOUR[i],
         "QA reviewer time": qa_hours * QA_TIME_SAVED[i] * AGENT_COST_PER_HOUR[i],
-        "Fewer roll-forwards → charge-offs avoided": rolled_per_pt * ROLL_POINTS[i] / 1.0
-        if ROLL_POINTS[i]
-        else 0.0,
+        "Roll-rate cut: charge-offs avoided": rolled_per_pt * ROLL_POINTS[i] / 1.0 if ROLL_POINTS[i] else 0.0,
     } | {
         "_gap": gap,
         "_promised_year": promised_year,
@@ -234,18 +232,30 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
 
     # 3. funnel
     roll_n, roll_rate = d["roll"]
-    fig, ax = plt.subplots(figsize=(7.2, 1.9))
+    fig, ax = plt.subplots(figsize=(6.4, 2.0))
     steps = [
-        ("enter at 1–30 DPD (12 months)", d["inflow"][0]),
+        ("enter at 1–30 days past due", d["inflow"][0]),
         ("roll by day 30", d["inflow"][0] * roll_rate),
         ("end up charged off", d["inflow"][0] * roll_rate * d["co_rolled"][0]),
     ]
-    for i, (lab, v) in enumerate(steps):
-        ax.barh(2 - i, v, color=[BLUE, ORANGE, KEPT][i], height=0.55)
-        ax.text(v + d["inflow"][0] * 0.01, 2 - i, f"{lab}: {v:,.0f}", va="center", fontsize=8)
-    ax.set_xlim(0, d["inflow"][0] * 1.6)
-    ax.axis("off")
-    ax.set_title("Where charge-offs come from: only cases that roll", loc="left")
+    for i, (_, v) in enumerate(steps):
+        ax.barh(2 - i, v, color=[BLUE, ORANGE, KEPT][i], height=0.6)
+        ax.text(
+            v + d["inflow"][0] * 0.015,
+            2 - i,
+            f"{v:,.0f}",
+            va="center",
+            fontsize=11,
+            fontweight="bold",
+            color=INK,
+        )
+    ax.set_yticks([2, 1, 0], [s[0] for s in steps], fontsize=10.5)
+    ax.tick_params(axis="y", length=0)
+    ax.set_xticks([])
+    for side in ("top", "right", "bottom", "left"):
+        ax.spines[side].set_visible(False)
+    ax.set_xlim(0, d["inflow"][0] * 1.18)
+    ax.set_title("Cases a year, and how many roll and charge off", loc="left", fontsize=11)
     save(fig, "bc_funnel")
 
     # 4. scenarios stacked
@@ -270,7 +280,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
         ax.text(left + 0.05, 2 - j, f"${total[s] / 1e6:.2f}M", va="center", fontsize=8.5, fontweight="bold")
     ax.set_yticks([2, 1, 0], names)
     ax.set_xlabel("annual benefit, $M CAD")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.32), ncol=2, frameon=False, fontsize=7.5)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.42), ncol=3, frameon=False, fontsize=7.5)
     ax.set_title("Annual value by scenario", loc="left")
     tidy(ax)
     save(fig, "bc_scenarios")
@@ -283,7 +293,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
         ("book passes 26–104 a year", "Cheaper contact mix"),
         ("wrap-up saved 30–90 s", "Agent wrap-up time (call summaries)"),
         ("QA time saved 25–75%", "QA reviewer time"),
-        ("roll-rate cut 0–1 pt", "Fewer roll-forwards → charge-offs avoided"),
+        ("roll-rate cut 0–1 pt", "Roll-rate cut: charge-offs avoided"),
     ):
         lo, hi = scen["Low"][key], scen["High"][key]
         swings.append((label, base_total - b[key] + lo, base_total - b[key] + hi))

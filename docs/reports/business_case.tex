@@ -16,12 +16,12 @@ The cheapest way to stop a roll is a promise the customer can actually keep, and
 promises due right after payday get \textbf{11 points more} of the promised money paid. Kept dates every promise to
 payday, contacts the people a contact actually helps, swaps letters for near-free digital nudges, and gives agents
 and QA reviewers time back. Counted conservatively, that's \textbf{\$2.2M a year} against \$150K to run and \$300K to
-build, so it pays back in about two months. Every number below comes from the release, except four assumptions
+build, so it pays back in about two months. Every number below comes from the release, except six assumptions
 that are named, explained and stress-tested in §7.}
 
 \section{Where the money leaks}
 
-\fig[0.95\linewidth]{bc_funnel.png}{Cases that entered collections at 1–30 days past due in the last 12 months, and what happened next.}
+\fig[0.8\linewidth]{bc_funnel.png}{Cases that entered collections at 1–30 days past due in the last 12 months, and what happened next.}
 
 \textbf{What the chart says.} Of the 194,515 cases that entered at 1–30 days past due in the 12 months to 28 Sep 2026
 (\$63.9M overdue), about half roll into a worse bucket within 30 days (48.8\% across 330,779 cases since 2016). Of the
@@ -30,14 +30,14 @@ rolled cases, \textbf{2.5\% end up charged off, at \$12,523 on average}; of the 
 
 \section{The lever: timing the promise}
 
-\fig[0.95\linewidth]{bc_payday.png}{Resolved promises by days between the customer's last salary deposit and the due date.}
+\fig[0.8\linewidth]{bc_payday.png}{Resolved promises by days between the customer's last salary deposit and the due date.}
 
 \textbf{What the chart says.} Both panels slope the same way: the further a due date sits after payday, the worse the
 promise does. Due 0–2 days after payday, \textbf{54.3\%} of promises are kept and \textbf{62.5\%} of the promised money
 arrives. Due 8+ days after, when the pay is already spent, that drops to 46.3\% and \textbf{51.5\%}. The money panel
 moves more than the count panel, because a late-dated promise that does get paid is more often paid only in part.
 
-\begin{table}[H]\small\centering
+\begin{table}[htbp]\small\centering
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 \textbf{Due date vs payday} & \textbf{Promises} & \textbf{Kept} & \textbf{Money paid} & \textbf{Share of promised \$} \\
@@ -62,7 +62,7 @@ the customer's spare cash for that pay period. A promise that can't be sized tha
 
 \section{A cheaper, kinder contact mix}
 
-\fig[0.95\linewidth]{bc_mix.png}{Tonight's 96,000 open cases: the bank's current strategy vs Kept.}
+\fig[0.85\linewidth]{bc_mix.png}{Tonight's 96,000 open cases: the bank's current strategy vs Kept.}
 
 \textbf{What the chart says.} Kept doesn't simply call less: call-type actions are almost unchanged (40,601 vs 41,574).
 What changes is \emph{which} calls. The current strategy's biggest bar is collection calls (34,326); Kept's is
@@ -70,7 +70,7 @@ What changes is \emph{which} calls. The current strategy's biggest bar is collec
 conversation than the old rule set did. At the cheap end, \$1.10 letters (7,180) disappear in favour of SMS payment links
 (\$0.01), emails and app pushes (\$0.001).
 
-\begin{table}[H]\small\centering
+\begin{table}[htbp]\small\centering
 \begin{tabular}{@{}lrrr@{}}
 \toprule
 & \textbf{Cost per contact} & \textbf{Current strategy} & \textbf{Kept} \\
@@ -118,13 +118,13 @@ payday effect twice. The high case adds one point.
 
 \section{Putting it together}
 
-\fig[0.95\linewidth]{bc_scenarios.png}{Annual value by component and scenario.}
+\fig[0.9\linewidth]{bc_scenarios.png}{Annual value by component and scenario.}
 
 \textbf{What the chart says.} In every scenario the payday effect is the largest block, and the contact mix the second.
 The low case still clears \$1M a year with half the payday capture, half the book passes and half the time saved. The
 high case more than doubles the base mostly because of the roll-rate point it adds.
 
-\begin{table}[H]\small\centering
+\begin{table}[htbp]\small\centering
 \begin{tabular}{@{}lrrr@{}}
 \toprule
 \textbf{Annual value (CAD)} & \textbf{Low} & \textbf{Base} & \textbf{High} \\
@@ -153,14 +153,14 @@ compute and hosted-model use at production volume. The \$300K build is four engi
 
 \section{What moves the number}
 
-\fig[0.95\linewidth]{bc_sensitivity.png}{Each assumption swung from its low to its high value, everything else at base.}
+\fig[0.88\linewidth]{bc_sensitivity.png}{Each assumption swung from its low to its high value, everything else at base.}
 
 \textbf{What the chart says.} The answer hinges on one question: \textbf{how much of the payday gap is causal?} That
 assumption swings the total by about \$1.2M. The next biggest are how often the book is worked (contact savings) and
 the roll-rate point. Minutes saved and QA time barely move it. That's why the rollout plan is built around measuring the
 payday effect first.
 
-\begin{table}[H]\small\centering
+\begin{table}[htbp]\small\centering
 \begin{tabularx}{\linewidth}{@{}lrrrL@{}}
 \toprule
 \textbf{Assumption} & \textbf{Low} & \textbf{Base} & \textbf{High} & \textbf{Why this range} \\
@@ -191,6 +191,6 @@ decision. Those are hard to price and matter anyway.
 \end{itemize}
 
 \reproduce{\path{scripts/business_case.py} reads only the release files and the scored cards, and caches the
-numbers in \path{data/exports/reports/business_data.json}.}{\path{uv run python scripts/reportlib.py business_case}}
+numbers in \path{data/exports/reports/business_data.json}.}{\code{uv run python scripts/reportlib.py business\_case}}
 
 \end{document}
