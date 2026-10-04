@@ -26,6 +26,7 @@ from kept.contracts.nba import (
     Proposal,
 )
 from kept.nba.explain import top_reasons
+from kept.nba.promise_model import PromiseModel, serving_row
 from kept.nba.ranking import is_close_call, score_actions
 from kept.nba.release import cancel_pending, is_stale
 from kept.nba.rules import allowed_actions, hard_stops, hardship_override
@@ -104,6 +105,7 @@ class KeptEngine:
         contact_cost: Mapping[Action, Decimal] = DEFAULT_CONTACT_COST,
         burden: Mapping[Action, Decimal] = DEFAULT_BURDEN,
         programs: Callable[[CaseContext], Sequence[str]] | None = None,
+        promise_model: PromiseModel | None = None,
     ) -> None:
         """proposals: where new proposals are stored for the release gate (Releaser reads it).
         programs: hardship programmes the case is eligible for, named for the banner
@@ -117,6 +119,7 @@ class KeptEngine:
         self._cost = contact_cost
         self._burden = burden
         self._programs = programs
+        self._promise = promise_model  # explains a sized promise on the card, never ranks it (#79)
 
     def recommend(self, case_id: str, now: datetime) -> NBACard:
         """An unknown case (KeyError from the context builder) propagates. After that it never
@@ -204,6 +207,13 @@ class KeptEngine:
             # protected and a hardship review is allowed, offer it rather than "no action", even
             # if no contact pays more in 14 days. Red tier: a specialist still decides.
             best = next((s for s in ranked if s.action is Action.HARDSHIP_REVIEW), best)
+        if best.action is Action.CALL and sizing is not None:
+            # a call that can carry a payday-dated promise asks for one: same contact and cost, a sized
+            # ask (#79). Promise and plan score like the call (they borrow its model), so only a tie or
+            # better switches; a plan when the amount needs instalments; never a non-call action.
+            asks = (Action.PAYMENT_PLAN, Action.PROMISE_REQUEST)
+            asks = asks if sizing.installments > 1 else asks[::-1]
+            best = next((s for a in asks for s in ranked if s.action is a and s.score >= best.score), best)
         probs = _alternatives(best.action, ranked)
         if best.action is Action.WAIT:
             return self._no_action(
@@ -231,11 +241,39 @@ class KeptEngine:
             proposal=proposal,
             probabilities=probs,
             reasons=tuple(reasons),
-            sizing_text=proposal.sizing.rationale if proposal.sizing else None,
+            sizing_text=self._sizing_text(ctx, fv, proposal.sizing) if proposal.sizing else None,
             similar_cases_text=similar_cases(fv, best.action),
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
+
+    def _sizing_text(self, ctx: CaseContext, fv: FeatureVector, sizing: PromiseSizing) -> str:
+        """The sizing rationale, plus the promise model's chance it's kept on this date and on a date
+        just before payday (#79). A model failure never costs the card: the rationale stays."""
+        if self._promise is None:
+            return sizing.rationale
+        try:
+            today = ctx.now.astimezone(ZoneInfo(ctx.time_zone)).date() if ctx.time_zone else ctx.now.date()
+            freq = ctx.payroll_frequency.value if ctx.payroll_frequency else None
+            common = {
+                "today": today,
+                "amount": float(sizing.amount),
+                "balance": float(ctx.balance_at_risk),
+                "payday": sizing.payday,
+                "frequency": freq,
+                "dpd": fv.max_dpd,
+                "prior_broken_90d": fv.broken_promises_90d,
+                "prior_kept_ratio": fv.kept_promise_ratio,
+            }
+            ours = serving_row(due=sizing.due_date, **common)  # type: ignore[arg-type]
+            before = serving_row(due=sizing.payday - timedelta(days=1), **common)  # type: ignore[arg-type]
+            p_ours, p_before = self._promise.p_kept([ours, before])
+        except Exception:
+            return sizing.rationale
+        chance = f"If they agree, the model gives this promise a {p_ours:.0%} chance of being kept"
+        if round(p_ours * 100) == round(p_before * 100):  # the date makes no visible difference here
+            return f"{sizing.rationale} {chance}."
+        return f"{sizing.rationale} {chance} ({p_before:.0%} if it fell due the day before payday)."
 
     def _legacy(
         self,
