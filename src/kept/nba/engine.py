@@ -104,6 +104,7 @@ class KeptEngine:
         contact_cost: Mapping[Action, Decimal] = DEFAULT_CONTACT_COST,
         burden: Mapping[Action, Decimal] = DEFAULT_BURDEN,
         programs: Callable[[CaseContext], Sequence[str]] | None = None,
+        drift_alarm: Sequence[str] = (),
     ) -> None:
         """proposals: where new proposals are stored for the release gate (Releaser reads it).
         programs: hardship programmes the case is eligible for, named for the banner
@@ -117,6 +118,7 @@ class KeptEngine:
         self._cost = contact_cost
         self._burden = burden
         self._programs = programs
+        self._drift = tuple(drift_alarm)  # model inputs that shifted overnight (#86): Green goes to a person
 
     def recommend(self, case_id: str, now: datetime) -> NBACard:
         """An unknown case (KeyError from the context builder) propagates. After that it never
@@ -223,7 +225,7 @@ class KeptEngine:
             action=best.action,
             hard_stopped=False,
             hardship_status=_protective_status(ctx),
-            close_call=is_close_call(ranked, margin=CLOSE_CALL_MARGIN),
+            close_call=is_close_call(ranked, margin=CLOSE_CALL_MARGIN) or bool(self._drift),
         )
         proposal = self._proposal(ctx, best.action, tier, slot, sizing if best.action in _SIZED else None)
         return NBACard(

@@ -285,6 +285,26 @@ def _last_nightly() -> datetime:
     return run if run <= now else run - timedelta(days=1)
 
 
+def _drift_alarm(previous: Path, served: Path) -> None:
+    """#86: tonight's model inputs against last night's -> drift_alarm.json next to the export.
+    While it names a feature, the engine sends every Green card to a person (Amber)."""
+    import json
+
+    import pandas as pd
+
+    from kept.contracts.feature_registry import model_inputs
+    from kept.features.drift import ALARM_FILE, night_over_night
+
+    if not previous.exists():
+        alarm: dict[str, object] = {"previous_as_of": None, "drifted": [], "psi": {}}
+    else:
+        alarm = night_over_night(pd.read_parquet(previous), pd.read_parquet(served), list(model_inputs()))
+    served.with_name(ALARM_FILE).write_text(json.dumps(alarm, indent=1))
+    drifted = [str(f) for f in alarm["drifted"]]  # type: ignore[attr-defined]
+    if drifted:
+        print(f"kept features: DRIFT since last night in {', '.join(drifted)}: Green cards go to review")
+
+
 def features(args: argparse.Namespace) -> int:
     """Track D: dbt feature models, then the Feast export + apply + materialize.
     --training builds the per-decision spine into features_train instead (for `kept train`)."""
@@ -311,11 +331,16 @@ def features(args: argparse.Namespace) -> int:
         return 1
     if args.training:
         return 0
+    served = EXPORT_DIR / "features" / "case_features.parquet"
+    previous = served.with_name("case_features_prev.parquet")
+    if served.exists():
+        served.replace(previous)  # last night's, for the drift alarm
     conn = duckdb.connect(str(WAREHOUSE_PATH))  # not read_only: dbt's connection in this process is open
     try:
-        n = export_features(conn, EXPORT_DIR / "features" / "case_features.parquet")
+        n = export_features(conn, served)
     finally:
         conn.close()
+    _drift_alarm(previous, served)
     feast = [str(Path(sys.executable).parent / "feast")]
     repo = Path(__file__).resolve().parents[2] / "feature_repo"
     start, end = args.as_of - timedelta(days=1), args.as_of + timedelta(seconds=1)
