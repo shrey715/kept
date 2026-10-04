@@ -23,6 +23,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from kept import __version__
+from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.common.audit import new_event_id
 from kept.config import DATA_DIR, REPO_ROOT
 from kept.contracts.ask import AskRequest, AskResponse, Citation, SourceText
@@ -65,6 +66,7 @@ class Services:
     extractions: ExtractionStore | None = None  # Track C: /extractions routes
     note_text: Callable[[str], str | None] | None = None  # source_id -> the note's text, for the panel
     scored_queue: Callable[[str, Role], list[QueueItem]] | None = None  # real: nba.cards from kept score
+    chart: Callable[[ChartRequest], ChartChoice] | None = None  # real: the LLM picks; None: the rules pick
     demo: bool = False
 
 
@@ -186,6 +188,7 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/extractions?user_id&role 200 list[NoteExtraction], newest first (20);
                                                   503 no store
     POST /ask                                     200 AskAnswer | Refusal | Clarification
+    POST /chart                                   200 ChartChoice (rows in the body; LLM or rules pick)
     GET  /steward/queue                           200 list[StewardItemOut]
     POST /steward/items/{item_id}                 200 {"status": ...}; 404 unknown item
     POST /extractions/{source_id}/confirm         200 TextExtraction; 403 not the assigned agent;
@@ -344,6 +347,11 @@ def create_app(services: Services) -> FastAPI:
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:
         return services.ask.ask(request)  # Track B: CollectionsAsk does the work
+
+    @app.post("/chart", response_model=ChartChoice)
+    def chart(request: ChartRequest) -> ChartChoice:
+        """A chart for rows the Ask already returned (#100, not on the Ask page yet). Reads no data."""
+        return (services.chart or choose_chart)(request)
 
     @app.post("/ask/source", response_model=SourceText)
     def ask_source(body: SourceIn) -> SourceText:
