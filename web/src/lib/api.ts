@@ -88,7 +88,7 @@ export const api = {
   benchSuites: () => call<BenchSuite[]>("/bench/suites"),
   benchQuestion: (question: Record<string, string>, gold?: Record<string, string>) =>
     call<BenchOut>("/bench/question", post({ question, gold: gold ?? null })),
-  /** #100, not on the Ask page yet: a chart for rows the Ask already returned (the LLM or the rules pick). */
+  /** A chart for rows the Ask already returned (the LLM or the rules pick); shown in the Ask page's Chart tab. */
   chart: (a: { question: string; sql: string | null; columns: string[]; rows: unknown[][] }, w: Who) =>
     call<ChartChoice>("/chart", post({ ...a, user_id: w.userId, role: w.role })),
   askSource: (citation: Citation, w: Who) => call<SourceText>("/ask/source", post({ citation, user_id: w.userId, role: w.role })),
