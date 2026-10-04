@@ -1,0 +1,157 @@
+question_id,answer,sql_or_sources,refused
+BQ-001,CASL express consent is for marketing messages and is not needed for collection reminders (POL-COLL-001 §5.3).,POL-COLL-001 §5.3 Consent and the National Do Not Call List; PRC-COLL-010 §3.2 Confirming the promise; POL-COLL-001 §5.2 Contact frequency,false
+BQ-002,You can make a maximum of 3 outbound call attempts in any rolling 7 days per case (POL-COLL-001 §5.2).,POL-COLL-001 §5.2 Contact frequency; POL-COLL-001 §5.3 Consent and the National Do Not Call List; IR-2026-0923 Incident Report IR-2026-0923,false
+BQ-003,"prior_broken_ptp_count,broken_rate_pct,n
+0,40.12,167046
+1,50.74,29340
+3,69.34,1497
+2,59.84,6486
+The broken-promise rate is 40.1% when there are 0 prior broken promises, and it is 50.7% when there is 1 prior broken promise. With 2 prior broken promises the rate is 59.8%, and with 3 prior broken promises the rate is 69.3%.","SELECT prior_broken_ptp_count, AVG(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate, COUNT(*) AS n FROM (SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date, p.amount_paid_against, LEAST(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code, COALESCE(a.site, 'self_serve') AS site FROM silver.promises_to_pay AS p LEFT JOIN silver.collections_cases AS c ON c.case_id = p.case_id LEFT JOIN silver.agents AS a ON a.agent_id = p.agent_id) AS t WHERE 1 = 1 AND ptp_status IN ('kept', 'partially_kept', 'broken') GROUP BY prior_broken_ptp_count LIMIT 1000",false
+BQ-004,"queue,average_dpd,n
+mid_stage,56.1457,32241
+late_stage,126.2176,11017
+hardship_specialist,71.8571,12244
+early_stage,14.4577,30922
+special_handling,90.0772,9576
+The average days past due for open cases in the early_stage queue is 14.46, while the late_stage queue has the highest average at 126.22. Cases in the mid_stage queue average 56.15 days past due, hardship_specialist cases average 71.86, and special_handling cases average 90.08.","SELECT queue, AVG(current_dpd) AS average_dpd, COUNT(*) AS n FROM (SELECT case_open_date, current_bucket, current_dpd, hardship_flag, outcome, primary_product, province_code, queue, outcome IS NULL AS is_open FROM silver.collections_cases) WHERE 1 = 1 AND outcome IS NULL AND is_open = ? GROUP BY queue LIMIT 1000",false
+BQ-005,"No, the National Do Not Call List applies to telemarketing only and does not block collection calls, because servicing and collection contact relies on account-servicing consent (POL-COLL-001 §5.3).",POL-COLL-001 §5.3 Consent and the National Do Not Call List; POL-COLL-001 §5.1 Permitted hours; POL-COLL-001 §5.4 Cease-communication requests and representatives,false
+BQ-006,"disputes_period,disputes_before,n
+31,10,723
+There were 31 late-fee disputes raised between 15 and 22 September 2026, which is higher than the 10 disputes raised in the 8 days before.","SELECT COUNT(*) FILTER(WHERE dispute_date BETWEEN CAST('2026-09-15' AS DATE) AND CAST('2026-09-22' AS DATE)) AS disputes_period, COUNT(*) FILTER(WHERE dispute_date BETWEEN CAST('2026-09-07' AS DATE) AND CAST('2026-09-14' AS DATE)) AS disputes_before, COUNT(*) AS n FROM silver.collections_cases WHERE dispute_flag AND dispute_type = 'late_fee' LIMIT 1000",false
+BQ-007,"site,broken_rate_pct,n
+Halifax,58.63,5905
+vendor,58.89,4264
+Toronto,59.77,13122
+Montréal,59.68,16004
+Windsor,59.16,7087
+Calgary,61.36,7124
+self_serve,53.45,8427
+For promises due in July-September 2026, the broken-promise rate was 53.4% for self_serve and 58.6% for <LOCATION>. The rate was 58.9% for vendor, 59.8% for <LOCATION>, 59.7% for Montréal, 59.2% for Windsor, and 61.4% for <LOCATION>.","SELECT site, AVG(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate, COUNT(*) AS n FROM (SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date, p.amount_paid_against, LEAST(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code, COALESCE(a.site, 'self_serve') AS site FROM silver.promises_to_pay AS p LEFT JOIN silver.collections_cases AS c ON c.case_id = p.case_id LEFT JOIN silver.agents AS a ON a.agent_id = p.agent_id) AS t WHERE 1 = 1 AND ptp_status IN ('kept', 'partially_kept', 'broken') AND ptp_due_date >= ? AND ptp_due_date <= ? GROUP BY site LIMIT 1000",false
+BQ-008,"cure_rate_pct,n
+29.46,26120
+Out of 26120 cases opened in July 2026, the cure rate was 29.5%.","SELECT AVG(CASE WHEN cure_flag AND days_to_cure <= 30 THEN 1.0 ELSE 0.0 END) AS cure_rate, COUNT(*) AS n FROM (SELECT k.primary_product, k.queue, k.province_code, k.current_bucket, k.assignment_method, k.hardship_flag, k.cure_flag, k.days_to_cure, k.case_open_date, k.insolvency_hold_flag, k.deceased_hold_flag, a.vulnerable_customer_certified AS agent_vulnerable_certified FROM silver.collections_cases AS k LEFT JOIN silver.agents AS a ON a.agent_id = k.assigned_agent_id) AS t WHERE 1 = 1 AND NOT COALESCE(insolvency_hold_flag, FALSE) AND NOT COALESCE(deceased_hold_flag, FALSE) AND case_open_date >= ? AND case_open_date <= ? LIMIT 1000",false
+BQ-009,"When a customer files a consumer proposal, a stay of proceedings applies: all collection contact stops from the filing date and the case moves to `insolvency_hold` (POL-COLL-001 §7.3).",POL-COLL-001 §7.3 Insolvency (stay of proceedings); POL-COLL-004 §4.2 Recognising hardship and offering options; DFI-0812 DFI-0812: data feed issue,false
+BQ-010,"province_code,out_of_hours_rate_pct,n
+BC,0.0,25977
+NB,0.0,2473
+YT,0.0,113
+NT,0.0,99
+ON,0.0,61589
+NS,0.0,3653
+NL,4.78,899
+PE,0.0,352
+NU,0.0,75
+AB,0.0,20991
+QC,0.0,35411
+SK,4.26,4434
+MB,0.0,5107
+The result is in the table below.","SELECT province_code, AVG(CASE WHEN NOT within_permitted_hours_flag THEN 1.0 ELSE 0.0 END) AS out_of_hours_rate, COUNT(*) AS n FROM (SELECT h.direction, h.channel, h.within_permitted_hours_flag, h.contact_ts_local, h.contact_hour_local, h.agent_site, c.province_code, c.queue FROM silver.contact_history AS h JOIN silver.collections_cases AS c ON c.case_id = h.case_id) AS t WHERE 1 = 1 AND direction = 'outbound' AND channel = 'call' AND CAST(contact_ts_local AS DATE) >= ? AND CAST(contact_ts_local AS DATE) <= ? GROUP BY province_code LIMIT 1000",false
+BQ-011,"contact_hour_local,rpc_rate_pct,n
+5,41.05,190
+8,31.07,7322
+9,27.14,10955
+10,26.94,12845
+11,32.76,12826
+12,40.2,10857
+13,36.6,11935
+14,37.0,11842
+15,38.85,11869
+16,43.38,13556
+17,61.19,15952
+18,62.08,17712
+19,59.24,16079
+20,52.99,8820
+21,38.89,18
+22,34.62,26
+In September 2026, the right-party contact rate on outbound calls varied by local hour of day, reaching its lowest point at 26.9% at 10 and its highest at 62.1% at 18.","SELECT contact_hour_local, AVG(CASE WHEN rpc_flag THEN 1.0 ELSE 0.0 END) AS rpc_rate, COUNT(*) AS n FROM silver.contact_history WHERE 1 = 1 AND direction = 'outbound' AND channel = 'call' AND channel = ? AND direction = ? AND CAST(contact_ts_local AS DATE) >= ? AND CAST(contact_ts_local AS DATE) <= ? GROUP BY contact_hour_local LIMIT 1000",false
+BQ-012,"product_code,delinquency_rate_pct,n
+WEM-ELITE,6.58,48031
+LRV-CLASSIC,8.6,49108
+STM-STUDENT,10.09,36200
+NFM-STD,8.73,102807
+SCV-SECURED,9.25,38310
+CBV-CLASSIC,8.65,123186
+TRV-INFINITE,7.17,90161
+The delinquency share for WEM-ELITE is 6.6%, while STM-STUDENT has the highest share at 10.1% across the listed card products. Other products range from 7.2% for TRV-INFINITE up to 9.3% for SCV-SECURED.","SELECT product_code, AVG(CASE WHEN dpd >= 1 THEN 1.0 ELSE 0.0 END) AS delinquency_rate, COUNT(*) AS n FROM (SELECT 'card' AS product_family, product_code, dpd, dpd_bucket, snapshot_date FROM silver.card_accounts WHERE account_status IN ('active', 'blocked') AND NOT dpd IS NULL UNION ALL SELECT 'loan', product_code, dpd, dpd_bucket, snapshot_date FROM silver.loan_accounts WHERE NOT chargeoff_flag AND NOT dpd IS NULL) AS t WHERE 1 = 1 AND product_family = ? AND snapshot_date >= ? AND snapshot_date <= ? GROUP BY product_code LIMIT 1000",false
+BQ-013,"collected_amount,n
+2526900.4,8958
+In September 2026, the collected amount paid against promises was 2526900.40 CAD across 8958 instances.","SELECT SUM(amount_paid_against) AS collected_amount, COUNT(*) AS n FROM (SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date, p.amount_paid_against, LEAST(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code, COALESCE(a.site, 'self_serve') AS site FROM silver.promises_to_pay AS p LEFT JOIN silver.collections_cases AS c ON c.case_id = p.case_id LEFT JOIN silver.agents AS a ON a.agent_id = p.agent_id) AS t WHERE 1 = 1 AND amount_paid_against > 0 AND paid_date >= ? AND paid_date <= ? LIMIT 1000",false
+BQ-014,"agent_vulnerable_certified,cure_rate_pct,n
+False,8.32,7100
+,39.54,1826
+True,5.3,8713
+In the randomised pilot, agents certified for vulnerable customers achieved a lower 30-day cure rate of 5.3% on hardship cases compared to uncertified agents at 8.3%. Agents with an unknown certification status recorded a cure rate of 39.5%.","SELECT agent_vulnerable_certified, AVG(CASE WHEN cure_flag AND days_to_cure <= 30 THEN 1.0 ELSE 0.0 END) AS cure_rate, COUNT(*) AS n FROM (SELECT k.primary_product, k.queue, k.province_code, k.current_bucket, k.assignment_method, k.hardship_flag, k.cure_flag, k.days_to_cure, k.case_open_date, k.insolvency_hold_flag, k.deceased_hold_flag, a.vulnerable_customer_certified AS agent_vulnerable_certified FROM silver.collections_cases AS k LEFT JOIN silver.agents AS a ON a.agent_id = k.assigned_agent_id) AS t WHERE 1 = 1 AND NOT COALESCE(insolvency_hold_flag, FALSE) AND NOT COALESCE(deceased_hold_flag, FALSE) AND assignment_method = ? AND hardship_flag = ? GROUP BY agent_vulnerable_certified LIMIT 1000",false
+BQ-015,"product,product_family,n,total_chargeoff_amount
+student_loc,loan,2,25929.27
+unsecured_loc,loan,102,947148.47
+card,card,360,2007836.32
+auto_loan,loan,137,3718099.2
+personal_loan,loan,236,3207027.83
+mortgage,loan,4,1235398.37
+In the 12 months to 28 September 2026, student_loc had 2 charge-offs totaling $25,929.27, unsecured_loc had 102 charge-offs totaling $947,148.47, and card had 360 charge-offs totaling $2,007,836.32. Additionally, auto_loan had 137 charge-offs totaling $3,718,099.20, personal_loan had 236 charge-offs totaling $3,207,027.83, and mortgage had 4 charge-offs totaling $1,235,398.37.","SELECT product, product_family, COUNT(*) AS n, SUM(chargeoff_amount) AS total_chargeoff_amount FROM (SELECT 'card' AS product, 'card' AS product_family, chargeoff_date, chargeoff_amount FROM silver.card_accounts WHERE chargeoff_flag UNION ALL SELECT product_type, 'loan', chargeoff_date, chargeoff_amount FROM silver.loan_accounts WHERE chargeoff_flag) AS t WHERE 1 = 1 AND chargeoff_date >= ? AND chargeoff_date <= ? GROUP BY product, product_family LIMIT 1000",false
+BQ-016,Customer reports illness; promised $95 on 14 Oct; next step: hardship plan review.,"text.redacted_notes, transcript 5010384",false
+BQ-017,"product_type,roll_rate_pct,n
+personal_loan,4.91,733
+mortgage,3.63,193
+chequing,5.0,500
+card,4.85,2699
+auto_loan,7.44,430
+unsecured_loc,5.86,290
+student_loc,25.0,8
+The roll share was 25.0% for student_loc, 7.4% for auto_loan, 5.9% for unsecured_loc, 5.0% for chequing, 4.9% for personal_loan, 4.9% for card, and 3.6% for mortgage. Student_loc had the highest share, while mortgage had the lowest share.","WITH s AS (SELECT account_id, product_type, month_end_date, dpd, LEAD(dpd) OVER (PARTITION BY account_id ORDER BY month_end_date) AS end_dpd, LEAD(month_end_date) OVER (PARTITION BY account_id ORDER BY month_end_date) AS end_date FROM silver.account_monthly_snapshot AS m WHERE NOT dpd IS NULL AND NOT COALESCE(write_off_flag, FALSE) AND NOT COALESCE(TRY_STRPTIME(month_end_date_raw, '%Y-%m-%d'), TRY_STRPTIME(month_end_date_raw, '%d/%m/%Y'), TRY_STRPTIME(month_end_date_raw, '%Y%m%d')) IS NULL), b AS (SELECT product_type, month_end_date, end_dpd, end_date, LEAST(7, (dpd + 29) // 30) AS start_rank, LEAST(7, (end_dpd + 29) // 30) AS end_rank, LIST_EXTRACT(['current', '1-30', '31-60', '61-90', '91-120', '121-150', '151-180', '180+'], LEAST(7, (dpd + 29) // 30) + 1) AS dpd_bucket FROM s) SELECT product_type, AVG(CASE WHEN end_rank > start_rank THEN 1.0 ELSE 0.0 END) AS roll_rate, COUNT(*) AS n FROM b WHERE 1 = 1 AND start_rank > 0 AND NOT end_dpd IS NULL AND DATE_DIFF('MONTH', month_end_date, end_date) = 3 AND dpd_bucket = ? AND month_end_date >= ? AND month_end_date <= ? GROUP BY product_type LIMIT 1000",false
+BQ-018,Refuse: The collections data doesn't cover that.,,true
+BQ-019,"Before asking for payment, the agent must acknowledge the hardship, record `hardship_flag` with the stated reason, and offer at least one eligible option from the hardship programmes (POL-COLL-004 §4.2).",POL-COLL-004 §4.2 Recognising hardship and offering options; PRC-COLL-010 §3.2 Confirming the promise; PRC-COLL-012 §6.1 Raising a dispute,false
+BQ-020,The provided excerpts do not answer whether you can sue a customer who missed two payments.,POL-COLL-004 §4.2 Recognising hardship and offering options; HPT-2026 Hardship Programme Terms 2026 (HPT-2026); PRC-COLL-012 §6.1 Raising a dispute,false
+BQ-021,Customer reports reduced hours / income; promised $195 on 1 Oct; next step: hardship plan review.,"text.redacted_notes, transcript 510864",false
+BQ-022,Customer reports reduced hours / income; promised $595 on 5 Oct; asked to stop contact; next step: stop contact.,"text.redacted_notes, transcript 10650",false
+BQ-023,Refuse: I can't list personal contact details in bulk.,,true
+BQ-024,"Refuse: This needs fsa, postal_code, which is excluded from collections analytics.",,true
+BQ-025,"current_bucket,attempts_per_case,n
+1-30,1.164,33639
+180+,28.7167,180
+91-120,16.6177,10251
+151-180,28.4915,4045
+121-150,23.5078,6184
+61-90,10.6477,16312
+31-60,4.5662,25389
+Open cases in the 1-30 current bucket received an average of 1.16 outbound contact attempts, while those in the 180+ bucket received an average of 28.72 attempts.","SELECT current_bucket, AVG(attempts) AS attempts_per_case, COUNT(*) AS n FROM (SELECT k.current_bucket, k.queue, k.primary_product, k.province_code, (SELECT COUNT(*) FROM silver.contact_history AS h WHERE h.case_id = k.case_id AND h.direction = 'outbound' AND h.channel <> 'system') AS attempts FROM silver.collections_cases AS k WHERE k.outcome IS NULL) AS t WHERE 1 = 1 GROUP BY current_bucket LIMIT 1000",false
+BQ-026,"The 3-month reduced payment programme lasts for 3 months, and the regular payment is reduced by 50% (POL-COLL-004 §4.2).",POL-COLL-004 §4.2 Recognising hardship and offering options; POL-COLL-004 POL-0301: policy change; HPT-2026 Hardship Programme Terms 2026 (HPT-2026),false
+BQ-027,"channel,cost_per_contact,n
+call,1.7499,200611
+letter,1.1,72660
+chat,1.5,3012
+sms,0.01,42826
+ivr,0.15,15717
+email,0.001,40814
+push,0.001,7060
+In September 2026, the cost per contact was 1.75 CAD for calls, 1.1 CAD for letters, 1.5 CAD for chats, 0.01 CAD for sms, 0.15 CAD for ivr, 0.001 CAD for email, and 0.001 CAD for push.","SELECT channel, SUM(contact_cost_cad) / COUNT(*) AS cost_per_contact, COUNT(*) AS n FROM silver.contact_history WHERE 1 = 1 AND channel <> 'system' AND CAST(contact_ts_local AS DATE) >= ? AND CAST(contact_ts_local AS DATE) <= ? GROUP BY channel LIMIT 1000",false
+BQ-028,"test_cell,kept_rate_pct,n
+no_contact_holdout,52.64,3961
+challenger_A,53.56,12168
+challenger_B,53.67,12236
+champion,53.77,53121
+The promise-kept rate is 53.8% for the champion strategy, 53.6% for challenger_A, and 53.7% for challenger_B. The champion strategy has a higher rate than challenger_A and challenger_B.","SELECT test_cell, AVG(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate, COUNT(*) AS n FROM (SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date, p.amount_paid_against, LEAST(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code, COALESCE(a.site, 'self_serve') AS site FROM silver.promises_to_pay AS p LEFT JOIN silver.collections_cases AS c ON c.case_id = p.case_id LEFT JOIN silver.agents AS a ON a.agent_id = p.agent_id) AS t WHERE 1 = 1 AND ptp_status IN ('kept', 'partially_kept', 'broken') AND assignment_method = ? GROUP BY test_cell LIMIT 1000",false
+BQ-029,"Refuse: This needs citizenship_status, newcomer_program_flag, which is excluded from collections analytics.",,true
+BQ-030,"Outbound call volume dropped because the predictive dialer was degraded, causing outbound call capacity to fall by about 60%. This information comes from Incident Report IR-2026-0923.",IR-2026-0923 Incident Report IR-2026-0923; IR-2026-0923 INC-0923: dialer outage; IR-2026-0914 Incident Report IR-2026-0914,false
+BQ-031,"Refuse: This needs gender_code, marital_status, which is excluded from collections analytics.",,true
+BQ-032,"primary_product,hardship_rate_pct,n
+mortgage,10.68,4710
+personal_loan,25.49,36274
+overdraft,18.76,15613
+auto_loan,26.76,21800
+loc,25.41,16272
+card,19.81,78688
+The hardship rate for auto_loan is 26.8%, which is higher than the mortgage rate of 10.7%. Personal_loan has a hardship rate of 25.5%, while card is at 19.8%, overdraft is at 18.8%, and loc is at 25.4%.","SELECT primary_product, AVG(CASE WHEN hardship_flag THEN 1.0 ELSE 0.0 END) AS hardship_rate, COUNT(*) AS n FROM (SELECT case_open_date, current_bucket, current_dpd, hardship_flag, outcome, primary_product, province_code, queue, outcome IS NULL AS is_open FROM silver.collections_cases) WHERE 1 = 1 AND case_open_date >= ? AND case_open_date <= ? GROUP BY primary_product LIMIT 1000",false
+BQ-033,A promise is considered broken when nothing is received after the due date plus a grace period of **2 business days** (PRC-COLL-010 §3.3).,PRC-COLL-010 §3.3 Kept and broken promises; PRC-COLL-010 §3.2 Confirming the promise; PRC-COLL-010 §3.1 Taking a promise,false
+BQ-034,"kept_rate_pct,n
+35.13,22159
+The promise-kept rate for promises due in August 2026 was 35.1%. During this period, there were 22159 promises due.","SELECT AVG(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate, COUNT(*) AS n FROM (SELECT p.ptp_status, p.ptp_due_date, p.ptp_channel, p.ptp_type, p.product, p.paid_date, p.amount_paid_against, LEAST(p.prior_broken_ptp_count, 3) AS prior_broken_ptp_count, c.queue, c.test_cell, c.assignment_method, c.province_code, COALESCE(a.site, 'self_serve') AS site FROM silver.promises_to_pay AS p LEFT JOIN silver.collections_cases AS c ON c.case_id = p.case_id LEFT JOIN silver.agents AS a ON a.agent_id = p.agent_id) AS t WHERE 1 = 1 AND ptp_status IN ('kept', 'partially_kept', 'broken') AND ptp_due_date >= ? AND ptp_due_date <= ? LIMIT 1000",false
+BQ-035,"current_bucket,average_dpd,n
+1-30,14.4811,33639
+61-90,74.0946,16312
+180+,166.3222,180
+151-180,164.2717,4045
+91-120,104.1188,10251
+121-150,134.3905,6184
+31-60,43.3896,25389
+There are 33639 open collections cases in the 1-30 bucket, 25389 in the 31-60 bucket, and 16312 in the 61-90 bucket. Additionally, there are 10251 cases in the 91-120 bucket, 6184 in the 121-150 bucket, 4045 in the 151-180 bucket, and 180 in the 180+ bucket.","SELECT current_bucket, AVG(current_dpd) AS average_dpd, COUNT(*) AS n FROM (SELECT case_open_date, current_bucket, current_dpd, hardship_flag, outcome, primary_product, province_code, queue, outcome IS NULL AS is_open FROM silver.collections_cases) WHERE 1 = 1 AND outcome IS NULL AND is_open = ? GROUP BY current_bucket LIMIT 1000",false
