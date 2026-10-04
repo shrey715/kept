@@ -1,363 +1,196 @@
-% Options for packages loaded elsewhere
-\PassOptionsToPackage{unicode}{hyperref}
-\PassOptionsToPackage{hyphens}{url}
-\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
-\documentclass[
-  10pt,
-]{article}
-\usepackage{xcolor}
-\usepackage[margin=2cm]{geometry}
-\usepackage{amsmath,amssymb}
-\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
-\usepackage{iftex}
-\ifPDFTeX
-  \usepackage[T1]{fontenc}
-  \usepackage[utf8]{inputenc}
-  \usepackage{textcomp} % provide euro and other symbols
-\else % if luatex or xetex
-  \usepackage{unicode-math} % this also loads fontspec
-  \defaultfontfeatures{Scale=MatchLowercase}
-  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
-\fi
-\usepackage{lmodern}
-\ifPDFTeX\else
-  % xetex/luatex font selection
-  \setmainfont[]{Carlito}
-  \setmonofont[]{Adwaita Mono}
-\fi
-% Use upquote if available, for straight quotes in verbatim environments
-\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
-\IfFileExists{microtype.sty}{% use microtype if available
-  \usepackage[]{microtype}
-  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
-}{}
-\makeatletter
-\@ifundefined{KOMAClassName}{% if non-KOMA class
-  \IfFileExists{parskip.sty}{%
-    \usepackage{parskip}
-  }{% else
-    \setlength{\parindent}{0pt}
-    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
-}{% if KOMA class
-  \KOMAoptions{parskip=half}}
-\makeatother
-\usepackage{longtable,booktabs,array}
-\usepackage{calc} % for calculating minipage widths
-% Correct order of tables after \paragraph or \subparagraph
-\usepackage{etoolbox}
-\makeatletter
-\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
-\makeatother
-% Allow footnotes in longtable head/foot
-\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
-\makesavenoteenv{longtable}
-\usepackage{graphicx}
-\makeatletter
-\newsavebox\pandoc@box
-\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
-  \sbox\pandoc@box{#1}%
-  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
-  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
-  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
-  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
-  \else\usebox{\pandoc@box}%
-  \fi%
-}
-% Set default figure placement to htbp
-\def\fps@figure{htbp}
-\makeatother
-\setlength{\emergencystretch}{3em} % prevent overfull lines
-\providecommand{\tightlist}{%
-  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
-% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
-\usepackage{etoolbox}
-\AtBeginEnvironment{longtable}{\footnotesize}
-\let\oldunderscore\_
-\renewcommand{\_}{\oldunderscore\allowbreak}
-\usepackage{xcolor}
-\definecolor{keptred}{HTML}{C8102E}
-\usepackage{titlesec}
-\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
-\titleformat{\subsection}{\large\bfseries}{}{0em}{}
-\setlength{\parskip}{0.45em}
-\setlength{\parindent}{0pt}
-\renewcommand{\arraystretch}{1.15}
-\usepackage{bookmark}
-\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
-\urlstyle{same}
-\hypersetup{
-  pdftitle={Business case},
-  pdfauthor={Team Sharpe Shooters},
-  colorlinks=true,
-  linkcolor={keptred},
-  filecolor={Maroon},
-  citecolor={Blue},
-  urlcolor={keptred},
-  pdfcreator={LaTeX via pandoc}}
-
+\documentclass[11pt]{article}
+\usepackage{kept-report}
 \title{Business case}
-\usepackage{etoolbox}
-\makeatletter
-\providecommand{\subtitle}[1]{% add subtitle to \maketitle
-  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
-}
-\makeatother
-\subtitle{What Kept is worth to Maple Bank, from the bank's own data}
-\author{Team Sharpe Shooters}
-\date{04 October 2026}
+\subtitle{What Kept is worth to Maple Bank, measured on the bank's own data}
+\reportnumber{Business value · cost · ROI}
+\runninghead{Business case}
+\date{4 October 2026}
 
 \begin{document}
-\maketitle
+\makereporttitle
 
-{
-\hypersetup{linkcolor=black}
-\setcounter{tocdepth}{1}
-\tableofcontents
-}
-\section{TL;DR}\label{tldr}
+\statrow{\stat{\$2.2M}{a year, base case (\$1.0M–4.2M)}\stat{3.8×}{year-one ROI, base case}\stat{\textasciitilde 2 mo}{to pay back the build}\stat{62\% vs 52\%}{promised money paid: payday-dated vs not}}
 
-\textbf{Base case: \$2.2M a year} (low \$1.0M, high \$4.2M) against
-\textbf{\$150K a year to run} and \textbf{\$300K to productionise}.
-First-year ROI \textbf{3.8x} in the base case (1.3x low), payback in
-about \textbf{2 months} (4 months low).
+\takeaway{\textbf{The short version.} Collections loses money in one place: cases that \emph{roll} into a worse bucket.
+The cheapest way to stop a roll is a promise the customer can actually keep, and the bank's own history says
+promises due right after payday get \textbf{11 points more} of the promised money paid. Kept dates every promise to
+payday, contacts the people a contact actually helps, swaps letters for near-free digital nudges, and gives agents
+and QA reviewers time back. Counted conservatively, that's \textbf{\$2.2M a year} against \$150K to run and \$300K to
+build, so it pays back in about two months. Every number below comes from the release, except four assumptions
+that are named, explained and stress-tested in §7.}
 
-Where it comes from, biggest first:
+\section{Where the money leaks}
 
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  \textbf{Promises dated to payday.} Promises due 0--2 days after payday
-  get \textbf{62.5\%} of the promised money paid; 8+ days after,
-  \textbf{51.5\%}. Kept sizing puts the due date right after payday.
-\item
-  \textbf{A cheaper, kinder contact mix.} Same number of calls, but most
-  become hardship reviews instead of collection calls, and \$1.10
-  letters become near-free texts, emails and app pushes.
-\item
-  \textbf{Agent time.} Auto call summaries cut after-call work on
-  629,435 agent calls a year.
-\item
-  \textbf{QA time.} Every call gets pre-scored, so reviewers listen to
-  the ones that need it.
-\end{enumerate}
+\fig[0.95\linewidth]{bc_funnel.png}{Cases that entered collections at 1–30 days past due in the last 12 months, and what happened next.}
 
-Plus an upside we don't count in the base case: \textbf{every point of
-roll rate is worth \textasciitilde\$603K a year} in charge-offs avoided.
-The 5\% hold-out measures it after launch.
+\textbf{What the chart says.} Of the 194,515 cases that entered at 1–30 days past due in the 12 months to 28 Sep 2026
+(\$63.9M overdue), about half roll into a worse bucket within 30 days (48.8\% across 330,779 cases since 2016). Of the
+rolled cases, \textbf{2.5\% end up charged off, at \$12,523 on average}; of the cases that \emph{don't} roll,
+\textbf{none} do. Rolling is the only road to a charge-off, so everything Kept does is aimed at the first 30 days.
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/bc_scenarios.png}
+\section{The lever: timing the promise}
 
-\section{1. The payday effect (the core
-idea)}\label{the-payday-effect-the-core-idea}
+\fig[0.95\linewidth]{bc_payday.png}{Resolved promises by days between the customer's last salary deposit and the due date.}
 
-From 31,957 resolved promises where we can see the customer's salary
-deposits:
+\textbf{What the chart says.} Both panels slope the same way: the further a due date sits after payday, the worse the
+promise does. Due 0–2 days after payday, \textbf{54.3\%} of promises are kept and \textbf{62.5\%} of the promised money
+arrives. Due 8+ days after, when the pay is already spent, that drops to 46.3\% and \textbf{51.5\%}. The money panel
+moves more than the count panel, because a late-dated promise that does get paid is more often paid only in part.
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/bc_payday.png}
+\begin{table}[H]\small\centering
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Due date vs payday} & \textbf{Promises} & \textbf{Kept} & \textbf{Money paid} & \textbf{Share of promised \$} \\
+\midrule
+0–2 days after & 8,359 & 54.3\% & 62.5\% & 26\% \\
+3–7 days after & 7,553 & 52.2\% & 60.9\% & 24\% \\
+8+ days after & 16,045 & 46.3\% & 51.5\% & 50\% \\
+\bottomrule
+\end{tabular}
+\caption{Where we can see the customer's salary (32,000 resolved promises).}
+\end{table}
 
-\begin{longtable}[]{@{}lrrr@{}}
-\toprule\noalign{}
-Promise due & Promises & Kept & Promised money paid \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-0-2 days after payday & 8,359 & 54.3\% & 62.5\% \\
-3-7 days after payday & 7,553 & 52.2\% & 60.9\% \\
-8+ days after payday & 16,045 & 46.3\% & 51.5\% \\
-\end{longtable}
+\paragraph{From the chart to dollars} Today half of the promised money sits in the worst bucket. Moving the 3+ day
+promises to 0–2 days, at the 0–2 day paid rate, lifts the paid share by \textbf{5.9 points} on the \textbf{\$41.7M}
+promised in the last 12 months. That's \$2.46M. We count \textbf{half} of it, \textbf{\$1.23M}, because the gap is
+descriptive: part of it is \emph{who} gets offered which date, not the date itself. The 5\% hold-out measures the real
+effect after launch.
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{The gap:} weighting by where the money sits today, moving
-  promises that fall 3+ days after payday to 0--2 days lifts the paid
-  share by \textbf{5.9 points}.
-\item
-  \textbf{The base:} \textbf{\$41.7M} promised in the 12 months to 28
-  Sep 2026.
-\item
-  \textbf{We only take half of it} in the base case
-  (\texttt{PAYDAY\_CAPTURE} = 50\%): the gap is descriptive, and some of
-  it is who gets which due date, not the date itself. That gives
-  \textbf{\$1.23M a year}; the full gap would be \$2.46M.
-\end{itemize}
+\insight{How Kept uses this}{Kept sizing is plain arithmetic, not a model: the due date is 1–2 days after the expected
+payroll date (detected from salary deposits), and the amount is split into up to three instalments that each fit inside
+the customer's spare cash for that pay period. A promise that can't be sized that way isn't proposed at all.}
 
-\section{2. Contact mix and cost}\label{contact-mix-and-cost}
+\section{A cheaper, kinder contact mix}
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/bc_mix.png}
+\fig[0.95\linewidth]{bc_mix.png}{Tonight's 96,000 open cases: the bank's current strategy vs Kept.}
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{Calls:} 40,601 call-type actions for Kept vs 41,574 for the
-  current strategy. Basically the same number, but \textbf{37,409 of
-  ours are hardship reviews} (a specialist conversation) where the old
-  strategy has 34,326 collection calls.
-\item
-  \textbf{Letters → digital:} the old strategy sends 7,180 letters at
-  \$1.10; Kept uses SMS links (\$0.01), email and app pushes (\$0.001).
-\item
-  \textbf{Cost per pass over the book} (channel costs from
-  \texttt{contact\_history}, Sep 2026): \$80,927 old vs \$71,187 Kept,
-  \textbf{\$9,740 saved each pass}. At 52 passes a year (base) that's
-  \textbf{\$506K}.
-\item
-  \textbf{Model's view:} tonight's 55,674 positive-uplift proposals are
-  expected to bring in \textbf{\$2.06M more within 14 days than waiting}
-  (uplift × balance at risk). It's a model estimate, so it's not in the
-  totals: the hold-out proves or disproves it.
-\end{itemize}
+\textbf{What the chart says.} Kept doesn't simply call less: call-type actions are almost unchanged (40,601 vs 41,574).
+What changes is \emph{which} calls. The current strategy's biggest bar is collection calls (34,326); Kept's is
+\textbf{hardship reviews (37,409)}, because text and cash-flow signals flag far more customers who need a protective
+conversation than the old rule set did. At the cheap end, \$1.10 letters (7,180) disappear in favour of SMS payment links
+(\$0.01), emails and app pushes (\$0.001).
 
-\section{3. Roll rate → charge-offs (the
-upside)}\label{roll-rate-charge-offs-the-upside}
+\begin{table}[H]\small\centering
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+& \textbf{Cost per contact} & \textbf{Current strategy} & \textbf{Kept} \\
+\midrule
+Call-type (call, promise, plan, hardship review) & \$1.75 & 41,574 & 40,601 \\
+Letter & \$1.10 & 7,180 & 0 \\
+SMS payment link & \$0.01 & 27,942 & 11,971 \\
+Email · app push & \$0.001 & 0 & 20,370 \\
+\midrule
+\textbf{Cost of one pass over the open book} & & \textbf{\$80,932} & \textbf{\$71,192} \\
+\bottomrule
+\end{tabular}
+\caption{Channel costs are the release's own averages for September 2026.}
+\end{table}
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/bc_funnel.png}
+Each pass over the book saves \textbf{\$9,740}. The open book is worked through roughly weekly under the
+3-contacts-in-7-days cap, so 52 passes a year give \textbf{\$506K}.
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{48.8\%} of cases that enter at 1--30 days past due have rolled
-  by day 30 (330,779 cases since 2016).
-\item
-  Of rolled cases, \textbf{2.48\%} end up charged off, averaging
-  \textbf{\$12,523}. Of cases that don't roll: \textbf{0.00\%}. Rolling
-  is the only road to a charge-off.
-\item
-  \textbf{194,515 cases (\$63.9M overdue)} entered at 1--30 DPD in the
-  last 12 months, so \textbf{1 point of roll rate ≈ \$603K a year}
-  avoided.
-\item
-  The design's hypothesis is 1--2 points. We keep it \textbf{out of the
-  base case} because it overlaps the payday gain (kept promises are what
-  stop rolls), and count 1 point in the high case only.
-\end{itemize}
+\paragraph{What the model expects} The uplift model estimates that tonight's 55,674 positive-uplift proposals bring in
+\textbf{\$2.06M more within 14 days} than doing nothing. That's a model estimate, so it's \emph{not} in our totals; it's
+exactly what the hold-out is there to check.
 
-\section{4. Time saved}\label{time-saved}
+\section{Time back for agents and QA}
 
-\begin{itemize}
-\tightlist
-\item
-  \textbf{Call summaries:} 629,435 agent calls in 12 months, average
-  handle time 6.8 min. Saving 60 s of after-call work each at \$36/h is
-  \textbf{\$378K a year} (about 5.8 agents' worth of hours back on the
-  phones).
-\item
-  \textbf{QA:} a 2\% manual sample at 12 min a call is 2,518 reviewer
-  hours a year. Pre-scoring every call (88--100\% agreement with human
-  QA per item) lets reviewers skip the clean ones: \textbf{\$45K} at
-  50\% time saved, and coverage goes from 2\% of calls to all of them.
-\end{itemize}
+\begin{table}[H]\small\centering
+\begin{tabularx}{\linewidth}{@{}lrL@{}}
+\toprule
+& \textbf{Base} & \textbf{How it's computed} \\
+\midrule
+Call summaries & \$378K & 629,435 agent calls a year × 60 s of after-call work saved × \$36/h loaded agent cost (≈ 5.8 agents' time back on the phones) \\
+QA pre-scoring & \$45K & today's 2\% manual sample is 2,518 reviewer-hours a year; scoring every call first lets reviewers skip the clean ones (50\% saved) and coverage goes from 2\% of calls to all of them \\
+\bottomrule
+\end{tabularx}
+\caption{Average handle time in the release is 6.8 minutes, so 60 seconds of wrap-up is a modest assumption.}
+\end{table}
 
-\section{5. Cost, ROI, payback}\label{cost-roi-payback}
+\section{The upside we don't count: roll rate}
 
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2500}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\raggedright
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Low
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Base
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-High
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-Promises dated to payday & \$614,603 & \textbf{\$1,229,207} &
-\$1,843,810 \\
-Cheaper contact mix & \$253,239 & \textbf{\$506,479} & \$1,012,957 \\
-Agent wrap-up time (call summaries) & \$157,359 & \textbf{\$377,661} &
-\$660,907 \\
-QA reviewer time & \$18,883 & \textbf{\$45,319} & \$79,309 \\
-Fewer roll-forwards → charge-offs avoided & \$0 & \textbf{\$0} &
-\$603,362 \\
-\textbf{Total benefit / year} & \textbf{\$1,044,084} &
-\textbf{\$2,158,666} & \textbf{\$4,200,345} \\
-Run cost / year & \$150,000 & \$150,000 & \$150,000 \\
-Build (one-off) & \$300,000 & \$300,000 & \$300,000 \\
-\textbf{Year-1 ROI} & \textbf{1.3x} & \textbf{3.8x} & \textbf{8.3x} \\
+From §1: 194,515 cases a year enter at 1–30 days past due, 2.5\% of the ones that roll get charged off, at \$12.5K each.
+So \textbf{every point of 30-day roll rate is worth about \$603K a year} in charge-offs avoided, before counting the
+collection cost of the rolled cases. Our design hypothesised 1–2 points.
+
+We keep it \textbf{out of the base case}: a kept promise \emph{is} what stops a roll, so counting both would count the
+payday effect twice. The high case adds one point.
+
+\section{Putting it together}
+
+\fig[0.95\linewidth]{bc_scenarios.png}{Annual value by component and scenario.}
+
+\textbf{What the chart says.} In every scenario the payday effect is the largest block, and the contact mix the second.
+The low case still clears \$1M a year with half the payday capture, half the book passes and half the time saved. The
+high case more than doubles the base mostly because of the roll-rate point it adds.
+
+\begin{table}[H]\small\centering
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Annual value (CAD)} & \textbf{Low} & \textbf{Base} & \textbf{High} \\
+\midrule
+Promises dated to payday & 614,603 & 1,229,207 & 1,843,810 \\
+Cheaper contact mix & 253,239 & 506,479 & 1,012,957 \\
+Agent wrap-up time (call summaries) & 157,359 & 377,661 & 660,907 \\
+QA reviewer time & 18,883 & 45,319 & 79,309 \\
+Roll-rate reduction (charge-offs avoided) & 0 & 0 & 603,362 \\
+\midrule
+\textbf{Total benefit a year} & \textbf{1,044,084} & \textbf{2,158,666} & \textbf{4,200,345} \\
+Run cost a year & 150,000 & 150,000 & 150,000 \\
+Build, one-off & 300,000 & 300,000 & 300,000 \\
+\midrule
+\textbf{Year-one ROI} & \textbf{1.3×} & \textbf{3.8×} & \textbf{8.3×} \\
 \textbf{Payback} & 4.0 months & 1.8 months & 0.9 months \\
-\end{longtable}
+\bottomrule
+\end{tabular}
+\caption{Year-one ROI = (benefit − run − build) ÷ (run + build). Payback = build ÷ (benefit − run), in months.}
+\end{table}
 
-\textbf{Why it's cheap to run.} One nightly batch (\textasciitilde7
-minutes for the whole book on one machine), a local open model for text
-(no per-call fees, notes never leave the bank), a hosted model only for
-the Ask, and DuckDB/dbt instead of a cluster. The run cost is mostly one
-ops person.
+\paragraph{Why it's cheap to run} One nightly batch scores the whole book in about seven minutes on a single
+machine. Text runs on a local open model (no per-call fees, and notes never leave the bank); a hosted model is only used
+for the Ask. DuckDB and dbt replace a cluster. The \$150K is mostly one operations engineer (\$120K) plus about \$30K of
+compute and hosted-model use at production volume. The \$300K build is four engineers for three months.
 
-\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/bc_sensitivity.png}
+\section{What moves the number}
 
-\textbf{Assumptions (all in \texttt{scripts/business\_case.py}, change
-them and re-run):}
+\fig[0.95\linewidth]{bc_sensitivity.png}{Each assumption swung from its low to its high value, everything else at base.}
 
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
-  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\raggedright
-Assumption
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Base
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-Low
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
-High
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-Why
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-Payday gap we capture & 50\% & 25\% & 75\% & the gap is descriptive;
-half is a cautious read \\
-Passes over the open book a year & 52 & 26 & 104 & weekly work-through
-under the 3-in-7-days cap \\
-After-call work saved per call & 60 s & 30 s & 90 s & the summary
-pre-fills the wrap-up note \\
-Loaded agent cost & \$36/h & \$30/h & \$42/h & \textasciitilde\$50K
-salary + 30\% on-cost \\
-QA reviewer time saved & 50\% & 25\% & 75\% & reviewers skip pre-scored
-clean calls \\
-Roll-rate points counted & 0 & 0 & 1 & overlaps payday; high case
-only \\
-Build / run cost & \$300K / \$150K & & & 4 engineers × 3 months; 1 ops
-FTE + infra \\
-\end{longtable}
+\textbf{What the chart says.} The answer hinges on one question: \textbf{how much of the payday gap is causal?} That
+assumption swings the total by about \$1.2M. The next biggest are how often the book is worked (contact savings) and
+the roll-rate point. Minutes saved and QA time barely move it. That's why the rollout plan is built around measuring the
+payday effect first.
 
-\section{6. Things that don't fit in a
-spreadsheet}\label{things-that-dont-fit-in-a-spreadsheet}
+\begin{table}[H]\small\centering
+\begin{tabularx}{\linewidth}{@{}lrrrL@{}}
+\toprule
+\textbf{Assumption} & \textbf{Low} & \textbf{Base} & \textbf{High} & \textbf{Why this range} \\
+\midrule
+Payday gap we capture & 25\% & 50\% & 75\% & the gap is observational; half is a cautious read \\
+Passes over the book a year & 26 & 52 & 104 & weekly work-through under the contact cap \\
+After-call work saved & 30 s & 60 s & 90 s & the summary pre-fills the wrap-up note \\
+Loaded agent cost & \$30/h & \$36/h & \$42/h & \textasciitilde \$50K salary + 30\% on-cost \\
+QA reviewer time saved & 25\% & 50\% & 75\% & reviewers skip pre-scored clean calls \\
+Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
+\bottomrule
+\end{tabularx}
+\caption{The only assumptions in the model. Everything else is measured.}
+\end{table}
+
+\section{Risks, costs we're honest about, and how we'll know}
 
 \begin{itemize}
-\tightlist
-\item
-  \textbf{Fair treatment and regulator risk.} Hardship shows up when the
-  customer \emph{says} it (text) or the money \emph{shows} it (late
-  payroll, a pay cut, new EI), and it immediately limits contact to
-  protective actions, with two people releasing anything sensitive.
-  Every decision has a plain-English reason and an audit trail.
-\item
-  \textbf{The cost of the protection, honestly.} 38,115 of tonight's
-  cards are Red (a specialist reviews first). That's real specialist
-  time. A rule for customers already on an active hardship plan would
-  cut it; it's the next thing we'd ship.
-\item
-  \textbf{Measured, not promised.} A permanent 5\% hold-out stays on the
-  old strategy, so every number above gets checked against reality, and
-  a kill switch reverts everyone if it isn't working.
+\item \textbf{Specialist workload.} 38,115 of tonight's cards (40\%) are Red: a hardship specialist reviews before anything
+is sent. That's the protection working, but it's real time. A rule for customers already on an active hardship plan would
+cut it, and it's the next thing we'd ship.
+\item \textbf{Observational evidence.} The payday gap and the model's \$2.06M estimate are both observational. A permanent
+\textbf{5\% hold-out} stays on the old strategy, so the real effect on promises kept, roll rate and cost is measured
+from day 30, and a \textbf{kill switch} reverts everyone if it isn't there.
+\item \textbf{What isn't in the numbers.} Fewer complaints and less regulator risk from finding hardship when the customer
+says it rather than weeks later; fairness checked on every run; a plain-English reason and an audit trail for every
+decision. Those are hard to price and matter anyway.
 \end{itemize}
 
-\emph{Rebuild:} \texttt{uv\ run\ python\ scripts/business\_case.py}
-(reads only the raw files and the cards export).
+\reproduce{\path{scripts/business_case.py} reads only the release files and the scored cards, and caches the
+numbers in \path{data/exports/reports/business_data.json}.}{\path{uv run python scripts/reportlib.py business_case}}
 
 \end{document}

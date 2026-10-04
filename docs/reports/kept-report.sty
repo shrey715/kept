@@ -119,4 +119,10 @@
 \newcommand{\fig}[3][\linewidth]{% \fig[width]{file}{caption}
   \begin{figure}[H]\centering\includegraphics[width=#1]{figures/#2}\caption{#3}\label{fig:#2}\end{figure}}
 \newcommand{\code}[1]{\texttt{#1}}
+% a closing "how to rebuild this" block; paths wrap at / and _
+\newcommand{\reproduce}[2]{%
+  \par\vspace{1.2em}{\color{rule}\rule{\linewidth}{0.5pt}}\par\vspace{0.1em}
+  {\raggedright\footnotesize\color{muted}
+  {\headfont\bfseries Numbers}\quad #1\par\vspace{0.15em}
+  {\headfont\bfseries Rebuild}\quad #2\par}}
 \endinput

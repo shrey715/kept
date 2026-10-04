@@ -281,8 +281,7 @@ bureau hold.
 \item Keep a 300-link human review per release: it caught the only two bad links.
 \end{enumerate}
 
-\vfill
-{\footnotesize\color{muted} Numbers: \code{scripts/quality\_report\_full.py} (queries the release, the warehouse and the
-crosswalk; caches to \code{data/exports/reports/}). Build: \code{uv run python scripts/reportlib.py quality\_report}.}
+\reproduce{\path{scripts/quality_report_full.py} queries the release, the warehouse and the identity crosswalk,
+and caches everything in \path{data/exports/reports/quality_data.json}.}{\path{uv run python scripts/reportlib.py quality_report}}
 
 \end{document}
