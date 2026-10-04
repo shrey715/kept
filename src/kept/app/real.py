@@ -88,12 +88,21 @@ def real_services(
             ).fetchone()
         return row[0] if row else None
 
+    from kept.app.charts import ChartChoice, ChartRequest, choose_chart
     from kept.ask.service import build_ask
+
+    ask = build_ask(conn.cursor(), audit_log)
+    # ponytail: the chart picker borrows the Ask's gateway and redactor (one Presidio in memory) without
+    # changing how the Ask is built; give build_ask an llm/redactor argument pair once #100 is integrated.
+    llm, redactor = getattr(ask, "_llm", None), getattr(ask, "_redactor", None)
+
+    def chart(request: ChartRequest) -> ChartChoice:
+        return choose_chart(request, llm=llm, redactor=redactor)
 
     return Services(
         engine=engine,
         release_gate=Releaser(proposals=proposals, context=context, audit_log=audit_log),
-        ask=build_ask(conn.cursor(), audit_log),
+        ask=ask,
         c360=c360,
         audit_log=audit_log,
         proposals=proposals,
@@ -102,6 +111,7 @@ def real_services(
         note_text=note_text,
         steward=load_steward_queue(warehouse=warehouse),
         scored_queue=_scored_queue(conn),
+        chart=chart,
     )
 
 
