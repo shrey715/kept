@@ -82,6 +82,17 @@
 \setlength{\parskip}{0.45em}
 \setlength{\parindent}{0pt}
 \renewcommand{\arraystretch}{1.15}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\definecolor{edge}{HTML}{7B8794}
+\definecolor{kblue}{HTML}{2A78D6}
+\definecolor{korange}{HTML}{E8833A}
+\tikzset{
+  step/.style={draw=edge, rounded corners=3pt, fill=white, align=center, font=\footnotesize, inner sep=4pt, text width=#1, minimum height=1.1cm},
+  step/.default=2.6cm,
+  hot/.style={draw=korange, line width=1.1pt},
+  go/.style={-{Stealth[length=2mm]}, edge, line width=0.8pt},
+}
 \usepackage{bookmark}
 \IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
 \urlstyle{same}
@@ -129,6 +140,22 @@ protected attribute, bulk personal data or something outside the data.
 
 A question climbs down a ladder and stops at the first step that can
 answer it:
+
+\begin{center}
+\begin{tikzpicture}[node distance=0.3cm and 0.35cm]
+\node[step=2.0cm] (q) {\textbf{Question}\\ redacted first};
+\node[step=2.3cm, right=of q, hot] (rules) {\textbf{Rules}\\ protected, bulk PII,\\ writes, other cases};
+\node[step=2.5cm, right=of rules, hot] (cert) {\textbf{Certified metric\\ or SQL template}\\ dates from code};
+\node[step=2.4cm, right=of cert] (free) {\textbf{Free SQL}\\ 3 drafts, majority,\\ worked examples};
+\node[step=2.0cm, right=of free] (guard) {\textbf{SQL guard}\\ SELECT, 17 tables};
+\node[step=2.1cm, right=of guard, hot] (ans) {\textbf{Grounded answer}\\ SQL shown};
+\node[step=2.3cm, below=0.55cm of rules, fill=red!6] (refuse) {\textbf{Refuse}\\ + reason + "Try: …"};
+\node[step=2.5cm, below=0.55cm of cert, fill=green!6] (docs) {\textbf{Policy / incident docs}\\ section cited};
+\node[step=2.4cm, below=0.55cm of free, fill=green!6] (call) {\textbf{Call summary}\\ redacted transcript};
+\foreach \a/\b in {q/rules, rules/cert, cert/free, free/guard, guard/ans} \draw[go] (\a) -- (\b);
+\draw[go] (rules) -- (refuse); \draw[go] (cert) -- (docs); \draw[go] (cert.south east) -- (call.north west);
+\end{tikzpicture}
+\end{center}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}

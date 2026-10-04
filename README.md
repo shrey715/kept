@@ -159,7 +159,7 @@ built by a script from live queries. Stop `kept serve` first for the ones that r
 | `kept gate` then `uv run python scripts/quality_report_full.py` | `QUALITY_REPORT.pdf` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
 | `uv run python scripts/business_case.py` | `docs/reports/business_case.pdf` (raw files only, runs next to `kept serve`) |
 | `uv run python scripts/drift_report.py` | `docs/reports/drift_report.pdf`: PSI per feature, tonight vs training |
-| `uv run python scripts/fairness_report_pdf.py` | `docs/reports/fairness_report.pdf` (compliance-only inputs) |
+| `uv run python scripts/fairness_report.py` | `docs/reports/fairness_report.pdf` (compliance-only inputs) |
 | `kept benchmark --out … --scorecard …` then `scripts/benchmark_report.py` | the answers CSV (deliverable 5) and `docs/reports/benchmark_report.pdf` |
 | `kept map [--draft]` | schema drift of `data/raw` vs the data dictionary; `--draft` asks the local LLM for a mapping an engineer reviews |
 | `uv run python scripts/eval_qa.py 100` · `scripts/eval_call_summary.py 100` | QA scoring and call summaries against the release's public labels |

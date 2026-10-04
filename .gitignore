@@ -60,7 +60,7 @@ coverage.xml
 
 # Notebooks
 .ipynb_checkpoints/
-notebooks/**/*.ipynb_checkpoints
+
 
 # Editors / OS
 .vscode/

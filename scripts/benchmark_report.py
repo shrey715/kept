@@ -18,6 +18,26 @@ from pathlib import Path
 
 from reportlib import AQUA, BLUE, GRID, KEPT, MUTED, ORANGE, REPO, build_pdf, plt, save, style, tidy
 
+LADDER_TIKZ = r"""
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[node distance=0.3cm and 0.35cm]
+\node[step=2.0cm] (q) {\textbf{Question}\\ redacted first};
+\node[step=2.3cm, right=of q, hot] (rules) {\textbf{Rules}\\ protected, bulk PII,\\ writes, other cases};
+\node[step=2.5cm, right=of rules, hot] (cert) {\textbf{Certified metric\\ or SQL template}\\ dates from code};
+\node[step=2.4cm, right=of cert] (free) {\textbf{Free SQL}\\ 3 drafts, majority,\\ worked examples};
+\node[step=2.0cm, right=of free] (guard) {\textbf{SQL guard}\\ SELECT, 17 tables};
+\node[step=2.1cm, right=of guard, hot] (ans) {\textbf{Grounded answer}\\ SQL shown};
+\node[step=2.3cm, below=0.55cm of rules, fill=red!6] (refuse) {\textbf{Refuse}\\ + reason + "Try: …"};
+\node[step=2.5cm, below=0.55cm of cert, fill=green!6] (docs) {\textbf{Policy / incident docs}\\ section cited};
+\node[step=2.4cm, below=0.55cm of free, fill=green!6] (call) {\textbf{Call summary}\\ redacted transcript};
+\foreach \a/\b in {q/rules, rules/cert, cert/free, free/guard, guard/ans} \draw[go] (\a) -- (\b);
+\draw[go] (rules) -- (refuse); \draw[go] (cert) -- (docs); \draw[go] (cert.south east) -- (call.north west);
+\end{tikzpicture}
+\end{center}
+```
+"""
+
 
 def path_of(row: dict[str, str]) -> str:
     if row["refused"] == "true":
@@ -141,7 +161,8 @@ def main() -> None:
         f"| {q} | {qs[q]['split']} | {qs[q]['question_text'][:70].replace('|', '/')} | {path_of(answers[q])} | {label[q]} |"
         for q in ids
     )
-    md = f"""---
+    md = (
+        f"""---
 title: "Collections Ask: benchmark report"
 subtitle: "{len(ids)} released questions, one run, no hand edits"
 author: "Team Sharpe Shooters"
@@ -160,6 +181,9 @@ question that asks for a protected attribute, bulk personal data or something ou
 # How the Ask gets there
 
 A question climbs down a ladder and stops at the first step that can answer it:
+"""
+        + LADDER_TIKZ
+        + f"""
 
 1. **Rules** refuse protected attributes, bulk personal data, write actions and other people's cases, *before* any LLM.
 2. **Certified metrics and SQL templates**: reviewed SQL for the 15 official metrics plus our templates (charge-offs in a
@@ -182,6 +206,7 @@ A question climbs down a ladder and stops at the first step that can answer it:
 
 *Rebuild:* run `kept benchmark` with `--out` and `--scorecard`, then `scripts/benchmark_report.py` on those files.
 """
+    )
     print(build_pdf(md, "benchmark_report"))
 
 

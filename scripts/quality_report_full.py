@@ -30,6 +30,24 @@ RAW = REPO / "data" / "raw"
 EXPORTS = REPO / "data" / "exports"
 CACHE = BUILD / "quality_data.json"
 
+PIPELINE_TIKZ = r"""
+```{=latex}
+\begin{center}
+\begin{tikzpicture}[node distance=0.35cm]
+\node[step=2.2cm] (raw) {\textbf{Raw release}\\ 31 tables\\ 77M records};
+\node[step=2.2cm, right=of raw] (bronze) {\textbf{Bronze}\\ as delivered,\\ all text};
+\node[step=2.4cm, right=of bronze, hot] (silver) {\textbf{Silver}\\ tested rules;\\ unreadable → quarantine};
+\node[step=2.4cm, right=of silver, hot] (match) {\textbf{Match}\\ exact keys → Splink\\ → steward};
+\node[step=2.2cm, right=of match] (gold) {\textbf{Gold C360}\\ 1,052,300\\ people};
+\node[step=2.2cm, right=of gold, hot] (gate) {\textbf{Gate}\\ contract Q1–Q5\\ blocks publish};
+\foreach \a/\b in {raw/bronze, bronze/silver, silver/match, match/gold, gold/gate} \draw[go] (\a) -- (\b);
+\node[font=\scriptsize, text=edge, below=0.25cm of match, text width=15cm, align=center]
+  {checks at every step: dbt tests · Soda checks from the contract · the gate · a human for the 300-pair review and the steward queue};
+\end{tikzpicture}
+\end{center}
+```
+"""
+
 
 def _src(t: str) -> str:
     p = RAW / f"{t}.csv"
@@ -356,6 +374,9 @@ customer, and in collections that means calling the wrong person about someone e
 
 # 1. How we checked
 
+"""
+        + PIPELINE_TIKZ
+        + f"""
 - **Land raw, clean after.** Bronze keeps every file exactly as it came, all columns as text, so nothing gets
   silently converted (the README warns `NA` is a real outcome code and IDs have leading zeros; both survive).
 - **Small tested rules** in `kept.data.clean` / `kept.data.traps` do the cleaning: names, dates, phones, postal
@@ -491,10 +512,9 @@ rules, allowed and not-allowed uses) and extended to ODCS v{d["contract_version"
 """
     )
     pdf = build_pdf(md, "quality_report")
-    shutil.copy(pdf, REPO / "QUALITY_REPORT.pdf")
-    return pdf
+    return Path(shutil.move(pdf, REPO / "QUALITY_REPORT.pdf"))  # deliverable 4 lives at the repo root
 
 
 if __name__ == "__main__":
     data = json.loads(CACHE.read_text()) if "--render" in sys.argv else collect()
-    print(render(data), REPO / "QUALITY_REPORT.pdf")
+    print(render(data))

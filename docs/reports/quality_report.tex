@@ -82,6 +82,17 @@
 \setlength{\parskip}{0.45em}
 \setlength{\parindent}{0pt}
 \renewcommand{\arraystretch}{1.15}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\definecolor{edge}{HTML}{7B8794}
+\definecolor{kblue}{HTML}{2A78D6}
+\definecolor{korange}{HTML}{E8833A}
+\tikzset{
+  step/.style={draw=edge, rounded corners=3pt, fill=white, align=center, font=\footnotesize, inner sep=4pt, text width=#1, minimum height=1.1cm},
+  step/.default=2.6cm,
+  hot/.style={draw=korange, line width=1.1pt},
+  go/.style={-{Stealth[length=2mm]}, edge, line width=0.8pt},
+}
 \usepackage{bookmark}
 \IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
 \urlstyle{same}
@@ -151,6 +162,20 @@ strangers into one customer, and in collections that means calling the
 wrong person about someone else's debt.
 
 \section{1. How we checked}\label{how-we-checked}
+
+\begin{center}
+\begin{tikzpicture}[node distance=0.35cm]
+\node[step=2.2cm] (raw) {\textbf{Raw release}\\ 31 tables\\ 77M records};
+\node[step=2.2cm, right=of raw] (bronze) {\textbf{Bronze}\\ as delivered,\\ all text};
+\node[step=2.4cm, right=of bronze, hot] (silver) {\textbf{Silver}\\ tested rules;\\ unreadable → quarantine};
+\node[step=2.4cm, right=of silver, hot] (match) {\textbf{Match}\\ exact keys → Splink\\ → steward};
+\node[step=2.2cm, right=of match] (gold) {\textbf{Gold C360}\\ 1,052,300\\ people};
+\node[step=2.2cm, right=of gold, hot] (gate) {\textbf{Gate}\\ contract Q1–Q5\\ blocks publish};
+\foreach \a/\b in {raw/bronze, bronze/silver, silver/match, match/gold, gold/gate} \draw[go] (\a) -- (\b);
+\node[font=\scriptsize, text=edge, below=0.25cm of match, text width=15cm, align=center]
+  {checks at every step: dbt tests · Soda checks from the contract · the gate · a human for the 300-pair review and the steward queue};
+\end{tikzpicture}
+\end{center}
 
 \begin{itemize}
 \tightlist
