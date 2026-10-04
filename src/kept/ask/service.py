@@ -21,6 +21,7 @@ from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
 from kept.ask.scope import Classifier, check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import execute_guarded, guard_sql
+from kept.ask.templates import date_hints, examples
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
 from kept.config import ASK_SQL_TIMEOUT_S, SQL_CANDIDATES
@@ -49,7 +50,8 @@ Use only numbers that appear in the data below. Never add, estimate or compute n
 Only a column whose name ends in _rate, _share or _pct is a ratio (0 to 1) that may be written as a
 percentage. Amounts and costs (cost_per_contact, amounts in CAD) are dollars: never turn them into
 percentages. To compare two values, say which is higher or lower in words and do not state the
-difference. Do not mention SQL.
+difference. Round a percentage to one decimal place (35.1%) and any other number to at most two.
+Do not mention SQL.
 No data? Say there is nothing to show."""
 _NARRATE_POLICY = """You answer a collections agent's policy question from the excerpts below, in one to three
 plain sentences.
@@ -83,6 +85,10 @@ _CONVENTIONS = """Conventions (from the data dictionary):
 - "The N months to <date>" is the N months ending on that date: after the date N months earlier, up to and
   including <date>. The 12 months to 28 September 2026 is chargeoff_date > DATE '2025-09-28' AND
   chargeoff_date <= DATE '2026-09-28' (the start day is not included).
+- Write every date bound as a literal DATE 'YYYY-MM-DD' worked out in advance; never add or subtract an
+  INTERVAL to a date in the query.
+- Give a share or rate as a percentage with two decimals,
+  round(100.0 * avg(CASE WHEN ... THEN 1 ELSE 0 END), 2) AS <name>_pct, plus count(*) AS n.
 - contact_history, promises_to_pay and collections_cases join on case_id; promises and contacts join agents on
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
@@ -224,6 +230,12 @@ def _metric_hint(d: MetricDefinition, q: CertifiedQuery) -> str:
         f"{d.metric_name} ({', '.join(d.synonyms)}). Default filters already applied: {d.default_filters}. "
         f"Filters: {sorted(q.allowed_filters) or 'none'}. Group by: {sorted(q.allowed_group_by) or 'none'}. "
         f"Dates apply to {q.date_column or 'nothing (no date range)'}."
+        + (
+            " product_family is 'card' or 'loan': a question about card accounts or card products filters "
+            "product_family = 'card', one about loans 'loan'."
+            if "product_family" in q.allowed_filters
+            else ""
+        )
     )
 
 
@@ -298,6 +310,7 @@ class CollectionsAsk:
                 actor_id=request.user_id,
                 as_of=as_of,
                 metric_hints=self._hints,
+                date_hints=date_hints(question.text, as_of),
             )
         except Exception:
             return self._unsure(request, "I couldn't work out what you're asking.")
@@ -332,7 +345,7 @@ class CollectionsAsk:
         policy = self._sql_policy()
         drafts = generate_candidates(
             intent,
-            self._schema_doc(policy, as_of),
+            self._schema_doc(policy, as_of) + date_hints(question.text, as_of) + examples(question.text),
             self._llm,
             n=SQL_CANDIDATES,
             actor_id=request.user_id,
@@ -491,7 +504,7 @@ class CollectionsAsk:
             except Exception:
                 break
             said = reply.text.strip()
-            if not said:
+            if not said or (len(rows) and "nothing to show" in said.lower()):  # it misread a non-empty result
                 break
             if not (extra := ungrounded_numbers(said, rows, allow=allow)):
                 return said
@@ -604,6 +617,7 @@ def build_ask(
     from kept.ask.certified import CERTIFIED_QUERIES
     from kept.ask.metrics import load_metric_definitions
     from kept.ask.scope import make_classifier
+    from kept.ask.templates import TEMPLATES
     from kept.common.llm import LiteLLMGateway
     from kept.contracts.data_contract import load_data_contract
 
@@ -624,8 +638,8 @@ def build_ask(
         llm=llm,
         redactor=redactor,
         classifier=make_classifier(llm, redactor, actor_id="system:ask-scope"),
-        metrics=metrics,
-        certified_queries=CERTIFIED_QUERIES,
+        metrics=metrics | {k: d for k, (d, _) in TEMPLATES.items()},
+        certified_queries=CERTIFIED_QUERIES | {k: q for k, (_, q) in TEMPLATES.items()},
         policy_index=PolicyIndex(index_dir) if index_dir.exists() else None,
         audit_log=audit_log,
     )

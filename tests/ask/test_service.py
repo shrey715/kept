@@ -409,3 +409,26 @@ def test_a_narration_with_an_invented_number_gets_one_retry(build) -> None:  # t
     assert isinstance(a, AskAnswer) and a.narrative == "Both products have 30 cases each."
     second = [c for c in llm.calls if c["purpose"] == Purpose.ASK_NARRATE][1]
     assert "not in the data: 12" in second["user"].text
+
+
+def test_nothing_to_show_with_rows_falls_back(build) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build(
+        {
+            Purpose.ASK_ROUTE: [METRIC_INTENT],
+            Purpose.ASK_NARRATE: ["There is nothing to show."],
+        }
+    )
+    a = svc.ask(_req("promise kept rate by product"))
+    assert isinstance(a, AskAnswer) and a.rows
+    assert a.narrative == "The result is in the table below."
+
+
+def test_metric_hint_names_the_product_family_values() -> None:
+    from kept.ask.certified import CERTIFIED_QUERIES
+    from kept.ask.metrics import MetricDefinition
+    from kept.ask.service import _metric_hint
+
+    d = MetricDefinition(
+        "delinquency_rate", "Delinquency rate", "", "", "", "", "", "", "", (), (), "", "", True
+    )
+    assert "product_family = 'card'" in _metric_hint(d, CERTIFIED_QUERIES["delinquency_rate"])
