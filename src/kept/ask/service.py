@@ -37,6 +37,7 @@ from kept.contracts.ask import (
     Refusal,
     RefusalReason,
     ScopeDecision,
+    SourceText,
     SqlPolicy,
 )
 from kept.contracts.audit import AuditEvent, AuditKind
@@ -70,6 +71,34 @@ _ROW_CAP = 50  # rows sent to the narrator
 
 def _refuse(reason: RefusalReason, message: str) -> Refusal:
     return Refusal(reason=reason, message=message)
+
+
+_SECTION_NO = re.compile(r"§\s?\d+(?:\.\d+)*")
+
+
+def tag_citations(found: list[Citation], narrative: str) -> tuple[Citation, ...]:
+    """Mark which retrieved sections the answer actually names, and number them [1], [2]... in that order;
+    the rest stay attached as "retrieved, not relied on". A section is named by "DOC §n.n"; a document
+    without section numbers (an incident report) by its id alone."""
+
+    def mention(c: Citation) -> str | None:
+        if c.document_id not in narrative:
+            return None
+        sec = _SECTION_NO.match(c.section)
+        if sec is None:
+            return c.document_id
+        for sep in (" ", ", "):
+            if (m := f"{c.document_id}{sep}{sec[0]}") in narrative:
+                return m
+        named = any(f"{c.document_id} {n}" in narrative for n in _SECTION_NO.findall(narrative))
+        return None if named else c.document_id  # the document, but no section of it: count it
+
+    marked = [(c, mention(c)) for c in found]
+    marked.sort(key=lambda cm: cm[1] is None)  # stable: retrieval order within each group
+    return tuple(
+        c.model_copy(update={"ref": i, "used": m is not None, "mention": m})
+        for i, (c, m) in enumerate(marked, 1)
+    )
 
 
 _CONVENTIONS = """Conventions (from the data dictionary):
@@ -432,6 +461,9 @@ class CollectionsAsk:
                     section=f"transcript {result.transcript_id}",
                     effective_from=day,
                     snippet=result.summary,
+                    kind="transcript",
+                    ref=1,
+                    source_id=result.transcript_id,
                 ),
             )
         return AskAnswer(
@@ -470,7 +502,30 @@ class CollectionsAsk:
             tables_used=(),
             data_freshness=None,
             narrative=narrative,
-            citations=tuple(found),
+            citations=tag_citations(found, narrative),
+        )
+
+    def policy_source(self, citation: Citation) -> SourceText | None:
+        """The document version a policy citation came from, with the cited passage located."""
+        if self._policy_index is None:
+            return None
+        return self._policy_index.source(
+            citation.document_id, citation.section, citation.effective_from, citation.snippet
+        )
+
+    def transcript_source(self, source_id: str) -> tuple[str, SourceText] | None:
+        """(case_id, redacted transcript) for a call citation. The caller checks the user may see the case."""
+        with self._conn.cursor() as c:
+            row = c.execute(
+                "select case_id, text, written_at_local from text.redacted_notes "
+                "where source_id = ? and source_type = 'transcript'",
+                [source_id],
+            ).fetchone()
+        if row is None:
+            return None
+        day = date.fromisoformat(str(row[2])[:10]) if row[2] else None
+        return str(row[0]), SourceText(
+            title=f"Call transcript {source_id} (redacted)", text=str(row[1]), effective_from=day
         )
 
     # ------------------------------------------------------------------ helpers

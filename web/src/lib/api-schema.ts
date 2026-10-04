@@ -174,6 +174,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ask/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Source
+         * @description Verify a citation: the full source it came from, with the cited passage located in it.
+         */
+        post: operations["ask_source_ask_source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/steward/queue": {
         parameters: {
             query?: never;
@@ -360,6 +380,26 @@ export interface components {
             effective_from: string;
             /** Snippet */
             snippet: string;
+            /**
+             * Kind
+             * @default policy
+             * @enum {string}
+             */
+            kind: "policy" | "transcript";
+            /**
+             * Ref
+             * @default 0
+             */
+            ref: number;
+            /**
+             * Used
+             * @default true
+             */
+            used: boolean;
+            /** Mention */
+            mention?: string | null;
+            /** Source Id */
+            source_id?: string | null;
         };
         /** Clarification */
         Clarification: {
@@ -896,6 +936,13 @@ export interface components {
          * @enum {string}
          */
         Role: "agent" | "hardship_specialist" | "team_lead" | "analyst" | "compliance" | "data_steward" | "engineer";
+        /** SourceIn */
+        SourceIn: {
+            citation: components["schemas"]["Citation"];
+            /** User Id */
+            user_id: string;
+            role: components["schemas"]["Role"];
+        };
         /**
          * SourceKey
          * @description One customer key in one product system.
@@ -911,6 +958,24 @@ export interface components {
          * @enum {string}
          */
         SourceSystem: "crm" | "card" | "loan" | "deposit" | "collections" | "bureau";
+        /**
+         * SourceText
+         * @description A cited source in full, with the cited passage located in it: the "verify" view of a citation.
+         */
+        SourceText: {
+            /** Title */
+            title: string;
+            /** Text */
+            text: string;
+            /** Highlight Start */
+            highlight_start?: number | null;
+            /** Highlight End */
+            highlight_end?: number | null;
+            /** Effective From */
+            effective_from?: string | null;
+            /** Effective To */
+            effective_to?: string | null;
+        };
         /**
          * StatedReason
          * @description Why the customer says they can't pay. Triggers hardship handling only; never a feature.
@@ -1298,6 +1363,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AskAnswer"] | components["schemas"]["Refusal"] | components["schemas"]["Clarification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_source_ask_source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceText"];
                 };
             };
             /** @description Validation Error */

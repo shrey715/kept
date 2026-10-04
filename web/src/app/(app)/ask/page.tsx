@@ -1,9 +1,10 @@
 "use client";
 
 import { ExclamationTriangleIcon, MagicWandIcon, QuestionMarkCircledIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Code, Flex, Heading, Table, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, Flex, Heading, Table, Text, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import { CitedText, Sources, useVerify } from "@/components/citations";
 import { Rise, Stagger, spring } from "@/components/motion";
 import { api, humanize, type AskResponse } from "@/lib/api";
 import { useSession } from "@/lib/session";
@@ -21,6 +22,7 @@ export default function AskPage() {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<{ q: string; r: AskResponse } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verify, verifyDialog] = useVerify();
 
   async function ask(question: string) {
     if (!me || !question.trim()) return;
@@ -42,7 +44,7 @@ export default function AskPage() {
     <Stagger>
       <Rise>
         <Heading size="8">Collections Ask</Heading>
-        <Text color="gray" size="2">Plain-English questions. Every answer shows its SQL, its tables and how fresh the data is.</Text>
+        <Text color="gray" size="2">Plain-English questions. Every answer shows where it came from: the SQL and tables behind a number, or the policy section behind a rule, one click from the original.</Text>
       </Rise>
       <Rise>
         <Card size="3" mt="5">
@@ -104,7 +106,7 @@ export default function AskPage() {
                       </motion.span>
                     ))}
                 </Flex>
-                <Text as="p" size="5" className="serif" weight="medium">{r.narrative}</Text>
+                <CitedText text={r.narrative} citations={r.citations} onOpen={verify} />
                 {r.columns.length > 0 && (
                   <Table.Root mt="4" variant="surface" size="1">
                     <Table.Header>
@@ -119,28 +121,13 @@ export default function AskPage() {
                     </Table.Body>
                   </Table.Root>
                 )}
-                {r.citations.map((c) => (
-                  <Card key={`${c.document_id}-${c.section}`} variant="surface" mt="3">
-                    <Text weight="bold" size="2">{c.document_id} {c.section}</Text>
-                    <Text size="1" color="gray"> · effective {c.effective_from}</Text>
-                    <Text as="p" size="2" color="gray" mt="1">{c.snippet}</Text>
-                  </Card>
-                ))}
-                {r.sql && (
-                  <details style={{ marginTop: 16 }}>
-                    <summary style={{ cursor: "pointer" }}><Text size="2" color="gray">Show SQL</Text></summary>
-                    <Code variant="soft" size="2" style={{ display: "block", whiteSpace: "pre-wrap", padding: 12, marginTop: 8 }}>{r.sql}</Code>
-                  </details>
-                )}
-                <Text as="p" size="1" color="gray" mt="3">
-                  Tables: {r.tables_used.join(", ") || "none"}
-                  {r.data_freshness && ` · data as of ${new Date(r.data_freshness).toLocaleDateString("en-CA", { dateStyle: "medium" })}`}
-                </Text>
+                <Sources r={r} onOpen={verify} />
               </Card>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+      {verifyDialog}
     </Stagger>
   );
 }
