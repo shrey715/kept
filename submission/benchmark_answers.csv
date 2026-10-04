@@ -168,7 +168,7 @@ loc,3993124.3,10540
 mortgage,4747615.32,980
 overdraft,6619054.44,6860
 personal_loan,27736813.05,23960
-The total amount overdue on open collections cases is <PHONE_NUMBER> CAD for auto_loan, <PHONE_NUMBER> CAD for card, 3,993,124.30 CAD for loc, 4,747,615.32 CAD for mortgage, 6,619,054.44 CAD for overdraft, and <PHONE_NUMBER> CAD for personal_loan. Overdraft has a higher total overdue amount than loc and mortgage.","SELECT primary_product, SUM(total_overdue) AS total_overdue_amount, COUNT(*) AS n FROM silver.collections_cases WHERE outcome IS NULL GROUP BY primary_product ORDER BY primary_product LIMIT 1000",false
+The total amount overdue on open collections cases is 20,687,420.97 CAD for auto_loan, 14,743,219.80 CAD for card, 3,993,124.30 CAD for loc, 4,747,615.32 CAD for mortgage, 6,619,054.44 CAD for overdraft, and 27,736,813.05 CAD for personal_loan. Overdraft has a higher total overdue amount than loc and mortgage.","SELECT primary_product, SUM(total_overdue) AS total_overdue_amount, COUNT(*) AS n FROM silver.collections_cases WHERE outcome IS NULL GROUP BY primary_product ORDER BY primary_product LIMIT 1000",false
 BQ-108,"clicked_pct,links
 12.08,40665
 In September 2026, the share of payment links sent by SMS that were clicked was 12.1%, out of a total of 40665 links.","SELECT ROUND(100.0 * AVG(CASE WHEN link_clicked_flag THEN 1 ELSE 0 END), 2) AS clicked_pct, COUNT(*) AS links FROM silver.contact_history WHERE channel = 'sms' AND NOT payment_link_id IS NULL AND CAST(contact_ts_local AS DATE) BETWEEN CAST('2026-09-01' AS DATE) AND CAST('2026-09-30' AS DATE) LIMIT 1000",false
