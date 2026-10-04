@@ -407,12 +407,12 @@ def train(args: argparse.Namespace) -> int:
     conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
     try:
-        result = run(conn, cutoff=args.cutoff, out=args.out, seed=args.seed)
+        result = run(conn, cutoff=args.cutoff, out=args.out, seed=args.seed, force=args.promote)
     finally:
         conn.close()
     for k, v in result.items():
         print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
-    print(f"model -> {args.out}")
+    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {args.out}")
     return 0
 
 
@@ -619,6 +619,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
             p.add_argument("--seed", type=int, default=0)
+            p.add_argument(
+                "--promote", action="store_true", help="make the new model the champion without the gate"
+            )
         if name == "parity":
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")
