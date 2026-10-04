@@ -28,6 +28,8 @@ kind: "metric" when the question asks for one of the certified metrics below. "p
 policy, procedure, script or regulation says, what collectors may or may not do (including legal action), or
 what happened on a day and why a number changed (an outage, an incident, a release): those are answered from
 the policy, incident and release documents. Otherwise "lookup" (a custom query over the data).
+A question that asks for a share, count, average, rate or amount ("what share of calls were outside permitted
+hours", "how many ...") is about the data, so "metric" or "lookup", even when it names a policy term.
 For a metric set metric_id to exactly one of the metrics below. filters maps column names to values;
 group_by lists only the columns the question breaks the result down by ("by card product" is
 product_code, nothing else). date_from and date_to are ISO dates (inclusive), only when the question names
