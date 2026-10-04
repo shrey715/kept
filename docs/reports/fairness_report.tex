@@ -9,7 +9,7 @@
 \begin{document}
 \makereporttitle
 
-\statrow{\stat{0.86–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0}{protected attributes in the model's inputs}\stat{11}{attributes checked, from the data contract}\stat{7}{flags, all explained below}}
+\statrow{\stat{0.86–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0 of 96,000}{cards change when every protected attribute is scrambled}\stat{11}{attributes checked, from the data contract}\stat{7}{flags, all explained below}}
 
 \takeaway{\textbf{The short version.} For every protected attribute, the group that gets contacted least is within
 0.86–1.00 of the group that gets contacted most, so nothing comes near the four-fifths line. The 7 flags sit on two outcomes.
@@ -113,8 +113,56 @@ insolvency or cease holds where nobody gets contacted, and 206 get a call.
 We checked why. \textbf{30\%} of separated customers carry the vulnerability flag, against 12–15\% of the other statuses. Take
 the flagged customers out and the gap shrinks to 42.5\% against 34–35\%, a ratio of about 0.80. What's left lines up with
 hardship signals from their notes and cash flow. Separation is often a money shock, so that's plausible, and the model never sees
-marital status. We still list it in §5 for compliance to review.
+marital status. We still list it in §6 for compliance to review.
 \end{itemize}
+
+\section{The invariance test: scramble them and rescore}
+
+Ratios show outcomes are even; they can't prove the attributes are \emph{unused}. So we tested that directly, the way
+an auditor would: change the attributes and see whether any decision moves.
+
+\begin{center}
+\begin{tikzpicture}[node distance=0.4cm, every node/.style={font=\small\sffamily, align=center},
+  box/.style={draw=rule, fill=soft, rounded corners=3pt, inner sep=6pt, text width=2.6cm},
+  hot/.style={box, fill=kept!7, draw=kept!40},
+  go/.style={-{Stealth[length=2mm]}, draw=muted, line width=0.7pt}]
+\node[box] (w) {\textbf{Two copies}\\of tonight's warehouse};
+\node[hot, right=of w] (s) {\textbf{Scramble}\\shuffle each attribute across all rows, in silver};
+\node[box, right=of s] (b) {\textbf{Rebuild}\\gold, hardship, features (dbt)};
+\node[box, right=of b] (r) {\textbf{Rescore}\\all 96,000 cases, same clock};
+\node[hot, right=of r] (c) {\textbf{Compare}\\every card, field by field};
+\draw[go] (w) -- (s); \draw[go] (s) -- (b); \draw[go] (b) -- (r); \draw[go] (r) -- (c);
+\end{tikzpicture}
+\end{center}
+
+\begin{table}[H]\small\centering
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}rrL@{}}
+\toprule
+\textbf{Scrambled} & \textbf{Columns} & \textbf{Cards changed} & \textbf{What changed} \\
+\midrule
+The brief's protected attributes & 24 & \textbf{0 of 96,000} & nothing: action, tier, reasons, probabilities, hardship, hold-out all identical \\
+\quad plus every proxy without an operational use & 43 & 299 & all through one rule: 282 cases \emph{gained} hardship protection, 0 lost it; 17 already in hardship gained a cash-flow line on the banner \\
+\bottomrule
+\end{tabularx}
+\caption{Counterfactual invariance on tonight's book. The scramble reached gold: 50\% of gender codes, 75\% of marital statuses
+and 72\% of household sizes in \code{c360\_restricted} changed.}
+\end{table}
+
+\paragraph{The one proxy that moves something} All 299 changes trace to \code{ei\_deposit\_flag}. The cash-flow hardship rule
+reads it: Employment Insurance deposits that started in the last 60 days mark hardship \emph{possible}. POL-COLL-004 v4.2 names
+``waiting for Employment Insurance'' as financial hardship, and the brief says to flag it. The flag can only make a case
+gentler. A hardship review replaces a call or a payment link, and it never takes protection away. EI stays on the contract's
+proxy list, so no model feature can ever read it (the CI lineage test fails the build if one does). The contract now records this
+single use under \code{protectiveUses}, alongside \code{vulnerability\_flag}.
+
+\paragraph{What we left alone, and why} Contact language, address and postal code (time zone, so calling hours) and date of birth
+(identity matching, done before gold) are proxies the bank needs in order to contact the right person correctly. They are listed
+in the script and kept out of the model's features by the same lineage test.
+
+\insight{A bug the test found}{The first run moved 4 probabilities (no actions or tiers) with \emph{nothing} protected involved:
+two trend features are regression slopes whose float sums change in the last bits with row order. A slope of
+$2\times10^{-15}$ against $-4\times10^{-16}$ falls either side of a tree split. We now round them to 9 decimals, so a rebuild is
+bit-for-bit identical, and the protected run then came back at exactly zero.}
 
 \section{What we read from it, and what's next}
 
@@ -128,9 +176,10 @@ signals. We'd ask compliance to sample 50 of these cards and confirm the signals
 That's a data-coverage question for the data team, not a fairness fix.
 \end{enumerate}
 
-\reproduce{\path{scripts/fairness_report.py} joins \code{nba.cards} to \code{gold.c360\_restricted} on a compliance
+\reproduce{\path{scripts/invariance_test.py} (protected, then all) scrambles, rebuilds and rescores two warehouse copies and
+writes \path{data/exports/reports/invariance_*.json}. \path{scripts/fairness_report.py} joins \code{nba.cards} to \code{gold.c360\_restricted} on a compliance
 machine and caches the rates in \path{data/exports/reports/fairness_data.json}; the separated-customer breakdown in §4 is a
-one-off query on the same tables.}{\code{uv run python scripts/fairness\_report.py} (with \code{kept serve} stopped), then
+one-off query on the same tables.}{\code{uv run python scripts/invariance\_test.py protected} and \code{all}; \code{uv run python scripts/fairness\_report.py} (with \code{kept serve} stopped), then
 \code{uv run python scripts/reportlib.py fairness\_report}}
 
 \end{document}

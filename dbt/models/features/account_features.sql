@@ -48,8 +48,10 @@ monthly as (  -- per month-end in the last 12 months: total net cash flow, mean 
 ),
 trends as (  -- least-squares slope per month; at least 3 months
     select case_id, as_of,
-           case when count(net_cash_flow) >= 3 then regr_slope(net_cash_flow, m) end as cash_flow_trend,
-           case when count(utilisation) >= 3 then regr_slope(utilisation, m) end as card_utilisation_trend
+           -- rounded: regr_slope's float sums change in the last bits with row order, and a slope of
+           -- 2e-15 vs -4e-16 sits either side of a tree split (scripts/invariance_test.py found 4 such cards)
+           case when count(net_cash_flow) >= 3 then round(regr_slope(net_cash_flow, m), 9) end as cash_flow_trend,
+           case when count(utilisation) >= 3 then round(regr_slope(utilisation, m), 9) end as card_utilisation_trend
     from monthly
     group by case_id, as_of
 ),
