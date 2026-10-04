@@ -229,6 +229,20 @@ customProperties:
       - speaking_rate_wpm_customer
       - customer_voice_id
       - vulnerability_source
+  # The only uses of a protected or proxy column outside the restricted table, each one protective: it can make
+  # a case gentler (hardship handling, a specialist review), never harsher, and no model feature reads it (the
+  # lineage CI test still fails on any feature that traces back to these). Checked by scripts/invariance_test.py:
+  # scrambling them only ever adds hardship, it never takes it away from anyone or changes anything else.
+  - property: protectiveUses
+    value:
+      - column: deposit_accounts.ei_deposit_flag
+        use: "cash-flow hardship rule: EI deposits that started in the last 60 days mark hardship POSSIBLE"
+        why: "POL-COLL-004 v4.2 names waiting for Employment Insurance as financial hardship; the brief says flag it"
+        where: dbt/models/hardship/cashflow_observations.sql
+      - column: customers.vulnerability_flag
+        use: "a flagged customer is treated as hardship: protective actions only, specialist review first"
+        why: "data dictionary: customer marked potentially vulnerable (vulnerability_type itself stays protected)"
+        where: dbt/models/gold/c360_customer.sql (read by the NBA rules)
   - property: restrictedTables
     value:
       - gold.c360_restricted
