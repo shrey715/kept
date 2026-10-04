@@ -1,7 +1,8 @@
 """Fairness report on the scored cards: who gets which recommendation, by protected attribute.
 
 Reads nba.cards (D's `kept score`) and gold.c360_restricted (A's gold build), from the warehouse or from
-exported Parquet files, and writes docs/reports/fairness_report.md. Compliance-only inputs: run it on a
+exported Parquet files, and writes data/exports/reports/fairness_report.md
+(the PDF: fairness_report_pdf.py). Compliance-only inputs: run it on a
 machine that is allowed to read gold.c360_restricted.
 
     uv run python scripts/fairness_report.py
@@ -27,11 +28,11 @@ def main() -> None:
     ap.add_argument(
         "--restricted", type=Path, help="gold.c360_restricted as Parquet (default: the warehouse)"
     )
-    ap.add_argument("--out", type=Path, default=Path("docs/reports/fairness_report.md"))
+    ap.add_argument("--out", type=Path, default=Path("data/exports/reports/fairness_report.md"))
     ap.add_argument(
         "--notes",
         type=Path,
-        default=Path("docs/reports/fairness_findings.md"),
+        default=Path("data/exports/reports/fairness_findings.md"),
         help="hand-written findings appended",
     )
     args = ap.parse_args()

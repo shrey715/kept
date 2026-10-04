@@ -24,7 +24,7 @@ COMMANDS = {
     "serve": "Track D: run the API",
     "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
     "map": "Track A: schema drift of data/raw against the data dictionary; --draft: LLM mapping drafts",
-    "drift": "Track D: feature drift (PSI) against training -> docs/reports/drift_report.md",
+    "drift": "Track D: feature drift (PSI) against training (PDF: scripts/drift_report.py)",
 }
 
 
@@ -515,7 +515,8 @@ def drift(args: argparse.Namespace) -> int:
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as con:
         train = con.execute("select * from features_train.case_features").df()
     rows = drift_report(train, live, [f.name for f in FEATURES])
-    out = REPO_ROOT / "docs" / "reports" / "drift_report.md"
+    out = REPO_ROOT / "data" / "exports" / "reports" / "drift_report.md"  # the PDF: scripts/drift_report.py
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         to_markdown(rows, train_rows=len(train), live_rows=len(live), live_as_of=str(live["as_of"].max()))
     )

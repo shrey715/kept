@@ -1,0 +1,13 @@
+% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize}
+\let\oldunderscore\_
+\renewcommand{\_}{\oldunderscore\allowbreak}
+\usepackage{xcolor}
+\definecolor{keptred}{HTML}{C8102E}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries}{}{0em}{}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.15}

@@ -1,0 +1,228 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+\documentclass[
+  10pt,
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+  \setmainfont[]{Carlito}
+  \setmonofont[]{Adwaita Mono}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+% Shared LaTeX extras for the Kept report PDFs (scripts/reportlib.py)
+\usepackage{etoolbox}
+\AtBeginEnvironment{longtable}{\footnotesize}
+\let\oldunderscore\_
+\renewcommand{\_}{\oldunderscore\allowbreak}
+\usepackage{xcolor}
+\definecolor{keptred}{HTML}{C8102E}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{keptred}}{}{0em}{}
+\titleformat{\subsection}{\large\bfseries}{}{0em}{}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.15}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Fairness report},
+  pdfauthor={Team Sharpe Shooters},
+  colorlinks=true,
+  linkcolor={keptred},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={keptred},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Fairness report}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{Does Kept treat protected groups differently? (compliance-only
+inputs)}
+\author{Team Sharpe Shooters}
+\date{04 October 2026}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=black}
+\setcounter{tocdepth}{1}
+\tableofcontents
+}
+\section{TL;DR}\label{tldr}
+
+\textbf{No protected group gets materially different treatment.} Across
+96,000 scored cases, the share of customers who get \emph{any} contact
+action stays within a ratio of \textbf{0.86--1.00} between the lowest
+and highest group of every protected attribute (the four-fifths rule
+flags below 0.80).
+
+The flags you'll see sit on \textbf{calls}, a rare action
+(\textasciitilde3\% of cases), where tiny rates make ratios jumpy, and
+on \textbf{hardship review}, which is \emph{supposed} to land more on
+vulnerable customers. That's the protection doing its job.
+
+\textbf{How this is possible:} protected attributes never go into a
+decision. They live in \texttt{gold.c360\_restricted}, which only
+compliance can read; a CI test fails the build if any model feature's
+lineage touches one (or a proxy like postal code, age or language); and
+a curated test suite checks the trained model's actual inputs. We use
+them for exactly one thing: this report.
+
+\section{The overview}\label{the-overview}
+
+Each dot is the lowest group's rate divided by the highest group's rate
+for one attribute and one outcome. 1.0 means every group gets that
+outcome equally often.
+
+\includegraphics[width=1\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_ratios.png}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}
+  >{\raggedleft\arraybackslash}p{(\linewidth - 8\tabcolsep) * \real{0.2000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Attribute
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Any contact
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Call
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Hardship review
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedleft
+Cases with it blank
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\texttt{customer\_accent\_region} & 0.86 & 0.57 (flag) & 0.82 &
+94,786 \\
+\texttt{vulnerability\_type} & 0.91 & 0.36 (flag) & 0.91 & 82,304 \\
+\texttt{accessibility\_type} & 0.93 & 0.64 (flag) & 0.82 & 93,394 \\
+\texttt{dependants\_count} & 0.94 & 0.87 & 0.82 & 30,681 \\
+\texttt{marital\_status} & 0.96 & 0.69 (flag) & 0.76 (flag) & 10,685 \\
+\texttt{household\_size} & 0.98 & 0.79 (flag) & 0.93 & 30,741 \\
+\texttt{gender\_code} & 0.98 & 0.74 (flag) & 0.99 & 4,389 \\
+\texttt{citizenship\_status} & 0.99 & 0.83 & 0.98 & 4,391 \\
+\texttt{accessibility\_needs\_flag} & 0.99 & 0.95 & 0.97 & 3,458 \\
+\texttt{ccb\_deposit\_flag} & 1.00 & 0.90 & 0.98 & 51,136 \\
+\texttt{newcomer\_program\_flag} & 1.00 & 0.97 & 0.98 & 3,458 \\
+\end{longtable}
+
+(flag) = below 0.80. A flag is a question for compliance, not a verdict.
+
+\section{Group by group}\label{group-by-group}
+
+Blue = gets any contact action, aqua = gets a hardship review.
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_gender_code.png}\hfill
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_citizenship_status.png}
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_marital_status.png}\hfill
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_accessibility_needs_flag.png}
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_vulnerability_type.png}\hfill
+
+\includegraphics[width=0.48\linewidth,height=\textheight,keepaspectratio]{docs/reports/figures/f_household_size.png}
+
+\section{What we read from it}\label{what-we-read-from-it}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Contact is even.} Gender, citizenship, household, dependants,
+  benefits and accessibility all sit at 0.93--1.00 for ``any contact
+  action''.
+\item
+  \textbf{Call flags are small-number noise.} Calls are
+  \textasciitilde3\% of cards; 3.5\% vs 2.9\% is a 0.83 ratio but a tiny
+  absolute gap.
+\item
+  \textbf{Vulnerable customers get more hardship reviews, on purpose.}
+  The vulnerability \emph{flag} (a safeguard, not a protected attribute
+  in the data dictionary) routes cases to protective actions. That shows
+  up as a gap by \texttt{vulnerability\_type}, and it's the point.
+\item
+  \textbf{Blank attributes go with fewer contacts.} That's thin data
+  (often holds, cease or the hold-out), not a group. Worth a
+  data-coverage look, not a fairness fix.
+\end{enumerate}
+
+\emph{Rebuild:}
+\texttt{uv\ run\ python\ scripts/fairness\_report\_pdf.py} (with
+\texttt{kept\ serve} stopped, on a compliance machine).
+
+\end{document}
