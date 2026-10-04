@@ -19,9 +19,9 @@ DICTIONARY = "CIBC Hackathon - Data Dictionary.xlsx"
 @pytest.fixture(scope="module")
 def dictionary(repo_root: Path) -> dict[str, Any]:
     openpyxl = pytest.importorskip("openpyxl")
-    path = repo_root / "docs" / DICTIONARY
+    path = repo_root / "docs" / "brief" / DICTIONARY
     if not path.exists():
-        pytest.skip(f"{DICTIONARY} not in docs/")
+        pytest.skip(f"{DICTIONARY} not in docs/brief/")
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     rows = [r for r in wb["Columns"].iter_rows(min_row=2, values_only=True) if r and r[0]]
     tables = [r[0] for r in wb["Tables"].iter_rows(min_row=2, values_only=True) if r and r[0]]

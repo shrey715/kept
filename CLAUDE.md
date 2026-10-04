@@ -1,6 +1,6 @@
 # Kept: agent instructions
 
-Four people build this in parallel tracks. Before writing code, read `docs/TEAM_PLAN.md`
+Four people build this in parallel tracks. Before writing code, read `docs/team/TEAM_PLAN.md`
 §0 (rules for agents), §3 (what can't be parallelized), §3a (conventions every track follows)
 and your track's phase in §5.
 
@@ -28,7 +28,7 @@ don't ask which track or phase, and don't work on `track-a/b/c/d`. The rules:
   > The parallelizable part of Phase N for Track X is done. We need to integrate it with
   > the other tracks' work at gate GN before we can move on to implement it further.
 
-  Then list what you finished, what gate GN needs from the other tracks (`docs/TEAM_PLAN.md` §6),
+  Then list what you finished, what gate GN needs from the other tracks (`docs/team/TEAM_PLAN.md` §6),
   and any open questions. Wait for the user to confirm the gate passed before starting the next phase.
 
 ## Big downloads and long jobs: ask first
@@ -42,14 +42,14 @@ on your own. The dataset is the exception: download it on every machine without 
 ## When the user says a sequential part or integration is done
 
 Check it before moving on, cheaply: make sure the branch is pulled and up to date with
-`origin/main`; then, for that item in `docs/TEAM_PLAN.md` §3/§5/§6, confirm the listed files and
+`origin/main`; then, for that item in `docs/team/TEAM_PLAN.md` §3/§5/§6, confirm the listed files and
 functions exist and are no longer stubs (grep for `NotImplementedError`, `make progress`), and that
 its exit checks in §6 hold. Skim signatures and diffs, don't read whole files. Report what's there
 and what's missing in a few lines, then carry on.
 
 ## Your track file
 
-Each person has one status file: `docs/tracks/Track_<X>.md`, where X is their track. Create it
+Each person has one status file: `docs/team/tracks/Track_<X>.md`, where X is their track. Create it
 only after the user has told you which track they're on, and never create or edit another track's
 file. It's for the user and the team to read; instructions come through the prompt, so don't
 re-read the file before tasks. Update it after each task (or when you get blocked) with small
@@ -58,7 +58,7 @@ edits to the sections below, not a rewrite. Use this layout:
 ```markdown
 # Track <X>: <name>
 
-Person: <name> · Tasks: `docs/TEAM_PLAN.md` §5
+Person: <name> · Tasks: `docs/team/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: <N>
@@ -81,15 +81,15 @@ Person: <name> · Tasks: `docs/TEAM_PLAN.md` §5
 ## LLMs: free only
 
 Never use a paid LLM API or key, and never set one in `.env`. Use only the free options in
-`docs/TEAM_PLAN.md` §1b: a local model on Track C's GPU (Ollama) for text extraction, and a free
+`docs/team/TEAM_PLAN.md` §1b: a local model on Track C's GPU (Ollama) for text extraction, and a free
 hosted tier for the Ask. Every call goes through `kept.common.llm`. If a free tier's rate limit
 gets in the way, tell the user rather than switching providers on your own.
 
 ## When something is ambiguous
 
-First look it up in the docs: `docs/SharpeShooters_SystemDesign.pdf` (our design), `docs/collection hackathon.pdf` (challenge
-brief), `docs/CIBC Hackathon Build Phase - Instructions.pdf` (build rules, deliverables, deadline),
-`docs/CIBC Hackathon - Data Dictionary.xlsx`, the dataset release's `README.md`, and `docs/TEAM_PLAN.md`. Then ask the user, and
+First look it up in the docs: `docs/design/SharpeShooters_SystemDesign.pdf` (our design), `docs/brief/collection hackathon.pdf` (challenge
+brief), `docs/brief/CIBC Hackathon Build Phase - Instructions.pdf` (build rules, deliverables, deadline),
+`docs/brief/CIBC Hackathon - Data Dictionary.xlsx`, the dataset release's `README.md`, and `docs/team/TEAM_PLAN.md`. Then ask the user, and
 tell them what the docs say, quoting the file and section, so they can make an informed decision.
 If the docs say nothing about it, say that too.
 
@@ -97,7 +97,7 @@ If the docs say nothing about it, say that too.
 
 Track C's machine has an RTX 5070 Ti. If you're Track C's agent, use the GPU for everything that
 can run on it: SetFit training and inference, Whisper, embeddings, and the heavy runs other tracks
-hand over (`docs/TEAM_PLAN.md` §1a). Check `torch.cuda.is_available()` first; if it's False, tell
+hand over (`docs/team/TEAM_PLAN.md` §1a). Check `torch.cuda.is_available()` first; if it's False, tell
 the user instead of quietly running on CPU. Other tracks: don't run heavy jobs on a laptop, hand
 them to C.
 

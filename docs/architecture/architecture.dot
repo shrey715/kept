@@ -1,6 +1,6 @@
-// Kept: final architecture (deliverable 2). Render: dot -Tpng -Gdpi=180 docs/architecture.dot -o docs/architecture.png
-//                                                    dot -Tpdf docs/architecture.dot -o docs/architecture.pdf
-// Orange-bordered boxes = changed from the 2 Oct design (docs/SharpeShooters_SystemDesign.pdf).
+// Kept: final architecture (deliverable 2). Render: dot -Tpng -Gdpi=180 docs/architecture/architecture.dot -o docs/architecture/architecture.png
+//                                                    dot -Tpdf docs/architecture/architecture.dot -o docs/architecture/architecture.pdf
+// Orange-bordered boxes = changed from the 2 Oct design (docs/design/SharpeShooters_SystemDesign.pdf).
 digraph kept {
   graph [rankdir=TB, splines=ortho, fontname="Helvetica", fontsize=11, nodesep=0.28, ranksep=0.42, pad=0.3, newrank=true,
          label=<<b>Kept</b>: a guarded next best action for promises customers can keep · Team Sharpe Shooters · final architecture, 4 Oct 2026<br/><font point-size="9" color="#666666">orange border = changed from the 2 Oct design · numbers are from the real-data runs</font>>,

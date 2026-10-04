@@ -1,6 +1,6 @@
 # Data quality report
 
-Contract: `kept-c360-customer` v1.0.0. Written 2026-10-03 23:56 UTC from the warehouse by `scripts/quality_report.py`: the record counts are queried; the few match-quality figures in the handling column (79% to 98%, 5,498 held clusters) are from Track A's checks, recorded in `docs/tracks/Track_A.md`.
+Contract: `kept-c360-customer` v1.0.0. Written 2026-10-03 23:56 UTC from the warehouse by `scripts/quality_report.py`: the record counts are queried; the few match-quality figures in the handling column (79% to 98%, 5,498 held clusters) are from Track A's checks, recorded in `docs/team/tracks/Track_A.md`.
 
 ## 1. The gate on the golden record
 

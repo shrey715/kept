@@ -1,7 +1,7 @@
 """Kept: a guarded next best action for promises customers can keep.
 
 Package layout follows the four layers of the system design
-(docs/SharpeShooters_SystemDesign.pdf):
+(docs/design/SharpeShooters_SystemDesign.pdf):
 
     kept.contracts   shared, fixed API between tracks (change only by team agreement)
     kept.config      every threshold the design commits to, in one place

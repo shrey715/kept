@@ -15,12 +15,12 @@ Customer data never goes into git.
 | `models/`     | Local model artefacts (SetFit); uplift models live in MLflow (`mlruns/`) | Track C / D |
 
 The table list, columns, sensitivity labels and relationships are in
-`docs/CIBC Hackathon - Data Dictionary.xlsx`; `tests/contracts/test_data_dictionary.py`
+`docs/brief/CIBC Hackathon - Data Dictionary.xlsx`; `tests/contracts/test_data_dictionary.py`
 keeps our contract in step with it.
 
 ## How the release goes into `data/` (K3)
 
-Download and unzip the release as in `docs/TEAM_PLAN.md` §3 (Q1), then, from inside
+Download and unzip the release as in `docs/team/TEAM_PLAN.md` §3 (Q1), then, from inside
 `maple_collections_release/`, with `$K` = this repo's `data/` folder:
 
 ```bash

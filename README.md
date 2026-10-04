@@ -3,9 +3,9 @@
 A guarded next best action for promises customers can keep.
 Team Sharpe Shooters, CIBC Collections Hackathon.
 
-- Design: [`docs/SharpeShooters_SystemDesign.pdf`](docs/SharpeShooters_SystemDesign.pdf)
-- Data dictionary: [`docs/CIBC Hackathon - Data Dictionary.xlsx`](docs/)
-- **Who builds what, phases, integration gates, interfaces: [`docs/TEAM_PLAN.md`](docs/TEAM_PLAN.md)**
+- Design: [`docs/design/SharpeShooters_SystemDesign.pdf`](docs/design/SharpeShooters_SystemDesign.pdf)
+- Data dictionary: [`docs/brief/CIBC Hackathon - Data Dictionary.xlsx`](docs/)
+- **Who builds what, phases, integration gates, interfaces: [`docs/team/TEAM_PLAN.md`](docs/team/TEAM_PLAN.md)**
 
 ## Run it
 
@@ -105,10 +105,10 @@ latest 06:00 UTC run, so cards are never stale.
 
 | Command | What it writes |
 |---|---|
-| `kept gate` then `uv run python scripts/quality_report.py` | `docs/quality_report.md` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
-| `kept drift` | `docs/drift_report.md`: PSI per feature, tonight's features against training |
+| `kept gate` then `uv run python scripts/quality_report.py` | `docs/reports/quality_report.md` (deliverable 4); needs the 300 reviewed pairs in `data/labels/match_pairs.csv` |
+| `kept drift` | `docs/reports/drift_report.md`: PSI per feature, tonight's features against training |
 | `kept map [--draft]` | schema drift of `data/raw` against the data dictionary; `--draft` asks the local LLM for a mapping an engineer reviews (reads files only) |
-| `uv run python scripts/business_case.py` | `docs/business_case.md`: the dollar case for payday-dated promises (reads files only) |
+| `uv run python scripts/business_case.py` | `docs/reports/business_case.md`: the dollar case for payday-dated promises (reads files only) |
 | `uv run python scripts/eval_qa.py 100` | QA call scoring (`kept.text.qa`) against the release's QA labels |
 
 **Start it for a demo** (after the first run; each time the machine starts). Stop `kept serve` before any
@@ -241,7 +241,7 @@ cd web && pnpm lint && npx tsc --noEmit
   data" in it); a case with no recorded call gets "there is no recorded call", not a refusal. "Why did X
   change on that day" is answered from the incident reports and the operations-events table (indexed with
   the policies).
-- **Fairness report on the real cards (B):** `docs/fairness_report.md` compares recommendations across the
+- **Fairness report on the real cards (B):** `docs/reports/fairness_report.md` compares recommendations across the
   protected attributes in `gold.c360_restricted` (compliance only); a blank attribute is reported, not
   treated as a group.
 

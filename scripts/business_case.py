@@ -1,7 +1,7 @@
 # ruff: noqa: E501  (report prose)
 """The dollar case for Kept sizing, from the release's own history (deliverable support for the deck).
 
-    uv run python scripts/business_case.py      # writes docs/business_case.md
+    uv run python scripts/business_case.py      # writes docs/reports/business_case.md
 
 Resolved promises by days between the customer's last salary credit and the due date (scripts/
 payday_timing.py), then: if every promise now due 3+ days after payday were dated 0-2 days after it (what
@@ -72,7 +72,7 @@ def main() -> None:
         "Not counted: fewer wasted contacts from uplift targeting (Qini 0.0073 vs 0.0017 for calls) and lower",
         "roll rate, both measured on the hold-out after launch.",
     ]
-    out = REPO_ROOT / "docs" / "business_case.md"
+    out = REPO_ROOT / "docs" / "reports" / "business_case.md"
     out.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 

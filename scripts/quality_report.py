@@ -1,5 +1,5 @@
 # ruff: noqa: E501  (one-off generator: long SQL and prose strings)
-"""Write docs/quality_report.md (deliverable 4): the gate result plus every data issue we found, how many
+"""Write docs/reports/quality_report.md (deliverable 4): the gate result plus every data issue we found, how many
 records it touched (counted now, from the warehouse) and what we did about it.
 
     uv run kept gate          # first: it writes the gate table this reads
@@ -16,7 +16,7 @@ from kept.common.db import connect
 from kept.config import EXPORT_DIR, REPO_ROOT
 from kept.contracts.data_contract import load_data_contract
 
-OUT = REPO_ROOT / "docs" / "quality_report.md"
+OUT = REPO_ROOT / "docs" / "reports" / "quality_report.md"
 PROVINCES = "'AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'"
 
 # (issue, where, SQL returning (records affected, records in the table), how we handled it)
@@ -197,7 +197,7 @@ def main() -> None:
                 f"Contract: `kept-c360-customer` v{contract.version}. Written {datetime.now(UTC):%Y-%m-%d %H:%M} UTC from the "
                 "warehouse by `scripts/quality_report.py`: the record counts are queried; the few match-quality "
                 "figures in the handling column (79% to 98%, 5,498 held clusters) are from Track A's checks, "
-                "recorded in `docs/tracks/Track_A.md`.",
+                "recorded in `docs/team/tracks/Track_A.md`.",
                 "",
                 "## 1. The gate on the golden record",
                 "",

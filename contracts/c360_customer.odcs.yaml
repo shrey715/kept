@@ -308,7 +308,7 @@ customProperties:
       - text.redacted_notes
   - property: decisions
     value:
-      - "Ground-truth IDs: the organisers provided none. Match precision is evidenced by the checks in docs/quality_report.md section 4 and a steward's review of 300 predicted links (target 98%)."
+      - "Ground-truth IDs: the organisers provided none. Match precision is evidenced by the checks in docs/reports/quality_report.md section 4 and a steward's review of 300 predicted links (target 98%)."
       - "Roll rate: the certified metric and its SQL are in kept/ask/certified.py (Track B)."
       - "Random assignment: collections_cases.assignment_method = 'random' (Track D)."
       - "Autopay/PAD accounts at other banks: ignored for linking (nothing to link to); left untouched in silver."
