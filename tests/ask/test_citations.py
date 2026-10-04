@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("sqlglot")  # the `ask` extra; the contract-test job runs without it
+
 from kept.ask.policy import PolicyChunk, PolicyIndex
 from kept.ask.service import tag_citations
 from kept.contracts.ask import Citation
