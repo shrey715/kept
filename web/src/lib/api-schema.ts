@@ -174,6 +174,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chart
+         * @description A chart for rows the Ask already returned (#100, not on the Ask page yet). Reads no data.
+         */
+        post: operations["chart_chart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ask/source": {
         parameters: {
             query?: never;
@@ -437,6 +457,61 @@ export interface components {
          * @enum {string}
          */
         Channel: "call" | "sms" | "email" | "push";
+        /** ChartChoice */
+        ChartChoice: {
+            option: components["schemas"]["ChartOption"];
+            /** Options */
+            options: components["schemas"]["ChartOption"][];
+            /** Profile */
+            profile: components["schemas"]["ColumnProfile"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "llm" | "rules";
+            /** Why */
+            why?: string | null;
+        };
+        /**
+         * ChartOption
+         * @description One chart the rows support. x / y / series are column names; y has one entry per series
+         *     (several only when they share a unit: never two scales).
+         */
+        ChartOption: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "tile" | "bar" | "line" | "grouped_bar" | "table";
+            /** Title */
+            title: string;
+            /** X */
+            x?: string | null;
+            /** Y */
+            y?: string[];
+            /** Series */
+            series?: string | null;
+            /** Unit */
+            unit?: ("fraction" | "percent" | "money" | "count" | "number") | null;
+            /** Describe */
+            describe: string;
+        };
+        /** ChartRequest */
+        ChartRequest: {
+            /** Question */
+            question: string;
+            /** Sql */
+            sql?: string | null;
+            /** Columns */
+            columns: string[];
+            /** Rows */
+            rows: unknown[][];
+            /** User Id */
+            user_id: string;
+            role: components["schemas"]["Role"];
+        };
         /**
          * CheckName
          * @enum {string}
@@ -494,6 +569,26 @@ export interface components {
             /** Question */
             question: string;
             intent?: components["schemas"]["Intent"] | null;
+        };
+        /** ColumnProfile */
+        ColumnProfile: {
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "number" | "time" | "category" | "id" | "text";
+            /** Unit */
+            unit?: ("fraction" | "percent" | "money" | "count" | "number") | null;
+            /** Distinct */
+            distinct: number;
+            /** Nulls */
+            nulls: number;
+            /** Low */
+            low?: number | null;
+            /** High */
+            high?: number | null;
         };
         /**
          * ContactPermissions
@@ -807,6 +902,8 @@ export interface components {
             sizing_text?: string | null;
             /** Similar Cases Text */
             similar_cases_text?: string | null;
+            /** Legacy Text */
+            legacy_text?: string | null;
             /**
              * Checks
              * @default []
@@ -1446,6 +1543,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AskAnswer"] | components["schemas"]["Refusal"] | components["schemas"]["Clarification"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chart_chart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartChoice"];
                 };
             };
             /** @description Validation Error */

@@ -29,6 +29,7 @@ class Purpose:
     ASK_ROUTE = "ask.route"  # Track B: question -> Intent
     ASK_SQL = "ask.sql_candidate"  # Track B: one call per lookup SQL candidate
     ASK_NARRATE = "ask.narrate"  # Track B: explain the result rows
+    ASK_CHART = "ask.chart"  # kept.app.charts: pick a chart for the result rows (#100)
     TEXT_EXTRACT = "text.extract"  # Track C: note/transcript extraction
 
 

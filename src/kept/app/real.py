@@ -24,11 +24,13 @@ from kept.contracts.interfaces import AuditLog
 from kept.contracts.nba import CaseContext, ProposalStatus
 from kept.data.c360_reader import DuckDBC360Reader
 from kept.data.identity.steward import load_steward_queue
+from kept.features.drift import load_alarm
 from kept.features.store import FeastFeatureProvider
 from kept.governance.access import mask_name
 from kept.hardship.programs import HardshipProgram, ProgramCase, eligible_programs
 from kept.nba.context import KeptContextBuilder, duckdb_case_reader
 from kept.nba.engine import KeptEngine
+from kept.nba.promise_model import load_model
 from kept.nba.release import Releaser
 from kept.text.store import DuckDBExtractionStore
 
@@ -76,6 +78,8 @@ def real_services(
         audit_log=audit_log,
         proposals=proposals,
         programs=_programs(conn),
+        drift_alarm=load_alarm(EXPORT_DIR / "features"),
+        promise_model=load_model(EXPORT_DIR / "models" / "promise.pkl"),
     )
     typed: dict[str, str] = {}  # notes typed in this session: source_id -> text
 
@@ -88,12 +92,21 @@ def real_services(
             ).fetchone()
         return row[0] if row else None
 
+    from kept.app.charts import ChartChoice, ChartRequest, choose_chart
     from kept.ask.service import build_ask
+
+    ask = build_ask(conn.cursor(), audit_log)
+    # ponytail: the chart picker borrows the Ask's gateway and redactor (one Presidio in memory) without
+    # changing how the Ask is built; give build_ask an llm/redactor argument pair once #100 is integrated.
+    llm, redactor = getattr(ask, "_llm", None), getattr(ask, "_redactor", None)
+
+    def chart(request: ChartRequest) -> ChartChoice:
+        return choose_chart(request, llm=llm, redactor=redactor)
 
     return Services(
         engine=engine,
         release_gate=Releaser(proposals=proposals, context=context, audit_log=audit_log),
-        ask=build_ask(conn.cursor(), audit_log),
+        ask=ask,
         c360=c360,
         audit_log=audit_log,
         proposals=proposals,
@@ -102,6 +115,7 @@ def real_services(
         note_text=note_text,
         steward=load_steward_queue(warehouse=warehouse),
         scored_queue=_scored_queue(conn),
+        chart=chart,
     )
 
 

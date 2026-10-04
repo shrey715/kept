@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from kept.config import PROPOSAL_TTL
@@ -20,7 +21,7 @@ from kept.contracts import (
     HardStop,
     ReleaseTier,
 )
-from kept.nba.engine import KeptEngine
+from kept.nba.engine import KeptEngine, _legacy_text
 
 from ..fakes import ConstantScorer, FixedContextBuilder, InMemoryAuditLog, StaticFeatureProvider
 
@@ -288,11 +289,13 @@ def test_programmes_lookup_failure_keeps_the_card(make_ctx) -> None:  # type: ig
 
 @pytest.mark.parametrize(
     ("hardship", "want"),
-    [(HardshipStatus.NONE, Action.CALL), (HardshipStatus.POSSIBLE, Action.HARDSHIP_REVIEW)],
+    # the call becomes a payday-dated ask when one can be sized (#79): this balance needs instalments
+    [(HardshipStatus.NONE, Action.PAYMENT_PLAN), (HardshipStatus.POSSIBLE, Action.HARDSHIP_REVIEW)],
 )
 def test_model_without_promise_plan_or_review_arms(make_ctx, hardship, want) -> None:  # type: ignore[no-untyped-def]
     """The real model only has the randomised arms: promise, plan and hardship review are calls and
-    take the call's P(paid); hardship review only when hardship protects the case."""
+    take the call's P(paid); hardship review only when hardship protects the case; a sizable call
+    asks for a payday-dated promise."""
     ctx = make_ctx(hardship_status=hardship)
     fv = FeatureVector(
         case_id=ctx.case_id,
@@ -371,3 +374,89 @@ def test_similar_cases_line(make_ctx) -> None:  # type: ignore[no-untyped-def]
     assert similar_cases(empty, Action.PROMISE_REQUEST) and "payday" in similar_cases(
         empty, Action.PROMISE_REQUEST
     )  # type: ignore[operator]
+
+
+def test_card_compares_with_the_banks_current_strategy(engine) -> None:  # type: ignore[no-untyped-def]
+    """Issue #90: one line with the legacy action and both chances of payment."""
+    eng, _ = engine(legacy_action=Action.SMS_PAYMENT_LINK)
+    card = eng.recommend("C-118204", NOW)
+    assert card.proposal is not None and card.proposal.action is not Action.SMS_PAYMENT_LINK
+    assert card.legacy_text is not None
+    assert "text a payment link (30% chance" in card.legacy_text and card.legacy_text.endswith("%).")
+    same, _ = engine(legacy_action=card.proposal.action)
+    assert same.recommend("C-118204", NOW).legacy_text == "Same as the bank's current strategy."
+    unscored = _legacy_text(
+        Action.HARDSHIP_REVIEW,
+        Action.EMAIL,
+        pd.Series({"email": 0.29}),
+        {Action.EMAIL: Action.EMAIL},
+        [Action.EMAIL],
+    )
+    assert unscored == (
+        "The bank's current strategy would: call to start a hardship review (our model doesn't score it for "
+        "this customer, and it isn't allowed for this customer today). Ours: send a reminder email (29%)."
+    )
+    none, _ = engine(legacy_action=None)
+    assert (
+        none.recommend("C-118204", NOW).legacy_text
+        == "The bank's current strategy has no action for this case."
+    )
+
+
+def test_drift_alarm_sends_green_cards_to_a_person(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    """#86: while a model input has drifted overnight, a Green proposal becomes Amber."""
+    green = {"wait": 0.2, "email": 0.3, "push": 0.21, "sms_payment_link": 0.22, "call": 0.21}
+
+    def tier(alarm):  # type: ignore[no-untyped-def]
+        ctx = make_ctx()
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
+            scorer=ConstantScorer(green),
+            audit_log=InMemoryAuditLog(),
+            drift_alarm=alarm,
+        )
+        card = eng.recommend(ctx.case_id, NOW)
+        assert card.proposal is not None and card.proposal.action is Action.EMAIL
+        return card.proposal.tier
+
+    assert tier(()) is ReleaseTier.GREEN
+    assert tier(("max_dpd",)) is ReleaseTier.AMBER
+
+
+def test_a_call_asks_for_a_payday_promise_only_when_one_can_be_sized(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    """#79: same contact, a sized ask. Without payday or spare cash it stays a plain call."""
+    randomised = {a: PROBS[a] for a in ("wait", "email", "push", "sms_payment_link", "call")}
+
+    def card(**over):  # type: ignore[no-untyped-def]
+        ctx = make_ctx(**over)
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
+            scorer=ConstantScorer(randomised),
+            audit_log=InMemoryAuditLog(),
+        )
+        return eng.recommend(ctx.case_id, NOW)
+
+    sized = card()
+    assert sized.proposal is not None and sized.proposal.action in (
+        Action.PROMISE_REQUEST,
+        Action.PAYMENT_PLAN,
+    )
+    assert sized.proposal.sizing is not None and sized.sizing_text
+    plain = card(expected_next_payroll_date=None)
+    assert (
+        plain.proposal is not None and plain.proposal.action is Action.CALL and plain.proposal.sizing is None
+    )

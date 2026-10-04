@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -19,6 +20,7 @@ COMMANDS = {
     "parity": "Track A: offline/online parity test",
     "extract": "Track C: text extraction on new notes",
     "train": "Track D: train uplift models, log to MLflow",
+    "train-promises": "Track D: P(kept | promise) model for the card's promise line (#79)",
     "score": "Track D: score every open case",
     "benchmark": "Track B: run the Ask scorecard",
     "serve": "Track D: run the API",
@@ -285,6 +287,26 @@ def _last_nightly() -> datetime:
     return run if run <= now else run - timedelta(days=1)
 
 
+def _drift_alarm(previous: Path, served: Path) -> None:
+    """#86: tonight's model inputs against last night's -> drift_alarm.json next to the export.
+    While it names a feature, the engine sends every Green card to a person (Amber)."""
+    import json
+
+    import pandas as pd
+
+    from kept.contracts.feature_registry import model_inputs
+    from kept.features.drift import ALARM_FILE, night_over_night
+
+    if not previous.exists():
+        alarm: dict[str, object] = {"previous_as_of": None, "drifted": [], "psi": {}}
+    else:
+        alarm = night_over_night(pd.read_parquet(previous), pd.read_parquet(served), list(model_inputs()))
+    served.with_name(ALARM_FILE).write_text(json.dumps(alarm, indent=1))
+    drifted = [str(f) for f in alarm["drifted"]]  # type: ignore[attr-defined]
+    if drifted:
+        print(f"kept features: DRIFT since last night in {', '.join(drifted)}: Green cards go to review")
+
+
 def features(args: argparse.Namespace) -> int:
     """Track D: dbt feature models, then the Feast export + apply + materialize.
     --training builds the per-decision spine into features_train instead (for `kept train`)."""
@@ -311,11 +333,16 @@ def features(args: argparse.Namespace) -> int:
         return 1
     if args.training:
         return 0
+    served = EXPORT_DIR / "features" / "case_features.parquet"
+    previous = served.with_name("case_features_prev.parquet")
+    if served.exists():  # last night's, for the drift alarm; a copy, so a failed export keeps it served
+        shutil.copy2(served, previous)
     conn = duckdb.connect(str(WAREHOUSE_PATH))  # not read_only: dbt's connection in this process is open
     try:
-        n = export_features(conn, EXPORT_DIR / "features" / "case_features.parquet")
+        n = export_features(conn, served)
     finally:
         conn.close()
+    _drift_alarm(previous, served)
     feast = [str(Path(sys.executable).parent / "feast")]
     repo = Path(__file__).resolve().parents[2] / "feature_repo"
     start, end = args.as_of - timedelta(days=1), args.as_of + timedelta(seconds=1)
@@ -396,6 +423,23 @@ def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = N
     return 0
 
 
+def train_promises(args: argparse.Namespace) -> int:
+    """#79: P(kept | promise) on resolved promises, time split; explains sized promises on the card."""
+    import duckdb
+
+    from kept.nba import promise_model as pm
+
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
+        conn.execute("set memory_limit = '3GB'; set threads = 2")
+        rows = pm.load(conn)
+    model, metrics = pm.train(rows)
+    pm.save(model, args.out)
+    for k, v in metrics.items():
+        print(f"{k:>22}  {v:.4f}")
+    print(f"model -> {args.out}")
+    return 0
+
+
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
     import duckdb
@@ -407,12 +451,19 @@ def train(args: argparse.Namespace) -> int:
     conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
     try:
-        result = run(conn, cutoff=args.cutoff, out=args.out, seed=args.seed)
+        result = run(
+            conn,
+            cutoff=args.cutoff,
+            out=args.out,
+            seed=args.seed,
+            force=args.promote,
+            pooled=args.pool_nudges,
+        )
     finally:
         conn.close()
     for k, v in result.items():
         print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
-    print(f"model -> {args.out}")
+    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {args.out}")
     return 0
 
 
@@ -537,6 +588,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "features": features,
     "parity": parity,
     "score": score,
+    "train-promises": train_promises,
     "nightly": nightly,
     "map": map_,
     "drift": drift,
@@ -610,6 +662,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--now", type=datetime.fromisoformat, default=None, help="with a UTC offset (default: now)"
             )
+        if name == "train-promises":
+            p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
         if name == "train":
             p.add_argument(
                 "--cutoff",
@@ -619,6 +673,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "uplift.pkl")
             p.add_argument("--seed", type=int, default=0)
+            p.add_argument(
+                "--promote", action="store_true", help="make the new model the champion without the gate"
+            )
+            p.add_argument("--pool-nudges", action="store_true", help="one arm for email, push and SMS (#80)")
         if name == "parity":
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")

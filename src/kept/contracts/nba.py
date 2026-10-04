@@ -202,6 +202,7 @@ class NBACard(_Frozen):
     reasons: tuple[Reason, ...] = Field(default=(), max_length=TOP_REASONS)
     sizing_text: str | None = None
     similar_cases_text: str | None = None  # "(descriptive, not causal)"
+    legacy_text: str | None = None  # the bank's current strategy for this case, next to ours
     checks: tuple[CheckResult, ...] = ()
     hardship_banner: str | None = None
     hard_stop: HardStopResult | None = None

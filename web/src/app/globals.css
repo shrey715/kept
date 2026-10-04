@@ -217,3 +217,22 @@ html {
   width: 0;
   height: 0;
 }
+
+/* ---------------------------------------------------------------- charts (#100)
+   Categorical slots in fixed order (dataviz reference palette), validated on these app surfaces:
+   light #faf7f2 and dark #14110f pass every gate; light slots 2-4 sit under 3:1, so charts keep a
+   legend, a value at each mark and the table one click away. */
+.light,
+.light-theme {
+  --viz-1: #2a78d6;
+  --viz-2: #eb6834;
+  --viz-3: #1baf7a;
+  --viz-4: #eda100;
+}
+.dark,
+.dark-theme {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+}
