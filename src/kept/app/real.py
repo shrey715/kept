@@ -24,6 +24,7 @@ from kept.contracts.interfaces import AuditLog
 from kept.contracts.nba import CaseContext, ProposalStatus
 from kept.data.c360_reader import DuckDBC360Reader
 from kept.data.identity.steward import load_steward_queue
+from kept.features.drift import load_alarm
 from kept.features.store import FeastFeatureProvider
 from kept.governance.access import mask_name
 from kept.hardship.programs import HardshipProgram, ProgramCase, eligible_programs
@@ -76,6 +77,7 @@ def real_services(
         audit_log=audit_log,
         proposals=proposals,
         programs=_programs(conn),
+        drift_alarm=load_alarm(EXPORT_DIR / "features"),
     )
     typed: dict[str, str] = {}  # notes typed in this session: source_id -> text
 

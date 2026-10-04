@@ -371,3 +371,30 @@ def test_similar_cases_line(make_ctx) -> None:  # type: ignore[no-untyped-def]
     assert similar_cases(empty, Action.PROMISE_REQUEST) and "payday" in similar_cases(
         empty, Action.PROMISE_REQUEST
     )  # type: ignore[operator]
+
+
+def test_drift_alarm_sends_green_cards_to_a_person(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    """#86: while a model input has drifted overnight, a Green proposal becomes Amber."""
+    green = {"wait": 0.2, "email": 0.3, "push": 0.21, "sms_payment_link": 0.22, "call": 0.21}
+
+    def tier(alarm):  # type: ignore[no-untyped-def]
+        ctx = make_ctx()
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
+            scorer=ConstantScorer(green),
+            audit_log=InMemoryAuditLog(),
+            drift_alarm=alarm,
+        )
+        card = eng.recommend(ctx.case_id, NOW)
+        assert card.proposal is not None and card.proposal.action is Action.EMAIL
+        return card.proposal.tier
+
+    assert tier(()) is ReleaseTier.GREEN
+    assert tier(("max_dpd",)) is ReleaseTier.AMBER

@@ -9,6 +9,7 @@ The usual reading: under 0.1 stable, 0.1 to 0.25 watch, 0.25 or more drift (retr
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -97,3 +98,31 @@ def to_markdown(rows: list[FeatureDrift], *, train_rows: int, live_rows: int, li
         for r in rows
     ]
     return "\n".join(lines) + "\n"
+
+
+ALARM_FILE = "drift_alarm.json"  # next to the served features export
+# features that move with the calendar every night by design: days_to_next_payroll counts down a
+# day per night (PSI 0.25 night over night on real data, everything else about 0)
+CALENDAR = frozenset({"days_to_next_payroll"})
+
+
+def night_over_night(previous: pd.DataFrame, tonight: pd.DataFrame, features: list[str]) -> dict[str, object]:
+    """Tonight's served features against last night's, model inputs only (#86). Training against
+    serving drifts by construction (snapshot-only features are null in training, cohort rates move
+    over the year), so the alarm compares serving with serving: a sudden shift means a feed broke or
+    the book changed overnight, and a person should look before cards go out."""
+    rows = drift_report(previous, tonight, [f for f in features if f not in CALENDAR])
+    return {
+        "previous_as_of": str(previous["as_of"].max()) if len(previous) else None,
+        "as_of": str(tonight["as_of"].max()) if len(tonight) else None,
+        "drifted": [r.feature for r in rows if r.status == "drift"],
+        "psi": {r.feature: round(r.psi, 4) for r in rows},
+    }
+
+
+def load_alarm(directory: Path) -> list[str]:
+    """The drifted model inputs from the last `kept features` run; none if there is no alarm file."""
+    import json
+
+    path = directory / ALARM_FILE
+    return list(json.loads(path.read_text())["drifted"]) if path.exists() else []
