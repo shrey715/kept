@@ -140,6 +140,8 @@ def test_phone_next_to_a_case_id_still_redacted(redactor: PresidioRedactor) -> N
         "[{'cure_rate': 0.42059724349157736, 'n': 26120}]",
         "cure_rate,n\n0.4206 26120",
         "rate 12.5512345678901234 over 3 months",
+        # BQ-107: large money totals in the result rows were read as phone numbers
+        '{"rows": [["auto_loan", 20687420.97, 15340], ["personal_loan", 27736813.05, 23960]]}',
     ],
 )
 def test_decimals_are_not_cards_or_phones(redactor: PresidioRedactor, text: str) -> None:

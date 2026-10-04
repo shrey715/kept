@@ -220,7 +220,10 @@ def _inside_decimal(text: str, start: int, end: int) -> bool:
     # "0.4206 26120" read as a phone: a span that opens like a decimal (1-2 digits, ".", a digit) is a
     # number; dotted phones (416.555.0123) have 3 digits before the first dot
     opens_decimal = re.match(r"\d{1,2}\.\d", text[start:end]) is not None
-    return before or after or opens_decimal
+    # "20687420.97" (a money total in a result row) read as a phone: a span that is one plain decimal is an
+    # amount; phones never have a single dot (416.555.0123 has two)
+    plain_decimal = re.fullmatch(r"\d+\.\d+", text[start:end]) is not None
+    return before or after or opens_decimal or plain_decimal
 
 
 def _looks_like_name(span: str) -> bool:
