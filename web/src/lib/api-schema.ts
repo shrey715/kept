@@ -962,7 +962,7 @@ export interface components {
          */
         PayOffer: {
             /** Amount Due */
-            amount_due: string;
+            amount_due: string | null;
             /** Options */
             options: components["schemas"]["PromiseSizing"][];
         };

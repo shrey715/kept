@@ -66,9 +66,11 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
       {offer && !done && (
         <>
           <Heading size="6" mb="1">Pick a plan that works for you</Heading>
-          <Text as="p" size="2" color="gray" mb="4">
-            {money(offer.amount_due)} is overdue. Every option below is timed for right after your payday and fits what you usually have left after bills.
-          </Text>
+          {offer.amount_due != null && (
+            <Text as="p" size="2" color="gray" mb="4">
+              {money(offer.amount_due)} is overdue. Every option below is timed for right after your payday and fits what you usually have left after bills.
+            </Text>
+          )}
           {offer.options.length === 0 ? (
             <Callout.Root><Callout.Text>Let&apos;s talk instead: there isn&apos;t a plan we can set up here.</Callout.Text></Callout.Root>
           ) : (

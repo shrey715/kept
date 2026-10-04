@@ -167,7 +167,7 @@ BENCH_SUITES = (
 class PayOffer(BaseModel):
     """What the customer's SMS link opens (#89): no name, account or case ID, only the plans."""
 
-    amount_due: Decimal
+    amount_due: Decimal | None  # None when no plan fits: the page then says "let's talk" and shows no amount
     options: list[PromiseSizing]
 
 
@@ -384,7 +384,7 @@ def create_app(services: Services) -> FastAPI:
         _, options = pay_offer(proposal_id)
         # instalments round up to the cent, so the smallest total is the balance (exact when 1 fits)
         return PayOffer(
-            amount_due=min((o.amount * o.installments for o in options), default=Decimal(0)), options=options
+            amount_due=min((o.amount * o.installments for o in options), default=None), options=options
         )
 
     @app.post("/pay/{proposal_id}", response_model=PromiseSizing)

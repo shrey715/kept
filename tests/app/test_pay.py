@@ -35,7 +35,11 @@ class _Engine:
         return promise_options(**SIZE)
 
 
-def _client(action: Action = Action.SMS_PAYMENT_LINK, status: ProposalStatus = ProposalStatus.RELEASED):  # type: ignore[no-untyped-def]
+def _client(  # type: ignore[no-untyped-def]
+    action: Action = Action.SMS_PAYMENT_LINK,
+    status: ProposalStatus = ProposalStatus.RELEASED,
+    engine: object = None,
+):
     p = Proposal(
         proposal_id="P1",
         case_id="C1",
@@ -50,7 +54,7 @@ def _client(action: Action = Action.SMS_PAYMENT_LINK, status: ProposalStatus = P
         status=status,
     )
     log = InMemoryAuditLog()
-    services = Services(_Engine(), None, None, None, log, proposals={"P1": p}, clock=lambda: NOW)  # type: ignore[arg-type]
+    services = Services(engine or _Engine(), None, None, None, log, proposals={"P1": p}, clock=lambda: NOW)  # type: ignore[arg-type]
     return TestClient(create_app(services)), log
 
 
@@ -68,3 +72,14 @@ def test_no_link_for_a_call_or_an_unreleased_proposal() -> None:
     assert _client(action=Action.CALL)[0].get("/pay/P1").status_code == 404
     assert _client(status=ProposalStatus.PENDING)[0].get("/pay/P1").status_code == 404
     assert _client()[0].get("/pay/nope").status_code == 404
+
+
+class _NoPlans:
+    def payment_options(self, case_id: str, now: datetime):  # type: ignore[no-untyped-def]
+        return []
+
+
+def test_no_plan_means_no_amount() -> None:
+    """No detected payday or spare cash: no plans and no amount, so the page never says "$0.00 is overdue"."""
+    offer = _client(engine=_NoPlans())[0].get("/pay/P1").json()
+    assert offer == {"amount_due": None, "options": []}
