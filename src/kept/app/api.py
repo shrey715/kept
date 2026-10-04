@@ -371,7 +371,9 @@ def create_app(services: Services) -> FastAPI:
         released = p is not None and p.status in (ProposalStatus.APPROVED, ProposalStatus.RELEASED)
         if p is None or p.action is not Action.SMS_PAYMENT_LINK or not released:
             raise HTTPException(404, "this link isn't active")
-        options = getattr(services.engine, "payment_options", lambda *_: [])(p.case_id, services.clock())
+        options: list[PromiseSizing] = getattr(services.engine, "payment_options", lambda *_: [])(
+            p.case_id, services.clock()
+        )
         return p, options
 
     # ponytail: the proposal ID is the link token for the demo; a signed, expiring token before any real SMS.
