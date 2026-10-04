@@ -101,33 +101,40 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     tidy(ax)
     save(fig, "f_ratios")
 
-    small = []
-    for a in [x for x in SHOW if x in attrs]:
+    shown = [x for x in SHOW if x in attrs]
+    fig, axes = plt.subplots(2, 3, figsize=(7.4, 5.2), sharex=True)
+    for ax, a in zip(axes.flat, shown, strict=False):
         rates = attrs[a]["outcomes"]["any contact action"]["rates"]
         hr = attrs[a]["outcomes"]["hardship review"]["rates"]
         groups = sorted(rates, key=lambda g: -attrs[a]["sizes"].get(g, 0))[:6]
-        fig, ax = plt.subplots(figsize=(3.5, 0.32 * len(groups) + 1.0))
         yy = list(range(len(groups)))[::-1]
         ax.barh(
-            [v + 0.17 for v in yy],
+            [v + 0.19 for v in yy],
             [100 * rates[g] for g in groups],
-            height=0.32,
+            height=0.36,
             color=BLUE,
-            label="any contact",
+            label="any contact action",
         )
         ax.barh(
-            [v - 0.17 for v in yy],
+            [v - 0.19 for v in yy],
             [100 * hr.get(g, 0) for g in groups],
-            height=0.32,
+            height=0.36,
             color=AQUA,
             label="hardship review",
         )
-        ax.set_yticks(yy, [g[:16] for g in groups], fontsize=7.5)
+        ax.set_yticks(yy, [g.replace("_", " ") for g in groups], fontsize=7)
+        ax.tick_params(axis="x", labelsize=7)
         ax.set_xlim(0, 100)
-        ax.set_xlabel("% of cases", fontsize=7.5)
-        ax.set_title(a, loc="left", fontsize=8.5)
+        ax.set_title(a, loc="left", fontsize=8, fontweight="bold")
         tidy(ax)
-        small.append(save(fig, f"f_{a}"))
+    for ax in axes.flat[len(shown) :]:
+        ax.axis("off")
+    for ax in axes[-1]:
+        ax.set_xlabel("% of cases", fontsize=7)
+    h, lab = axes.flat[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=2, frameon=False, fontsize=8, bbox_to_anchor=(0.5, -0.02))
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    save(fig, "f_groups")
     print("figures written; compile with: uv run python scripts/reportlib.py")
 
 

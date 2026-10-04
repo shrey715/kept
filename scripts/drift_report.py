@@ -104,7 +104,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     ax.set_yticks(y, [r["feature"] for r in rows])
     ax.scatter([], [], color=BLUE, label="training rows")
     ax.scatter([], [], color=AQUA, label="tonight")
-    ax.legend(loc="lower right", frameon=False, fontsize=8)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=2, frameon=False, fontsize=8)
     ax.set_xlabel("% of rows with no value")
     ax.set_title("Missing values, training vs tonight", loc="left")
     tidy(ax)

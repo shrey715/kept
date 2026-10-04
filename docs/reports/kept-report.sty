@@ -120,7 +120,8 @@
 
 \newcommand{\fig}[3][\linewidth]{% \fig[width]{file}{caption}
   \begin{figure}[H]\centering\includegraphics[width=#1]{figures/#2}\caption{#3}\label{fig:#2}\end{figure}}
-\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\breakunderscore}{\textunderscore\allowbreak}
+\newcommand{\code}[1]{\texttt{\let\_\breakunderscore #1}}  % long identifiers wrap after an underscore
 % a closing "how to rebuild this" block; paths wrap at / and _
 \newcommand{\reproduce}[2]{%
   \par\vspace{1.2em}{\color{rule}\rule{\linewidth}{0.5pt}}\par\vspace{0.1em}
