@@ -44,13 +44,36 @@ def size_promise(
     Installments fall one per pay period; the first is due promise_due_date(payday).
     Returns None (no promise; consider hardship review) when spare cash or payday is
     unknown, spare cash <= 0, or even max_installments doesn't fit."""
+    options = promise_options(
+        balance_due=balance_due,
+        spare_cash_monthly=spare_cash_monthly,
+        expected_payday=expected_payday,
+        payroll_frequency=payroll_frequency,
+        today=today,
+        max_installments=max_installments,
+    )
+    return options[0] if options else None
+
+
+def promise_options(
+    *,
+    balance_due: Decimal,
+    spare_cash_monthly: Decimal | None,
+    expected_payday: date | None,
+    payroll_frequency: PayrollFrequency,
+    today: date,
+    max_installments: int = 3,
+) -> list[PromiseSizing]:
+    """Every installment count from the smallest that fits up to max_installments (#89: the
+    customer picks one). More installments are smaller, so once one fits the rest do. [] = none fit."""
     if spare_cash_monthly is None or expected_payday is None or spare_cash_monthly <= 0 or balance_due <= 0:
-        return None
+        return []
     periods = PERIODS_PER_YEAR.get(payroll_frequency, 12)
     per_period = (spare_cash_monthly * 12 / periods).quantize(CENT, rounding=ROUND_DOWN)
     due = promise_due_date(expected_payday, today=today)
     if per_period <= 0 or due is None:
-        return None
+        return []
+    out = []
     for n in range(1, max_installments + 1):
         amount = (balance_due / n).quantize(CENT, rounding=ROUND_CEILING)
         if amount <= per_period:
@@ -62,8 +85,8 @@ def size_promise(
                 payday=expected_payday,
                 rationale="",
             )
-            return s.model_copy(update={"rationale": sizing_text(s)})
-    return None
+            out.append(s.model_copy(update={"rationale": sizing_text(s)}))
+    return out
 
 
 def sizing_text(s: PromiseSizing) -> str:

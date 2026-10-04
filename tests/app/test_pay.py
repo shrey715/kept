@@ -1,0 +1,70 @@
+"""#89: the customer's pay link offers only Kept-sized plans, and only for a released SMS proposal."""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
+
+from fastapi.testclient import TestClient
+
+from kept.app.api import Services, create_app
+from kept.contracts.enums import Action, Channel, PayrollFrequency, ReleaseTier
+from kept.contracts.nba import Proposal, ProposalStatus
+from kept.nba.sizing import promise_options, size_promise
+from tests.fakes import InMemoryAuditLog
+
+NOW = datetime(2026, 10, 5, 18, tzinfo=UTC)
+SIZE = {
+    "balance_due": Decimal("300"),
+    "spare_cash_monthly": Decimal("400"),
+    "expected_payday": date(2026, 10, 15),
+    "payroll_frequency": PayrollFrequency.BIWEEKLY,
+    "today": date(2026, 10, 5),
+}
+
+
+def test_options_fit_spare_cash_and_payday_and_match_size_promise() -> None:
+    opts = promise_options(**SIZE)
+    assert [o.installments for o in opts] == [2, 3]  # 300 > ~184 per pay; 150 and 100 fit
+    assert all(o.amount <= o.spare_cash_estimate and (o.due_date - o.payday).days in (1, 2) for o in opts)
+    assert size_promise(**SIZE) == opts[0]
+
+
+class _Engine:
+    def payment_options(self, case_id: str, now: datetime):  # type: ignore[no-untyped-def]
+        return promise_options(**SIZE)
+
+
+def _client(action: Action = Action.SMS_PAYMENT_LINK, status: ProposalStatus = ProposalStatus.RELEASED):  # type: ignore[no-untyped-def]
+    p = Proposal(
+        proposal_id="P1",
+        case_id="C1",
+        golden_customer_id="G1",
+        action=action,
+        channel=Channel.SMS,
+        tier=ReleaseTier.GREEN,
+        model_version="t",
+        features_as_of=NOW,
+        created_at=NOW,
+        expires_at=NOW + timedelta(days=1),
+        status=status,
+    )
+    log = InMemoryAuditLog()
+    services = Services(_Engine(), None, None, None, log, proposals={"P1": p}, clock=lambda: NOW)  # type: ignore[arg-type]
+    return TestClient(create_app(services)), log
+
+
+def test_released_sms_gets_plans_and_the_choice_is_audited() -> None:
+    client, log = _client()
+    offer = client.get("/pay/P1").json()
+    assert [o["installments"] for o in offer["options"]] == [2, 3]
+    assert client.post("/pay/P1", json={"installments": 1}).status_code == 422  # not on offer
+    assert client.post("/pay/P1", json={"installments": 3}).json()["amount"] == "100.00"
+    (event,) = log.read()
+    assert event.actor_id == "customer:self-serve" and event.payload["installments"] == 3
+
+
+def test_no_link_for_a_call_or_an_unreleased_proposal() -> None:
+    assert _client(action=Action.CALL)[0].get("/pay/P1").status_code == 404
+    assert _client(status=ProposalStatus.PENDING)[0].get("/pay/P1").status_code == 404
+    assert _client()[0].get("/pay/nope").status_code == 404
