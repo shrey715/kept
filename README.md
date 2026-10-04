@@ -39,8 +39,8 @@ More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs
 | Features | 26 features; training vs live parity **0 of 56,000** cells off |
 | Model | uplift Qini for calls **0.0073 vs 0.0017** for the bank's current strategy |
 | Decisions | **96,000** cards a night (~7 min end to end); agent card loads in 0.21 s |
-| Ask | dev benchmark **94%** accuracy, refusal recall **100%**, refusal precision **100%** |
-| Fairness | contact-action ratio across every protected group **0.86–1.00** (four-fifths flags only on rare calls and protective reviews) |
+| Ask | dev split **20 of 21** right (17/18 in scope, 3/3 refusals); refusal recall **100%**, refusal precision **100%**; every answer cites its SQL or source |
+| Fairness | contact-action ratio across every protected group **0.86–1.00**; scrambling every protected attribute changes **0 of 96,000** decisions |
 | Business | promises dated to payday: **62% vs 52%** of the money paid; base case **$2.2M a year**, year-1 ROI **3.8x**, payback **~2 months** |
 
 ## How it works, in one breath
