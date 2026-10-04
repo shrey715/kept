@@ -1,0 +1,111 @@
+% Kept: final architecture (deliverable 2), TikZ.
+% Build: cd docs/architecture && xelatex architecture.tex && pdftocairo -png -r 150 -singlefile architecture.pdf architecture
+% Orange border = changed from the 2 Oct design (docs/design/SharpeShooters_SystemDesign.pdf). Numbers: real-data runs, 4 Oct.
+\documentclass{article}
+\usepackage[paperwidth=36cm,paperheight=23.6cm,margin=0.6cm]{geometry}
+\usepackage{fontspec}
+\setmainfont{Carlito}
+\usepackage{tikz}
+\usetikzlibrary{positioning,fit,backgrounds,arrows.meta,calc}
+\pagestyle{empty}
+\newcommand{\tech}[1]{{\normalsize\mdseries\color{muted}#1}}
+\definecolor{ink}{HTML}{1F2933}
+\definecolor{muted}{HTML}{52606D}
+\definecolor{edge}{HTML}{7B8794}
+\definecolor{changed}{HTML}{E8833A}
+\definecolor{keptred}{HTML}{C8102E}
+\definecolor{l1}{HTML}{F3F8FD}\definecolor{l1b}{HTML}{BCCCDC}
+\definecolor{l2}{HTML}{F4FBF6}\definecolor{l2b}{HTML}{B7DFC4}
+\definecolor{l3}{HTML}{FDF8F1}\definecolor{l3b}{HTML}{F0D9B5}
+\definecolor{l4}{HTML}{F8F5FD}\definecolor{l4b}{HTML}{D6C8EF}
+\definecolor{gov}{HTML}{FFF7E6}\definecolor{govb}{HTML}{D9A441}
+\begin{document}
+\centering
+\begin{tikzpicture}[
+  box/.style={draw=edge, rounded corners=4pt, fill=white, align=center, font=\small, inner sep=5pt,
+              text width=#1, minimum height=1.55cm},
+  box/.default=5.4cm,
+  new/.style={draw=changed, line width=1.3pt},
+  flow/.style={-{Stealth[length=2.5mm]}, edge, line width=0.9pt},
+  cross/.style={-{Stealth[length=2.5mm]}, edge, line width=0.9pt, dashed, rounded corners=6pt},
+  lane/.style={rounded corners=10pt, inner sep=10pt, line width=0.8pt},
+  lanelabel/.style={anchor=south west, font=\large\bfseries, text=ink},
+  tech/.style={font=\normalsize\mdseries, text=muted},
+]
+% ---------------------------------------------------------------- title
+\node[font=\LARGE] (title) at (16.5, 3.7) {\textbf{Kept}: a guarded next best action for promises customers can keep};
+\node[font=\small, text=muted, below=1pt of title] {Team Sharpe Shooters · final architecture, 4 Oct 2026 · orange border = changed from the 2 Oct design · numbers from the real-data runs};
+\node[box=13cm, fill=gray!8] (src) at (6.6, 1.85) {\textbf{31 source tables} · CRM, cards, loans, deposits, cases, contacts, notes, transcripts, bureau, policy\\ five systems, five customer keys, no shared ID · 1M people · 77M records};
+
+% ---------------------------------------------------------------- 1 data product factory
+\node[box] (bronze) at (3.4,-1.6) {\textbf{Bronze → Silver}\\ land raw (all text) · tested cleaning rules\\ never guess: unreadable → quarantine};
+\node[box, new, right=1.0cm of bronze] (ident) {\textbf{Identity resolution}\\ exact keys (+ core-banking CIF) → Splink\\ ≥0.95 auto · 0.80–0.95 steward\\ 3.84M keys → 1,052,300 people};
+\node[box, right=1.0cm of ident] (gold) {\textbf{Golden C360}\\ lineage per field · match confidence\\ hard stops · restricted table apart};
+\node[box, new, right=1.0cm of gold] (gate) {\textbf{Contract gate}\\ ODCS from DC-COLL-001 · Q1–Q5\\ PASS · human review 99.3\% (300)\\ schema drift: \texttt{kept map}};
+\draw[flow] (bronze) -- (ident); \draw[flow] (ident) -- (gold); \draw[flow] (gold) -- (gate);
+\begin{scope}[on background layer]
+\node[lane, fill=l1, draw=l1b, fit=(bronze)(gate), inner ysep=14pt] (L1) {};
+\end{scope}
+\node[lanelabel] at (L1.north west) {1 · DATA PRODUCT FACTORY \tech{\ DuckDB · dbt · Splink · Soda}};
+
+% ---------------------------------------------------------------- 2 Ask
+\node[box] (scope) at (3.4,-5.4) {\textbf{Scope check}\\ rules first (no LLM): protected,\\ bulk PII, writes, other cases\\ + classifier · "Try: …" on refusal};
+\node[box, new, right=1.0cm of scope] (ladder) {\textbf{SQL ladder}\\ certified metrics + reviewed templates\\ → free SQL last (3 drafts, majority,\\ worked examples) · dates in code};
+\node[box, right=1.0cm of ladder] (guard) {\textbf{SQL guard}\\ sqlglot AST: SELECT only,\\ 17 tables, no PII columns,\\ row limit, 10 s timeout};
+\node[box, new, right=1.0cm of guard] (answer) {\textbf{Grounded answer}\\ SQL / sources shown · numbers only\\ from rows · policy, incidents, calls cited\\ dev 94\% · refusals 100\% / 100\%};
+\draw[flow] (scope) -- (ladder); \draw[flow] (ladder) -- (guard); \draw[flow] (guard) -- (answer);
+\begin{scope}[on background layer]
+\node[lane, fill=l2, draw=l2b, fit=(scope)(answer), inner ysep=14pt] (L2) {};
+\end{scope}
+\node[lanelabel] at (L2.north west) {2 · COLLECTIONS ASK \tech{\ LiteLLM (Gemini free tier) · sqlglot · LanceDB}};
+
+% ---------------------------------------------------------------- 3 text + features
+\node[box=4.5cm, new] (redact) at (2.95,-9.2) {\textbf{Presidio redaction}\\ EN + FR · SIN, postal, cards\\ 785,594 texts · 0 leaks};
+\node[box=4.5cm, new, right=0.75cm of redact] (llm) {\textbf{Local LLM extraction}\\ Gemma 3 12B on our GPU\\ verbatim quote per value\\ + call summaries + QA};
+\node[box=4.5cm, right=0.75cm of llm] (setfit) {\textbf{SetFit backfill}\\ 1,604 LLM labels → all\\ 785K historical texts\\ hardship recall 0.98 / 0.99};
+\node[box=4.5cm, new, right=0.75cm of setfit] (signals) {\textbf{Hardship signals}\\ text + cash-flow rule +\\ agent · cease counts only\\ once an agent confirms};
+\node[box=4.5cm, right=0.75cm of signals] (sqlf) {\textbf{SQL features}\\ DPD, promises, payday,\\ contacts, cohorts\\ 26 features · point in time};
+\node[box=4.5cm, new, right=0.75cm of sqlf] (feast) {\textbf{Feature store} (Feast)\\ same values train + live\\ parity 0 of 56,000\\ drift monitored (PSI)};
+\draw[flow] (redact) -- (llm); \draw[flow] (llm) -- (setfit); \draw[flow] (setfit) -- (signals); \draw[flow] (sqlf) -- (feast);
+\begin{scope}[on background layer]
+\node[lane, fill=l3, draw=l3b, fit=(redact)(feast), inner ysep=14pt] (L3) {};
+\end{scope}
+\node[lanelabel] at (L3.north west) {3 · TEXT + FEATURE STORE \tech{\ Presidio · Ollama · SetFit · dbt · Feast}};
+
+% ---------------------------------------------------------------- 4 decisioning
+\node[box=3.85cm] (stops) at (2.6,-13.8) {\textbf{1 Hard stops}\\ cease, insolvency,\\ bankruptcy, deceased};
+\node[box=3.85cm, right=0.55cm of stops] (perm) {\textbf{2 Permissions}\\ consent · local hours\\ 3 contacts / 7 days};
+\node[box=3.85cm, right=0.55cm of perm] (hship) {\textbf{3 Hardship override}\\ possible / confirmed or\\ vulnerable → protective only};
+\node[box=3.85cm, right=0.55cm of hship] (uplift) {\textbf{4 Uplift model}\\ LightGBM T-learner\\ Qini 0.0073 vs 0.0017};
+\node[box=3.85cm, new, right=0.55cm of uplift] (size) {\textbf{5–6 Kept sizing + rank}\\ due 1–2 days after payday\\ within spare cash · capacity};
+\node[box=3.85cm, right=0.55cm of size] (rel) {\textbf{7 Reasons + release}\\ TreeSHAP top 3 · tiers\\ Red: specialist + 2nd};
+\node[box=3.85cm, new, right=0.55cm of rel] (app) {\textbf{NBA card + app}\\ 96,000 cards / night\\ queue · Ask · steward · audit};
+\foreach \a/\b in {stops/perm, perm/hship, hship/uplift, uplift/size, size/rel, rel/app} \draw[flow] (\a) -- (\b);
+\begin{scope}[on background layer]
+\node[lane, fill=l4, draw=l4b, fit=(stops)(app), inner ysep=14pt] (L4) {};
+\end{scope}
+\node[lanelabel] at (L4.north west) {4 · KEPT: GUARDED NEXT BEST ACTION \tech{\ rules (no AI) → model → arithmetic · LightGBM · MLflow · FastAPI · Next.js}};
+\node[font=\footnotesize, text=muted, anchor=north west] at ($(L4.south west)+(0.2,-0.05)$) {Steps 1–3 and sizing are rules, no AI. The model never sends anything: a person releases every proposal, and the release re-checks every rule on fresh data.};
+
+% ---------------------------------------------------------------- governance
+\node[box=33.5cm, fill=gov, draw=govb, minimum height=1.1cm] (gov) at (16.6,-16.7) {\textbf{Governance on every layer:} role-based access · PII redacted before any LLM · free LLMs only, every call audited · no protected attributes or proxies (lineage CI test + curated tests on the trained model) · hardship protects, never scores · append-only audit · fairness report · drift + schema monitoring · 5\% hold-out + kill switch};
+
+% ---------------------------------------------------------------- cross-layer flows (routed through the gaps)
+\coordinate (gap) at ($(guard.east)!0.5!(answer.west)$);          % between SQL guard and the answer
+\coordinate (top) at ($(L1.south)!0.5!(L2.north)$);               % strip between lanes 1 and 2
+\coordinate (mid) at ($(L2.south)!0.5!(L3.north)$);               % strip between lanes 2 and 3
+\coordinate (low) at ($(L3.south)!0.5!(L4.north)$);               % strip between lanes 3 and 4
+\draw[flow] (src.south -| bronze) -- (bronze.north);
+\draw[cross] (gate.east) -- ++(1.1,0) |- node[pos=0.25, right, font=\scriptsize, text=muted, align=left]{gold + silver +\\ redacted text} (answer.east);
+% hardship status: up from the signals, through the gap, into gold
+\draw[cross, keptred] (signals.north) -- ([xshift=-1.5mm]signals.north |- mid) -- ([xshift=-1.5mm]gap |- mid)
+  -- ([xshift=-1.5mm]gap |- top) -- ([xshift=4mm]gold.south |- top) node[pos=0.5, above, font=\scriptsize, text=keptred]{hardship status} -- ([xshift=4mm]gold.south);
+% C360: down from gold through the same gap, into the SQL features
+\draw[flow] ([xshift=-4mm]gold.south) -- ([xshift=-4mm,yshift=-2mm]gold.south |- top) node[pos=1, left, font=\scriptsize, text=muted]{C360}
+  -- ([xshift=1.5mm,yshift=-2mm]gap |- top) -- ([xshift=1.5mm,yshift=-2mm]gap |- mid) -- ([yshift=-2mm]sqlf.north |- mid) -- (sqlf.north);
+\draw[flow] (feast.south) -- ([yshift=1.5mm]feast.south |- low) -| node[pos=0.08, above, font=\scriptsize, text=muted]{features as of decision time} (stops.north);
+% a live note: from the app up into the strip, across, into the extractor
+\draw[cross, changed] (app.north) -- ([yshift=-1.5mm]app.north |- low) -- ([yshift=-1.5mm]llm.south |- low)
+  node[pos=0.55, below, font=\scriptsize, text=changed, fill=white, inner sep=1pt]{agent adds a note → live extraction (\textasciitilde 5 s) → the card re-checks} -- (llm.south);
+\end{tikzpicture}
+\end{document}
