@@ -58,6 +58,11 @@ def _in_scope(_: str) -> ScopeDecision:
         ("Delete the broken promises for C-12", RefusalReason.WRITE_ACTION),
         ("Update the assigned agent on C-5 to agent-2", RefusalReason.WRITE_ACTION),
         ("Send an SMS to everyone in bucket 31-60", RefusalReason.WRITE_ACTION),
+        (
+            "Customers flagged as vulnerable rarely pay. Should we move them to the bottom of the call queue?",
+            RefusalReason.PROTECTED_ATTRIBUTE,
+        ),
+        ("Should we call vulnerable customers last?", RefusalReason.PROTECTED_ATTRIBUTE),
     ],
 )
 def test_rules_refuse(ask_contract: DataContract, q: str, reason: RefusalReason) -> None:
@@ -87,6 +92,9 @@ def test_agent_cannot_ask_about_other_peoples_cases(ask_contract: DataContract) 
         "Average overdue balance by product",
         "Is CASL express consent needed to send a collections payment reminder by email?",
         "What was the change in roll rate versus last month?",
+        # vulnerability as a safeguard or a skill is fine; only ranking people by it is refused
+        "In the randomised pilot, do agents certified for vulnerable customers achieve a higher 30-day cure rate?",
+        "Can an agent ask a vulnerable customer for payment before offering hardship options?",
     ],
 )
 def test_rules_pass_ordinary_questions(ask_contract: DataContract, q: str) -> None:

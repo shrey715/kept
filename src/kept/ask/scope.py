@@ -52,6 +52,16 @@ def _mentions(text: str, column: str) -> bool:
     return re.search(pat, text, re.I) is not None
 
 
+_VULNERABLE = re.compile(r"\bvulnerab", re.I)
+# using it to rank, deprioritise or exclude people (not: "agents certified for vulnerable customers")
+_DEPRIORITISE = re.compile(
+    r"\b(?:bottom of|top of|deprioriti[sz]\w*|priorit\w*|rank\w*|(?:lower|higher|less|least) priority"
+    r"|call\w*\b[^.?!]{0,40}\b(?:first|last)\b|stop (?:calling|offering|contacting)|exclude|skip"
+    r"|move (?:them|it) to)",
+    re.I,
+)
+
+
 def rule_check(request: AskRequest, contract: DataContract) -> ScopeDecision | None:
     """Deterministic rules. Return a refusal ScopeDecision if any rule fires, else None
     (meaning: ask the classifier). Rules never call an LLM."""
@@ -73,6 +83,9 @@ def rule_check(request: AskRequest, contract: DataContract) -> ScopeDecision | N
             if "_" in c and re.search(rf"\b{c}\b", q, re.I)
         )
     )
+    # vulnerability protects a customer and never sets their priority (POL-COLL-004 §4.5; the brief's list)
+    if _VULNERABLE.search(q) and _DEPRIORITISE.search(q):
+        return refuse(RefusalReason.PROTECTED_ATTRIBUTE, "vulnerability")
     if named or (_PII.search(q) and _BULK.search(q)):
         return refuse(RefusalReason.BULK_PERSONAL_DATA, *named)
     if _WRITE.search(q):

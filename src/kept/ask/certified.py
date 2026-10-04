@@ -137,11 +137,22 @@ WHERE 1=1 {where} {group_by}""",
             _CASE_COLS | {"assignment_method", "hardship_flag", "agent_vulnerable_certified"},
             "case_open_date",
         ),
-        _ptp("promise_kept_rate", "avg(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate"),
+        # every rate also carries its count, so "how many ..." questions that land on a rate get the number too
         _ptp(
-            "broken_promise_rate", "avg(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate"
+            "promise_kept_rate",
+            "avg(CASE WHEN ptp_status = 'kept' THEN 1.0 ELSE 0.0 END) AS kept_rate, "
+            "count(*) FILTER (WHERE ptp_status = 'kept') AS kept_promises",
         ),
-        _contacts("rpc_rate", "avg(CASE WHEN rpc_flag THEN 1.0 ELSE 0.0 END) AS rpc_rate", _CALLS),
+        _ptp(
+            "broken_promise_rate",
+            "avg(CASE WHEN ptp_status = 'broken' THEN 1.0 ELSE 0.0 END) AS broken_rate, "
+            "count(*) FILTER (WHERE ptp_status = 'broken') AS broken_promises",
+        ),
+        _contacts(
+            "rpc_rate",
+            "avg(CASE WHEN rpc_flag THEN 1.0 ELSE 0.0 END) AS rpc_rate, count(*) FILTER (WHERE rpc_flag) AS rpc_contacts",
+            _CALLS,
+        ),
         _contacts(
             "ptp_rate", "avg(CASE WHEN ptp_made_flag THEN 1.0 ELSE 0.0 END) AS ptp_rate", ("rpc_flag",)
         ),
@@ -165,7 +176,8 @@ WHERE 1=1 {where} {group_by}""",
         ),
         _cases(
             "hardship_rate",
-            "avg(CASE WHEN hardship_flag THEN 1.0 ELSE 0.0 END) AS hardship_rate",
+            "avg(CASE WHEN hardship_flag THEN 1.0 ELSE 0.0 END) AS hardship_rate, "
+            "count(*) FILTER (WHERE hardship_flag) AS hardship_cases",
             (),
             "case_open_date",
         ),
