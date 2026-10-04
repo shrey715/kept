@@ -127,7 +127,7 @@ body {
   line-height: 28px;
 }
 .paper .hand {
-  font-family: var(--font-hand), cursive;
+  font-family: "Segoe Script", "Bradley Hand", "URW Chancery L", cursive; /* signatures: system script fonts, no network font */
   font-size: 1.35em;
   color: #1e3a8a;
 }
