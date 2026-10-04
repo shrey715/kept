@@ -28,6 +28,17 @@ from kept.nba.uplift import TLearnerUplift, qini_coefficient
 
 # what the randomised data can teach: promise/plan/hardship actions are never randomised
 ACTIONS = (Action.WAIT, Action.EMAIL, Action.PUSH, Action.SMS_PAYMENT_LINK, Action.CALL)
+# --pool-nudges (#80): the model can't tell these apart per customer (the top one held in about 37% of
+# bootstrap resamples), so they can share one "digital nudge" arm, stored under EMAIL; the engine then
+# scores push and SMS with it and the ranking picks the cheapest one the customer consented to
+NUDGES = (Action.EMAIL, Action.PUSH, Action.SMS_PAYMENT_LINK)
+POOLED = (Action.WAIT, Action.EMAIL, Action.CALL)
+
+
+def pool_nudges(rows: pd.DataFrame) -> pd.DataFrame:
+    """Every nudge row (and a legacy nudge recommendation) becomes the one nudge arm."""
+    nudge = {a.value: Action.EMAIL.value for a in NUDGES}
+    return rows.assign(action=rows.action.replace(nudge))
 
 
 def load_rows(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -43,11 +54,15 @@ def load_rows(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         order by t.decision_at, t.decision_id""").df()
 
 
-def train(rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0) -> tuple[TLearnerUplift, dict[str, float]]:
-    """Fit on rows before cutoff; metrics on rows from cutoff (see the module docstring)."""
+def train(
+    rows: pd.DataFrame, *, cutoff: datetime, seed: int = 0, pooled: bool = False
+) -> tuple[TLearnerUplift, dict[str, float]]:
+    """Fit on rows before cutoff; metrics on rows from cutoff (see the module docstring).
+    pooled: one arm for email, push and SMS (`pool_nudges`)."""
+    rows = pool_nudges(rows) if pooled else rows
     X = rows[list(model_inputs())]
     early = (rows.decision_at < cutoff).to_numpy()
-    model = TLearnerUplift(ACTIONS, seed=seed).fit(
+    model = TLearnerUplift(POOLED if pooled else ACTIONS, seed=seed).fit(
         X[early],
         action=rows.action[early],
         paid_14d=rows.paid_14d[early],
@@ -62,15 +77,19 @@ def evaluate(
     """The test-split metrics for any fitted model, so a champion and a challenger are judged on the
     same rows (decisions from cutoff on)."""
     rng = np.random.default_rng(seed)
+    pooled = Action.PUSH not in model.actions
+    rows = pool_nudges(rows) if pooled else rows
     X = rows[list(model_inputs())]
     early = (rows.decision_at < cutoff).to_numpy()
     late = rows[~early]
     lift = model.uplift(late[X.columns])
     legacy = late["nba_recommendation_last"].map(lambda c: (a := legacy_to_action(c)) and a.value)
+    if pooled:
+        legacy = legacy.replace({a.value: Action.EMAIL.value for a in NUDGES})
     y = late.paid_14d.to_numpy(dtype=int)
     metrics: dict[str, float] = {"rows_train": float(early.sum()), "rows_test": float(len(late))}
     wait = (late.action == Action.WAIT.value).to_numpy()
-    contacts = [a.value for a in ACTIONS[1:]]
+    contacts = [a.value for a in model.actions if a is not Action.WAIT]
     arms = {a: (late.action == a).to_numpy() for a in contacts}
     arms["any_contact"] = ~wait
     for name, arm in arms.items():
@@ -120,7 +139,13 @@ def _qini_ties(
 
 
 def run(
-    conn: duckdb.DuckDBPyConnection, *, cutoff: datetime, out: Path, seed: int = 0, force: bool = False
+    conn: duckdb.DuckDBPyConnection,
+    *,
+    cutoff: datetime,
+    out: Path,
+    seed: int = 0,
+    force: bool = False,
+    pooled: bool = False,
 ) -> dict[str, Any]:
     """Load, train, write the challenger next to `out`, judge it against the champion at `out` on
     the same test rows, and replace the champion only if `promote` says so (or `force`). Params,
@@ -128,7 +153,7 @@ def run(
     import mlflow
 
     rows = load_rows(conn)
-    model, metrics = train(rows, cutoff=cutoff, seed=seed)
+    model, metrics = train(rows, cutoff=cutoff, seed=seed, pooled=pooled)
     out.parent.mkdir(parents=True, exist_ok=True)
     challenger = out.with_name(f"{out.stem}_challenger{out.suffix}")
     challenger.write_bytes(pickle.dumps(model))

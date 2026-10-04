@@ -71,3 +71,22 @@ def test_champion_challenger_gate() -> None:
     assert promote(m(0.0105, 0.0055), champ)[0] is False  # within noise
     assert promote(m(0.013, 0.005), champ)[0] is True  # calls better by 3 noise, any contact level
     assert promote(m(0.013, 0.002), champ)[0] is False  # any contact worse beyond noise
+
+
+def test_pooled_nudge_arm() -> None:
+    """#80: one arm for email, push and SMS; the engine scores push and SMS with it."""
+    pytest.importorskip("lightgbm")
+    from kept.contracts.enums import Action
+    from kept.nba.engine import _scored_as
+    from kept.nba.train import POOLED
+
+    rows = _rows()
+    model, m = train(rows, cutoff=rows.decision_at.iloc[4_200], pooled=True)
+    assert model.actions == POOLED
+    assert "qini_email" in m and "qini_push" not in m and m["qini_any_contact"] > 0
+    scored = _scored_as(["wait", "email", "call"], protective=False)
+    assert scored[Action.PUSH] is Action.EMAIL and scored[Action.SMS_PAYMENT_LINK] is Action.EMAIL
+    assert (
+        _scored_as(["wait", "email", "push", "sms_payment_link", "call"], protective=False)[Action.PUSH]
+        is Action.PUSH
+    )

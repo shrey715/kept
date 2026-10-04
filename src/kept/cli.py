@@ -407,7 +407,14 @@ def train(args: argparse.Namespace) -> int:
     conn = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     conn.execute("set memory_limit = '3GB'; set threads = 2")  # 14 GB laptops
     try:
-        result = run(conn, cutoff=args.cutoff, out=args.out, seed=args.seed, force=args.promote)
+        result = run(
+            conn,
+            cutoff=args.cutoff,
+            out=args.out,
+            seed=args.seed,
+            force=args.promote,
+            pooled=args.pool_nudges,
+        )
     finally:
         conn.close()
     for k, v in result.items():
@@ -622,6 +629,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--promote", action="store_true", help="make the new model the champion without the gate"
             )
+            p.add_argument("--pool-nudges", action="store_true", help="one arm for email, push and SMS (#80)")
         if name == "parity":
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")
