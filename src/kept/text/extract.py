@@ -177,11 +177,29 @@ class LLMExtractor:
             ),
             promised_amount=field("promised_amount", _amount, None),
             dispute=field("dispute", _bool, False),
-            cease_request=field("cease_request", _bool, False),
+            cease_request=_cease(field("cease_request", _bool, False), text.text),
             third_party_present=field("third_party_present", _bool, False),
-            extractor=f"llm:{PROMPT_VERSION}",
+            extractor=f"llm:{PROMPT_VERSION}+cease-rule",
             extracted_at=datetime.now(UTC),
         )
+
+
+# The local model reads anger about call frequency, and the stop that insolvency triggers, as a cease
+# request; the labels (and the law) don't: a cease is the customer asking for no further contact.
+_FREQUENCY_COMPLAINT = re.compile(r"every day|tous les jours|harass|done with this|plainte", re.IGNORECASE)
+_INSOLVENCY = re.compile(r"bankrupt|consumer proposal|faillite|proposition de consommateur", re.IGNORECASE)
+_ASKED_TO_STOP = re.compile(r"asked|stop calling|don't (call|contact)|arr[eê]t", re.IGNORECASE)
+
+
+def _cease(v: ExtractedValue[bool], text: str) -> ExtractedValue[bool]:
+    """A cease the model quoted from a frequency complaint, or from "cease contact noted" after an insolvency
+    filing (a legal stay, held by its own flag), is not the customer's request. Agents confirm every cease."""
+    quote = v.evidence.quote if v.evidence else ""
+    if v.value and (
+        _FREQUENCY_COMPLAINT.search(quote) or (_INSOLVENCY.search(text) and not _ASKED_TO_STOP.search(quote))
+    ):
+        return ExtractedValue(value=False, confidence=v.confidence)
+    return v
 
 
 def _bool(v: Any) -> bool:

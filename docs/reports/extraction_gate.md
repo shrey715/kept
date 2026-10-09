@@ -1,0 +1,55 @@
+# Text extraction: the release gate
+
+The local model (`gemma3:12b`, prompt `extract-v4` plus the cease rule) on the release's public labels. Every text is
+redacted first, and every positive value must quote the text it came from. Gate: F1 ≥ 0.80, hardship recall ≥ 0.90.
+The holdout split was used only to check, not to tune.
+
+    uv run python scripts/eval_extraction.py --source notes --split holdout
+    uv run python scripts/eval_extraction.py --source transcripts --split holdout
+    uv run python scripts/eval_extraction.py --source transcripts --calls whisper   # or --calls release
+
+## Holdout: every field passes
+
+| Field | Notes F1 (149) | Recall | Calls F1 (139) | Recall |
+|---|---:|---:|---:|---:|
+| Hardship | 0.83 | **1.00** | 0.99 | **1.00** |
+| Promise to pay | 0.85 | 0.88 | 0.95 | 1.00 |
+| Promised date | 0.90 | 0.81 | 0.96 | 0.92 |
+| Promised amount | 0.93 | 0.86 | 0.99 | 0.99 |
+| Dispute | 0.86 | 1.00 | 0.95 | 1.00 |
+| Cease request | 1.00 | 1.00 | 1.00 | 1.00 |
+| Third party present | 1.00 | 1.00 | 1.00 | 1.00 |
+
+Ten of the 149 calls got no usable reply from the model (a schema error after one retry); they're left out above. Cease and third party have only 1–2
+positives in each holdout, so treat those two F1s as "no misses", not as a precise rate.
+
+## Cease: what the model got wrong, and the fix
+
+The model never missed a labelled cease request, in any split. It failed the gate on false alarms, of two kinds:
+
+- **Anger about call frequency**: "Stop calling me every day! This is harassment.", "Arretez de m'appeler tous les
+  jours!". The labels treat these as complaints for a supervisor, not a request to stop all contact.
+- **The insolvency stay**: "says filed bankruptcy … cease contact noted". Contact stops, but because the law says so
+  (insolvency has its own hold flag in Kept), not because the customer asked.
+
+Telling the model so in the prompt didn't move it, so a small rule on the model's own quote does
+(`kept.text.extract._cease`, tested in `tests/text/test_extract_and_eval.py`). Before the rule, cease F1 on the calls
+holdout was 0.20 (8 false alarms); after, 1.00 with no new misses. Every cease is still confirmed by an agent before it
+blocks contact.
+
+## From the recording, not the transcript
+
+The 48 labelled calls that have a recording, read by the same extraction from the release's transcript and from
+Whisper's own transcript of the audio (`docs/reports/voice_wer.md`):
+
+| Field | Release transcript F1 | Whisper transcript F1 |
+|---|---:|---:|
+| Hardship | 1.00 | **0.97** (recall 1.00) |
+| Promise to pay | 0.99 | 0.89 |
+| Promised amount | 0.97 | 0.97 |
+| Promised date | 0.95 | 0.83 |
+| Dispute | 0.92 | 0.80 |
+
+Every hardship in these calls is caught straight from the audio. Dates suffer most: the Whisper transcript has no
+speaker labels, so "the 15th" is sometimes the agent's suggestion, not the customer's promise. Transcribing the agent and
+customer channels separately is the next step.
