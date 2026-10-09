@@ -215,8 +215,9 @@ EXAMPLES: tuple[tuple[str, str], ...] = (
         "FROM silver.contact_history WHERE complaint_raised_flag",
     ),
     (
-        # a dispute is raised in a contact (call, message): count contact_history rows, of any dispute type
-        "How many disputes were raised between 1 and 7 September 2026, compared with the 7 days before?",
+        # a dispute is raised in a contact (call, message): count contact_history rows; contact_history has no
+        # dispute type, so a late-fee dispute is any dispute_raised_flag contact (never collections_cases)
+        "How many late-fee disputes were raised between 1 and 7 September 2026, compared with the 7 days before?",
         "SELECT count(*) FILTER (WHERE CAST(contact_ts_local AS DATE) BETWEEN DATE '2026-09-01' AND DATE '2026-09-07')"
         " AS disputes_period,\n"
         "       count(*) FILTER (WHERE CAST(contact_ts_local AS DATE) BETWEEN DATE '2026-08-25' AND DATE '2026-08-31')"
