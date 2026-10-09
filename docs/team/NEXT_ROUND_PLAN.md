@@ -270,12 +270,46 @@ Have a recorded backup ready in a second tab.
 | **Mon 12** | WS4 retrain plus extraction re-gate; WS3 retrieval and stress ≥ 80%; deck v2 storyline (WS1) | Ask accuracy at target |
 | **Tue 13** | business case refresh with measured numbers; JUDGES.md; README trim; deck v2 complete | full dress rehearsal 1 |
 | **Wed 14** | fix everything rehearsal 1 found; final benchmark run; fairness follow-ups written up | dress rehearsal 2 on a cold machine |
-| **Thu 15** | freeze at 18:00 (code and deck); pre-flight script; Q&A drill with mock unseen questions | everything merged, CI green |
-| **Fri 16** | pre-flight 15 minutes before the slot; present | — |
+| **Thu 15** | freeze at 18:00 (code and deck); evening: `kept features && kept score` on the demo machine (§7a); Q&A drill | everything merged, CI green, features fresh |
+| **Fri 16** | `kept preflight` 15 minutes before the slot must print GO (§7a); present | — |
 
 Rules for the week:
 - Same as `TEAM_PLAN.md` §0: branch per change, PR to `main`, CI green, merge commits only.
 - Nothing merges after Thursday 18:00 except a fix for something broken.
+
+---
+
+## 7a. Day-of runbook (any machine: do not skip)
+
+Whoever's laptop runs the demo, these steps apply. The system needs the warehouse built on that machine (`kept nightly`, or a
+copy of `data/`), a `.env` with a working free Gemini key, and Ollama with `gemma3:12b-it-qat` pulled.
+
+**The evening before (Thu 15 Oct)**
+```bash
+uv run kept features && uv run kept score   # features go stale after 26 h; stale features make every card "no action"
+```
+
+**15 minutes before the slot (Fri 16 Oct)**
+```bash
+uv run kept serve                            # terminal 1 (real data)
+cd web && pnpm dev                           # terminal 2
+uv run kept preflight                        # terminal 3: must print "kept preflight: GO"
+```
+On NO GO, the failing check names its fix:
+- **features:** run `kept features && kept score` with `kept serve` stopped.
+- **warehouse lock:** a stale `kept serve` holds it; stop that process.
+- **Ask LLM:** the key is out of quota; swap in a fresh free key and restart `kept serve`.
+- **text LLM:** start Ollama.
+- **web:** run `pnpm dev`.
+
+**Between rehearsal takes**
+```bash
+# stop kept serve first (DuckDB allows one writer), then:
+uv run kept demo-reset                       # removes notes typed in earlier takes, so the demo case starts Green again
+uv run kept serve
+```
+
+**Fallback:** `uv run kept serve --demo` runs twelve in-memory cases with no warehouse and no network.
 
 ---
 
@@ -288,3 +322,4 @@ Rules for the week:
 - [ ] Voice: a WER report and one demo moment.
 - [ ] `JUDGES.md`, a trimmed README, `kept demo-reset`, the pre-flight script.
 - [ ] Two clean dress rehearsals; each person presents their own layer.
+- [ ] Day-of runbook (§7a) followed on the demo machine: features refreshed the evening before, preflight GO before the slot.
