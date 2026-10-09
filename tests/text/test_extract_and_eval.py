@@ -221,3 +221,22 @@ def test_relative_promised_dates(value: str, expected: date | None) -> None:
 def test_amount_formats(raw: object, expected: str) -> None:
     x = _extract(_reply(promised_amount={"value": raw, "quote": "$140", "confidence": 0.9}))
     assert x.promised_amount.value == Decimal(expected)
+
+
+@pytest.mark.parametrize(
+    ("text", "quote", "kept"),
+    [
+        ("cust asked us to stop calling", "asked us to stop calling", True),
+        ("customer: Stop calling me every day! This is harassment.", "Stop calling me every day!", False),
+        ("spoke w/ cust, says filed bankruptcy, cease contact noted", "cease contact noted", False),
+        ("says filed bankruptcy. asked us to stop calling", "asked us to stop calling", True),
+    ],
+)
+def test_cease_is_the_customers_request_only(text: str, quote: str, kept: bool) -> None:
+    """Frequency complaints and the insolvency stay aren't cease requests (labels: 5 of 5 ceases kept)."""
+    llm = PurposeLLM(
+        {Purpose.TEXT_EXTRACT: [_reply(cease_request={"value": True, "quote": quote, "confidence": 1})]}
+    )
+    note = RedactedText(text=text, redactor_version="test")
+    out = LLMExtractor(llm).extract(note, source_id="N-2", case_id="C-1")
+    assert out.cease_request.value is kept
