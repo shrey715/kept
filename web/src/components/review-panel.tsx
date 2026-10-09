@@ -101,13 +101,11 @@ export function ReviewPanel({
                 It&apos;s now in the team lead&apos;s approvals inbox.
               </Text>
             )}
-            {/* Customer pay link (#89, PR #121): switched off until it works on real data (most customers have no
-                detected payday, so no plan to offer). The page lives in web/src/app/_pay; rename it back to pay to restore.
             {result.released && p.action === "sms_payment_link" && (
               <Button asChild mt="4" variant="soft">
                 <a href={`/pay/${encodeURIComponent(p.proposal_id)}`} target="_blank" rel="noreferrer">Customer view: what the SMS opens</a>
               </Button>
-            )} */}
+            )}
             {!result.released && p.status === "pending" && (
               <Button mt="4" variant="soft" color="gray" onClick={() => setResult(null)}>
                 Back to review

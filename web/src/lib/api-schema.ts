@@ -196,6 +196,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pay/{proposal_id}/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pay Plans
+         * @description Plans from the customer's own answers (next payday, how often, what they can put toward it each
+         *     payday), when the bank doesn't know them. Still payday-dated and within what they said.
+         */
+        post: operations["pay_plans_pay__proposal_id__plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/chart": {
         parameters: {
             query?: never;
@@ -955,6 +976,7 @@ export interface components {
         PayChoiceIn: {
             /** Installments */
             installments: number;
+            stated?: components["schemas"]["StatedPay"] | null;
         };
         /**
          * PayOffer
@@ -965,6 +987,11 @@ export interface components {
             amount_due: string | null;
             /** Options */
             options: components["schemas"]["PromiseSizing"][];
+            /**
+             * Ask
+             * @default false
+             */
+            ask: boolean;
         };
         /**
          * PayrollFrequency
@@ -1192,6 +1219,20 @@ export interface components {
             effective_from?: string | null;
             /** Effective To */
             effective_to?: string | null;
+        };
+        /**
+         * StatedPay
+         * @description What a customer tells the pay page when the bank doesn't know their payday or spare cash (#89).
+         */
+        StatedPay: {
+            /**
+             * Next Payday
+             * Format: date
+             */
+            next_payday: string;
+            frequency: components["schemas"]["PayrollFrequency"];
+            /** Per Payday */
+            per_payday: number | string;
         };
         /**
          * StatedReason
@@ -1646,6 +1687,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromiseSizing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_plans_pay__proposal_id__plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatedPay"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayOffer"];
                 };
             };
             /** @description Validation Error */

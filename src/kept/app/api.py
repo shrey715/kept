@@ -14,7 +14,7 @@ import csv
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -46,6 +46,7 @@ from kept.contracts.nba import (
     ProposalStatus,
     ReleaseDecision,
     ReleaseResult,
+    StatedPay,
 )
 from kept.data.identity.steward import StewardQueue, StewardVerdict
 from kept.governance.access import can_view_case, masked_view
@@ -169,10 +170,12 @@ class PayOffer(BaseModel):
 
     amount_due: Decimal | None  # None when no plan fits: the page then says "let's talk" and shows no amount
     options: list[PromiseSizing]
+    ask: bool = False  # no plan from what the bank knows: the page asks the customer about their pay
 
 
 class PayChoiceIn(BaseModel):
     installments: int
+    stated: StatedPay | None = None  # the answers the plans were built from, when the page asked
 
 
 class SourceIn(BaseModel):
@@ -366,30 +369,44 @@ def create_app(services: Services) -> FastAPI:
     def ask(request: AskRequest) -> AskResponse:
         return services.ask.ask(request)  # Track B: CollectionsAsk does the work
 
-    def pay_offer(proposal_id: str) -> tuple[Proposal, list[PromiseSizing]]:
+    def pay_offer(proposal_id: str, stated: StatedPay | None = None) -> tuple[Proposal, list[PromiseSizing]]:
         p = services.proposals.get(proposal_id)
         released = p is not None and p.status in (ProposalStatus.APPROVED, ProposalStatus.RELEASED)
         if p is None or p.action is not Action.SMS_PAYMENT_LINK or not released:
             raise HTTPException(404, "this link isn't active")
-        options: list[PromiseSizing] = getattr(services.engine, "payment_options", lambda *_: [])(
-            p.case_id, services.clock()
+        if stated is not None and not (
+            services.clock().date() <= stated.next_payday <= services.clock().date() + timedelta(days=35)
+        ):
+            raise HTTPException(422, "your next payday should be within the next five weeks")
+        options: list[PromiseSizing] = getattr(services.engine, "payment_options", lambda *_, **__: [])(
+            p.case_id, services.clock(), **({"stated": stated} if stated else {})
         )
         return p, options
+
+    def offer(options: list[PromiseSizing], *, asked: bool) -> PayOffer:
+        # instalments round up to the cent, so the smallest total is the balance (exact when 1 fits)
+        return PayOffer(
+            amount_due=min((o.amount * o.installments for o in options), default=None),
+            options=options,
+            ask=not options and not asked,
+        )
 
     # ponytail: the proposal ID is the link token for the demo; a signed, expiring token before any real SMS.
     @app.get("/pay/{proposal_id}", response_model=PayOffer)
     def pay(proposal_id: str) -> PayOffer:
         """The customer's page (#89): plans Kept sized to payday and spare cash. Only a released SMS
         proposal has one; the customer picks among them, never a free date."""
-        _, options = pay_offer(proposal_id)
-        # instalments round up to the cent, so the smallest total is the balance (exact when 1 fits)
-        return PayOffer(
-            amount_due=min((o.amount * o.installments for o in options), default=None), options=options
-        )
+        return offer(pay_offer(proposal_id)[1], asked=False)
+
+    @app.post("/pay/{proposal_id}/plans", response_model=PayOffer)
+    def pay_plans(proposal_id: str, body: StatedPay) -> PayOffer:
+        """Plans from the customer's own answers (next payday, how often, what they can put toward it each
+        payday), when the bank doesn't know them. Still payday-dated and within what they said."""
+        return offer(pay_offer(proposal_id, body)[1], asked=True)
 
     @app.post("/pay/{proposal_id}", response_model=PromiseSizing)
     def pay_choose(proposal_id: str, body: PayChoiceIn) -> PromiseSizing:
-        p, options = pay_offer(proposal_id)
+        p, options = pay_offer(proposal_id, body.stated)
         chosen = next(
             (o for o in options if o.installments == body.installments), None
         )  # never the client's amount
@@ -408,6 +425,16 @@ def create_app(services: Services) -> FastAPI:
                     "installments": chosen.installments,
                     "amount": str(chosen.amount),
                     "due_date": chosen.due_date.isoformat(),
+                    # the customer's own payday is new payday data: it's how the bank learns it
+                    **(
+                        {
+                            "stated_next_payday": body.stated.next_payday.isoformat(),
+                            "stated_frequency": body.stated.frequency.value,
+                            "stated_per_payday": f"{body.stated.per_payday:.2f}",
+                        }
+                        if body.stated
+                        else {}
+                    ),
                 },
             )
         )

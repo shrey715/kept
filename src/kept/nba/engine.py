@@ -24,6 +24,7 @@ from kept.contracts.nba import (
     NBACard,
     PromiseSizing,
     Proposal,
+    StatedPay,
 )
 from kept.nba.explain import top_reasons
 from kept.nba.promise_model import PromiseModel, serving_row
@@ -123,16 +124,21 @@ class KeptEngine:
         self._drift = tuple(drift_alarm)  # model inputs that shifted overnight (#86): Green goes to a person
         self._promise = promise_model  # explains a sized promise on the card, never ranks it (#79)
 
-    def payment_options(self, case_id: str, now: datetime) -> list[PromiseSizing]:
-        """Every payday-dated plan within spare cash (#89, the customer page). KeyError if unknown."""
+    def payment_options(
+        self, case_id: str, now: datetime, stated: StatedPay | None = None
+    ) -> list[PromiseSizing]:
+        """Every payday-dated plan within spare cash (#89, the customer page). With `stated`, the
+        customer's own next payday, pay frequency and amount per payday replace the bank's.
+        KeyError if unknown."""
         ctx = self._context.build(case_id, now)
         today = ctx.now.astimezone(ZoneInfo(ctx.time_zone)).date() if ctx.time_zone else ctx.now.date()
         return promise_options(
             balance_due=ctx.balance_at_risk,
             spare_cash_monthly=ctx.estimated_monthly_spare_cash,
-            expected_payday=ctx.expected_next_payroll_date,
-            payroll_frequency=ctx.payroll_frequency,
+            expected_payday=stated.next_payday if stated else ctx.expected_next_payroll_date,
+            payroll_frequency=stated.frequency if stated else ctx.payroll_frequency,
             today=today,
+            stated_per_payday=stated.per_payday if stated else None,
         )
 
     def recommend(self, case_id: str, now: datetime) -> NBACard:

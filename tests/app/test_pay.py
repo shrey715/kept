@@ -82,4 +82,34 @@ class _NoPlans:
 def test_no_plan_means_no_amount() -> None:
     """No detected payday or spare cash: no plans and no amount, so the page never says "$0.00 is overdue"."""
     offer = _client(engine=_NoPlans())[0].get("/pay/P1").json()
-    assert offer == {"amount_due": None, "options": []}
+    assert offer == {"amount_due": None, "options": [], "ask": True}  # the page asks about their pay
+
+
+class _Unknown:  # the bank knows neither payday nor spare cash: only the customer's answers size a plan
+    def payment_options(self, case_id: str, now: datetime, stated=None):  # type: ignore[no-untyped-def]
+        if stated is None:
+            return []
+        return promise_options(
+            **{**SIZE, "spare_cash_monthly": None, "expected_payday": stated.next_payday},
+            stated_per_payday=stated.per_payday,
+        )
+
+
+def test_the_customer_answers_size_the_plan_and_are_audited() -> None:
+    client, log = _client(engine=_Unknown())
+    stated = {"next_payday": "2026-10-16", "frequency": "biweekly", "per_payday": "120"}
+    offer = client.post("/pay/P1/plans", json=stated).json()
+    assert [o["installments"] for o in offer["options"]] == [3] and not offer["ask"]  # 150 > 120 >= 100
+    assert (
+        offer["options"][0]["due_date"] == "2026-10-17"
+        and "said they can afford" in offer["options"][0]["rationale"]
+    )
+    assert client.post("/pay/P1", json={"installments": 2, "stated": stated}).status_code == 422
+    assert client.post("/pay/P1", json={"installments": 3, "stated": stated}).json()["amount"] == "100.00"
+    (event,) = log.read()
+    assert (
+        event.payload["stated_next_payday"] == "2026-10-16" and event.payload["stated_per_payday"] == "120.00"
+    )
+    too_little = client.post("/pay/P1/plans", json={**stated, "per_payday": "50"}).json()
+    assert too_little == {"amount_due": None, "options": [], "ask": False}  # the page offers a call instead
+    assert client.post("/pay/P1/plans", json={**stated, "next_payday": "2026-12-01"}).status_code == 422
