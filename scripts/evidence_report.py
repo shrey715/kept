@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import math
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
@@ -28,6 +29,8 @@ from kept.nba import promise_model as pm
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "evidence.md"
 BOOT = 300
+TRAIN_CUTOFF = datetime(2026, 8, 15)  # the live uplift champion's split (kept train --cutoff)
+AUDIT_CUTOFF = datetime(2026, 3, 1)  # the split the leak was found on (the model now cuts at pm.CUTOFF)
 
 
 def ci_diff(p1: float, n1: int, p2: float, n2: int) -> str:
@@ -121,11 +124,11 @@ def payday(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
 
 def models(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str]:
     lgbm = dict(n_estimators=200, num_leaves=15, min_child_samples=200, learning_rate=0.05, verbose=-1)
-    clean = [f for f in pm.FEATURES if f != "amount_ratio"]
-    early = rows.created < pm.CUTOFF
+    clean = list(pm.FEATURES)  # leak-free since #142
+    early = rows.created < AUDIT_CUTOFF
     abl = ["| Features | Test AUC (promises after 1 Mar) |", "|---|---:|"]
     for name, feats in [
-        ("all seven (as shipped)", list(pm.FEATURES)),
+        ("all seven (as first shipped)", [*clean, "amount_ratio"]),
         ("without amount_ratio", clean),
         ("without amount_ratio and dpd", [f for f in clean if f != "dpd"]),
     ]:
@@ -170,6 +173,87 @@ def models(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
     return "\n".join(abl), "\n".join(h2h) + note
 
 
+def off_policy(con: duckdb.DuckDBPyConnection) -> str:
+    """Doubly robust value of each policy on the uplift test decisions (randomised cases, from TRAIN_CUTOFF on):
+    outcome model = the live champion (fitted before the cutoff), propensity = LightGBM on the same inputs, fitted
+    before the cutoff, clipped at 0.05. Paid within 14 days is the outcome the uplift model is trained on."""
+    import pickle
+
+    from kept.nba.legacy import legacy_to_action
+    from kept.nba.train import load_rows
+    from kept.nba.uplift import _frame
+
+    model = pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes())
+    acts = [a.value for a in model.actions]
+    rows = load_rows(con)
+    rows = rows[rows.action.isin(acts)].reset_index(drop=True)
+    early = (rows.decision_at < TRAIN_CUTOFF).to_numpy()
+    X = _frame(rows[list(model._columns)])
+    prop = LGBMClassifier(
+        n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1
+    )
+    prop.fit(X[early], rows.action[early])
+    late = rows[~early].reset_index(drop=True)
+    mu = model.predict_proba(late)[acts].to_numpy()
+    p_all = pd.DataFrame(prop.predict_proba(X[~early]), columns=prop.classes_)[acts].to_numpy()
+    a_idx = late.action.map({a: i for i, a in enumerate(acts)}).to_numpy()
+    y = late.paid_14d.to_numpy(dtype=float)
+    p_a = np.clip(p_all[np.arange(len(late)), a_idx], 0.05, None)
+    resid = (y - mu[np.arange(len(late)), a_idx]) / p_a
+
+    def est(v: np.ndarray) -> str:
+        rng = np.random.default_rng(0)
+        bs = [v[rng.integers(0, len(v), len(v))].mean() for _ in range(BOOT)]
+        return (
+            f"{100 * v.mean():.1f}% [{100 * np.percentile(bs, 2.5):.1f}, {100 * np.percentile(bs, 97.5):.1f}]"
+        )
+
+    def dr(pi: np.ndarray, keep: np.ndarray) -> str:
+        return est((mu[np.arange(len(late)), pi] + (a_idx == pi) * resid)[keep])
+
+    def ips(pi: np.ndarray, keep: np.ndarray) -> str:  # self-normalised: no outcome model in the value
+        w = ((a_idx == pi) / p_a)[keep]
+        return est(w * y[keep] * len(w) / w.sum())
+
+    legacy = late.nba_recommendation_last.map(lambda c: (x := legacy_to_action(c)) and x.value)
+    has_legacy = legacy.isin(acts).to_numpy()
+    legacy_idx = legacy.map({a: i for i, a in enumerate(acts)}).fillna(0).astype(int).to_numpy()
+    everyone = np.ones(len(late), bool)
+    out = [
+        f"| Policy (on the {len(late):,} decisions from {TRAIN_CUTOFF:%d %b}) | Paid within 14 days: doubly robust | Inverse propensity |",
+        "|---|---:|---:|",
+        f"| What the bank actually did | {100 * y.mean():.1f}% (observed) | |",
+    ]
+    for name, pi, keep in [
+        ("The bank's strategy recommendation", legacy_idx, has_legacy),
+        ("Kept's model, on those same decisions", mu.argmax(axis=1), has_legacy),
+        ("Kept's model: the action it scores best", mu.argmax(axis=1), everyone),
+        ("Wait: contact nobody", np.full(len(late), acts.index("wait")), everyone),
+    ]:
+        cover = "" if keep.all() else f" ({100 * keep.mean():.0f}% of decisions)"
+        out.append(f"| {name}{cover} | {dr(pi, keep)} | {ips(pi, keep)} |")
+    return "\n".join(out)
+
+
+def guards(con: duckdb.DuckDBPyConnection) -> str:
+    """The guard metrics next to the primary one: the bank today (its randomised cells) against Kept."""
+    b = con.execute("""
+        select avg(complaint_flag::int) complaint, avg((coalesce(contact_cap_breach_count, 0) > 0)::int) cap,
+               avg((coalesce(out_of_hours_contact_count, 0) > 0)::int) ooh
+        from silver.collections_cases where assignment_method = 'random'""").fetchone()
+    return "\n".join(
+        [
+            "| Guard (must not get worse) | Bank today (randomised cases) | Kept | Where Kept's number comes from |",
+            "|---|---:|---:|---|",
+            f"| Contact-cap breaches | {100 * b[1]:.2f}% of cases | 0 | hard rules before scoring, re-checked at release (`kept.nba.rules`, `kept.nba.release`) |",
+            f"| Contact outside calling hours | {100 * b[2]:.1f}% of cases | 0 | call windows inside the customer's local calling hours (same) |",
+            "| Hardship notes missed | not measured | recall 1.00 | extraction gate, holdout notes and calls (`docs/reports/extraction_gate.md`) |",
+            "| Any-contact fairness ratio | not measured | 0.87 or above | four-fifths rule, 11 attributes (`docs/reports/fairness_report.pdf`) |",
+            f"| Complaints | {100 * b[0]:.1f}% of cases | not measurable offline | needs a live pilot cell |",
+        ]
+    )
+
+
 def ratio_table(con: duckdb.DuckDBPyConnection) -> str:
     d = con.execute("""
         select ptp_status, count(*) n, avg((abs(ptp_amount - overdue_at_creation) < 0.01)::int) full_balance
@@ -186,7 +270,12 @@ def main() -> None:
     a = ap.parse_args()
     con = duckdb.connect(a.warehouse, read_only=True)
     con.execute("set memory_limit = '8GB'")
-    rows = pm.load(con)
+    rows = pm.load(con).merge(  # the leaky ratio the shipped model dropped, for the audit only
+        con.execute(
+            "select ptp_id, ptp_to_overdue_ratio::double as amount_ratio from silver.promises_to_pay"
+        ).df(),
+        on="ptp_id",
+    )
     cell_md = cells(con)
     pay_md, pay_sum = payday(con, rows)
     abl_md, h2h_md = models(con, rows)
@@ -226,7 +315,23 @@ at promise time, but in this data a full-balance promise is all but certain to b
 That is too clean to be real behaviour, so we treat it as an artefact of how the data was generated and **headline the
 leak-free model**. Kept's promise model drops this feature (phase 2).
 
-## 4. Against the bank's own model
+## 4. Kept's contact policy, estimated off-policy
+
+{off_policy(con):s}
+
+Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
+uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
+They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
+scores best. A randomised pilot cell is the way to confirm it; the bank already runs four.
+
+## 5. One primary metric, and the guards
+
+**Primary: promised money paid** (§2). Kept moves it by changing when a promise falls due. **Guards** are what it must not
+make worse:
+
+{guards(con):s}
+
+## 6. Against the bank's own model
 
 {h2h_md:s}
 

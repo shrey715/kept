@@ -37,7 +37,7 @@ randomised due-date test, which the bank can run as a fourth challenger cell.
 
 | Features | Test AUC (promises after 1 Mar) |
 |---|---:|
-| all seven (as shipped) | 0.922 |
+| all seven (as first shipped) | 0.922 |
 | without amount_ratio | 0.626 |
 | without amount_ratio and dpd | 0.582 |
 
@@ -53,7 +53,35 @@ at promise time, but in this data a full-balance promise is all but certain to b
 That is too clean to be real behaviour, so we treat it as an artefact of how the data was generated and **headline the
 leak-free model**. Kept's promise model drops this feature (phase 2).
 
-## 4. Against the bank's own model
+## 4. Kept's contact policy, estimated off-policy
+
+| Policy (on the 141,350 decisions from 15 Aug) | Paid within 14 days: doubly robust | Inverse propensity |
+|---|---:|---:|
+| What the bank actually did | 29.1% (observed) | |
+| The bank's strategy recommendation (60% of decisions) | 32.5% [32.1, 32.9] | 32.4% [31.2, 33.5] |
+| Kept's model, on those same decisions (60% of decisions) | 38.6% [38.1, 39.1] | 42.0% [40.1, 43.7] |
+| Kept's model: the action it scores best | 37.2% [36.8, 37.6] | 39.7% [38.2, 41.1] |
+| Wait: contact nobody | 22.4% [21.2, 23.4] | 22.4% [22.0, 22.8] |
+
+Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
+uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
+They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
+scores best. A randomised pilot cell is the way to confirm it; the bank already runs four.
+
+## 5. One primary metric, and the guards
+
+**Primary: promised money paid** (§2). Kept moves it by changing when a promise falls due. **Guards** are what it must not
+make worse:
+
+| Guard (must not get worse) | Bank today (randomised cases) | Kept | Where Kept's number comes from |
+|---|---:|---:|---|
+| Contact-cap breaches | 0.03% of cases | 0 | hard rules before scoring, re-checked at release (`kept.nba.rules`, `kept.nba.release`) |
+| Contact outside calling hours | 1.4% of cases | 0 | call windows inside the customer's local calling hours (same) |
+| Hardship notes missed | not measured | recall 1.00 | extraction gate, holdout notes and calls (`docs/reports/extraction_gate.md`) |
+| Any-contact fairness ratio | not measured | 0.87 or above | four-fifths rule, 11 attributes (`docs/reports/fairness_report.pdf`) |
+| Complaints | 3.1% of cases | not measurable offline | needs a live pilot cell |
+
+## 6. Against the bank's own model
 
 | Model (trained on scored promises before 31 Jul, tested on the 12,820 after) | AUC |
 |---|---:|
