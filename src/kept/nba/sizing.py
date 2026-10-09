@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import calendar
 from datetime import date, timedelta
 from decimal import ROUND_CEILING, ROUND_DOWN, Decimal
 
@@ -15,6 +16,30 @@ PERIODS_PER_YEAR = {
     PayrollFrequency.SEMI_MONTHLY: 24,
     PayrollFrequency.MONTHLY: 12,
 }  # IRREGULAR and UNKNOWN: monthly
+
+
+_STEP_DAYS = {PayrollFrequency.WEEKLY: 7, PayrollFrequency.BIWEEKLY: 14, PayrollFrequency.SEMI_MONTHLY: 15}
+
+
+def next_payday(expected: date | None, frequency: PayrollFrequency, *, today: date) -> date | None:
+    """The bank's expected payday rolled forward along the pay schedule to the first one on or after today.
+    The deposit snapshot ages: a payday it expected last week is the start of the next cycle, not "no payday".
+    Semi-monthly steps 15 days, as in the features (dbt account_features); irregular or unknown pay isn't
+    projected."""
+    if expected is None or expected >= today:
+        return expected
+    if step := _STEP_DAYS.get(frequency):
+        return expected + timedelta(days=step * -(-(today - expected).days // step))
+    if frequency is PayrollFrequency.MONTHLY:
+        months = (today.year - expected.year) * 12 + today.month - expected.month
+        for k in (months, months + 1):
+            y, m = divmod(expected.month - 1 + k, 12)
+            d = date(
+                expected.year + y, m + 1, min(expected.day, calendar.monthrange(expected.year + y, m + 1)[1])
+            )
+            if d >= today:
+                return d
+    return expected
 
 
 def promise_due_date(expected_payday: date, *, today: date, offset_days: int = 1) -> date | None:
