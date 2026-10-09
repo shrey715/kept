@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 
 from kept.contracts import Action, ActionScore, Channel, HardshipStatus, PayrollFrequency, ReleaseTier
 from kept.nba.ranking import allocate_capacity, is_close_call, score_actions
-from kept.nba.sizing import promise_due_date, size_promise, sizing_text
+from kept.nba.sizing import next_payday, promise_due_date, size_promise, sizing_text
 from kept.nba.tiers import assign_tier
 
 PAYDAY = date(2026, 10, 2)
@@ -304,3 +304,16 @@ def test_tier_precedence(
         assert base is ReleaseTier.RED
     if action is Action.WAIT and not (hs is not HardshipStatus.NONE or red1 or red2 or red3 or close):
         assert base is ReleaseTier.GREEN
+
+
+def test_next_payday_rolls_a_stale_payday_forward_on_the_schedule() -> None:
+    today = date(2026, 10, 10)
+    assert next_payday(date(2026, 10, 12), PayrollFrequency.BIWEEKLY, today=today) == date(2026, 10, 12)
+    assert next_payday(date(2026, 9, 29), PayrollFrequency.BIWEEKLY, today=today) == date(2026, 10, 13)
+    assert next_payday(date(2026, 10, 3), PayrollFrequency.WEEKLY, today=today) == today  # today counts
+    assert next_payday(date(2026, 9, 29), PayrollFrequency.MONTHLY, today=today) == date(2026, 10, 29)
+    assert next_payday(date(2026, 8, 31), PayrollFrequency.MONTHLY, today=date(2026, 9, 5)) == date(
+        2026, 9, 30
+    )
+    assert next_payday(date(2026, 9, 29), PayrollFrequency.IRREGULAR, today=today) == date(2026, 9, 29)
+    assert next_payday(None, PayrollFrequency.MONTHLY, today=today) is None

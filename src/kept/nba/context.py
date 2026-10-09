@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import duckdb
 
@@ -24,6 +25,7 @@ from kept.contracts.nba import CaseContext
 from kept.hardship.combine import HardshipObservation, combine
 from kept.nba.legacy import legacy_to_action
 from kept.nba.release import in_holdout
+from kept.nba.sizing import next_payday
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +173,13 @@ class KeptContextBuilder:
             hardship_status=hardship,
             vulnerable=customer.vulnerability_flag,
             balance_at_risk=case.total_overdue,
-            expected_next_payroll_date=customer.expected_next_payroll_date,
+            expected_next_payroll_date=next_payday(
+                customer.expected_next_payroll_date,
+                customer.payroll_frequency_detected,
+                today=now.astimezone(ZoneInfo(customer.time_zone)).date()
+                if customer.time_zone
+                else now.date(),
+            ),
             payroll_frequency=customer.payroll_frequency_detected,
             estimated_monthly_spare_cash=fv.estimated_monthly_spare_cash,
             in_holdout=in_holdout(customer.golden_customer_id, salt=self._salt, share=HOLDOUT_SHARE),
