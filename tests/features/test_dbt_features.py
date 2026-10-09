@@ -103,7 +103,7 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "third_party_present_flag": rng.random() < 0.2,
             }
         )
-    cards, loans, deposits, customers, golden = [], [], [], [], []
+    cards, loans, deposits, customers, golden, salary = [], [], [], [], [], []
     freqs = ["weekly", "biweekly", "semi_monthly", "monthly", None]
     for i in range(60):  # one golden customer per CRM id: a card, a loan for half, payroll for most
         snap = date(2026, 9, 28) if i % 10 else date(2026, 3, 31)  # some accounts closed earlier
@@ -145,6 +145,26 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 **{f"net_cash_flow_m{k:02d}": round(rng.uniform(-900, 600), 2) for k in range(1, 13)},
             }
         )
+        if (
+            freq
+        ):  # monthly employer pay Feb-Aug, September for half (a month still running at the as_of dates)
+            per = {"weekly": 4, "biweekly": 2, "semi_monthly": 2, "monthly": 1}[freq]
+            base = rng.uniform(800, 3000)
+            for m in range(2, 10 if i % 2 else 9):
+                count = 0 if rng.random() < 0.1 else per
+                first = date(2026, m, rng.randrange(1, 8))
+                salary.append(
+                    {
+                        "deposit_account_id": f"D-{i}",
+                        "crm_customer_id": f"CRM-{i}",
+                        "credit_month": f"2026-{m:02d}",
+                        "employer_flag": "N" if rng.random() < 0.05 else "Y",
+                        "credit_count": count,
+                        "credit_amount_total": round(count * base * rng.choice([1, 1, 0.7]), 2),
+                        "first_credit_date": first if count else None,
+                        "last_credit_date": first + timedelta(days=(per - 1) * 7) if count else None,
+                    }
+                )
         customers.append(
             {"crm_customer_id": f"CRM-{i}", "monthly_housing_cost": rng.choice([None, 900.0, 1500.0])}
         )
@@ -158,6 +178,7 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
         "card_accounts": pd.DataFrame(cards),
         "loan_accounts": pd.DataFrame(loans),
         "deposit_accounts": pd.DataFrame(deposits),
+        "salary_credit_history": pd.DataFrame(salary),
         "customers": pd.DataFrame(customers),
         "c360_customer": pd.DataFrame(golden),
         "collections_cases": pd.DataFrame(cases),
@@ -345,12 +366,38 @@ def _slope(monthly: pd.Series) -> float | None:
     return float(np.polyfit(x, monthly.to_numpy(dtype=float), 1)[0])
 
 
+def _payroll_reference(salary: pd.DataFrame, account: str, d: date) -> tuple[float | None, float | None]:
+    """Payroll delay and pay change from employer pay months known at h = min(d, the feed's end + 1 day)."""
+    s = salary.assign(start=pd.to_datetime(salary.credit_month + "-01"))
+    s = s.assign(end=s.start + pd.offsets.MonthEnd(0))
+    h = min(pd.Timestamp(d), pd.Timestamp(s.end.max()) + pd.Timedelta(days=1))
+    w = s[(s.deposit_account_id == account) & (s.employer_flag == "Y") & (s.start < h)]
+    w = w[w.start >= h - pd.DateOffset(months=7)]
+    if w.credit_count.sum() == 0:
+        return None, None
+    done = w[(w.end < h) & (w.credit_count > 0)].sort_values("start", ascending=False)
+    if done.empty:
+        return None, None
+    before = done.iloc[1:4]
+    change = (
+        (done.credit_amount_total.iloc[0] / done.credit_count.iloc[0])
+        / (before.credit_amount_total.sum() / before.credit_count.sum())
+        - 1
+        if len(before)
+        else None
+    )
+    dates = [x for x in pd.concat([w.first_credit_date, w.last_credit_date]).dropna() if pd.Timestamp(x) < h]
+    gap = int(np.floor(30.4 / done.credit_count.iloc[:3].mean() + 0.5))
+    delay = max(0, (h - pd.Timestamp(max(dates))).days - gap - 2)
+    return float(delay), None if change is None else round(float(change), 4)
+
+
 def test_account_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, pd.DataFrame]]) -> None:
     """Latest dpd per account (aged within a month), 30+ dpd month-ends in 12 months, days in
     bucket, trend slopes over 12 months, next payday projected on the schedule, spare cash."""
     out, src = built
     period = {"weekly": 7, "biweekly": 14, "semi_monthly": 15}
-    checked = 0
+    checked = paid = 0
     for r in out.itertuples():
         i = int(r.golden_customer_id[2:])
         d = pd.Timestamp(r.as_of).date()
@@ -397,9 +444,15 @@ def test_account_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, p
             assert r.days_to_next_payroll == ref
         elif p:  # projected back along the schedule: a payday on the same cycle
             assert 0 <= r.days_to_next_payroll < p and (ref - r.days_to_next_payroll) % p == 0
-        known = dp.snapshot_date <= d
-        assert pd.isna(r.payroll_delay_days) is not known
-        if known:
+        delay, change = _payroll_reference(src["salary_credit_history"], f"D-{i}", d)
+        got = None if pd.isna(r.pay_change_vs_3m_avg) else float(r.pay_change_vs_3m_avg)
+        assert _same(r.payroll_delay_days, delay), (r.case_id, r.as_of)
+        paid += delay is not None and change is not None
+        assert (got is None) == (change is None) and (got is None or abs(got - change) < 1.1e-4), (
+            r.case_id,
+            r.as_of,
+        )
+        if dp.snapshot_date <= d:
             per_month = {"weekly": 52 / 12, "biweekly": 26 / 12, "semi_monthly": 2, "monthly": 1}[
                 dp.payroll_frequency_detected
             ]
@@ -412,4 +465,4 @@ def test_account_features_match_the_rules(built: tuple[pd.DataFrame, dict[str, p
             )
             assert float(r.estimated_monthly_spare_cash) == pytest.approx(spare, abs=0.01)
         checked += 1
-    assert checked > 30
+    assert checked > 30 and paid > 30

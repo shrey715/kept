@@ -230,6 +230,8 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         ("silver.call_transcripts.turns",),
         "C",
         "Customer stated an intent to pay",
+        # always blank: the nightly's classifier only reads hardship (promise history reaches the model from
+        # promises_to_pay). The live champion was trained with it, so it leaves at the next promoted retrain.
     ),
     FeatureSpec(
         "promised_date",
