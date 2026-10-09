@@ -254,12 +254,31 @@ The workstreams above, sequenced. Each phase ends with its PRs merged (CI green)
 | **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, README "what changed and why" and results table brought up to date, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test · **last:** update `docs/explanation.html` (the whole system in plain English; kept on Akshat's machine, not in git) to match everything above | deck v2 complete; every README and deck number links to a current report; `explanation.html` current; rehearsal 1 |
 | **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, §6 Q&A drill with unseen questions, final benchmark run (to `data/exports/reports/`), secret scan of history, deck PDF and video link in the repo as real text, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; Q&A drill done; no secrets in history; deck and video present; features refreshed |
 
+> **▶ RESUME HERE (paused 10 Oct, ~04:00 IST). Finish these before starting phase 3.**
+> Phases 1 and 2 are done except one item, and two to-dos for Akshat:
+> 1. **Voice demo on the case page (WS5), in progress on branch `feat/voice-panel`.** Decided: pre-transcribed, so it runs on
+>    any laptop. Done: `scripts/voice_extract.py` (Whisper transcript of each recorded call on an open case: redaction, then
+>    extraction; display only, because the card already reads the same call from the release transcript and using both
+>    would count it twice). To do:
+>    - run it to the end: `uv run python scripts/voice_extract.py` (resumes; 1,172 calls at ~4 s each on the GPU, stop
+>      `kept serve` first; writes `data/exports/voice/voice_extractions.parquet`);
+>    - API: `GET /cases/{id}/calls` (role-guarded like the case page) and `GET /calls/{voice_sample_id}/audio` (WAV from
+>      the voice pack: `KEPT_VOICE_DIR`, default `data/raw/files/voice`);
+>    - web: a Calls panel on the case page (audio player, Whisper transcript, hardship quote highlighted), plus a test and a
+>      PR. Without the voice pack or the parquet, the panel simply doesn't appear.
+> 2. **Pay page check (Akshat, in a browser):** release a payment-link proposal (the review panel's "Customer view" opens
+>    it), answer the three questions, and confirm the plans and the "let's talk" case look right.
+> 3. **Decided 10 Oct:** `promise_intent` stays in the live model (the retrain without it was worse beyond noise). The
+>    gate's noise band (0.0003) ignores training variance: two runs of the same recipe on 3 Oct gave 0.0053 and 0.0073.
+>    Worth a bootstrap-based margin later.
+
 **Results so far.** Phase 1: `docs/reports/evidence.md`. Phase 2: payroll features in training (gate kept the champion:
 no uplift gain), promise model leak-free and calibrated, every extraction field passes the gate
 (`docs/reports/extraction_gate.md`), Whisper WER 9.4% vs the bank's 12.4% (`docs/reports/voice_wer.md`), pay link back
 on (asks the customer's pay when the bank doesn't know: 96% of links), stale paydays rolled forward (payday-dated plans on
-cards 0 → 190). Fairness and invariance weren't re-run: the uplift model didn't change. `promise_intent` leaves the
-inputs at the next promoted retrain.
+cards 0 → 190). Phase 1 follow-ups: off-policy estimate of Kept's contact policy (38.6–42.0% paid in 14 days vs the bank
+strategy's 32.4–32.5% on the same decisions) and the guard metrics (`docs/reports/evidence.md` §4–5, #149). Fairness
+report refreshed (still 7 small-number call flags) and invariance re-run: 0 of 96,000 cards change (#148).
 
 Every item in §2 (gaps), §3 (pitfalls) and §3a (practices) lands in one of these rows, so finishing phase 5 finishes the
 plan: no second pass.
