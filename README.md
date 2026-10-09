@@ -197,6 +197,13 @@ make web                   # or the production build above
 - The Ask answers with the free Gemini tier; policy questions cite the section.
 - Without Presidio installed (`make setup-c`) adding a note answers 503; everything else works.
 
+### Before a live demo
+
+```bash
+uv run kept preflight      # go/no-go: API, warehouse lock, fresh features, Gemini, Ollama (warmed), web
+uv run kept demo-reset     # with kept serve stopped: removes notes typed in earlier demos, so cards reset
+```
+
 ### Benchmark answers
 
 ```bash
