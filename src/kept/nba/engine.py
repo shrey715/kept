@@ -276,8 +276,6 @@ class KeptEngine:
             freq = ctx.payroll_frequency.value if ctx.payroll_frequency else None
             common = {
                 "today": today,
-                "amount": float(sizing.amount),
-                "balance": float(ctx.balance_at_risk),
                 "payday": sizing.payday,
                 "frequency": freq,
                 "dpd": fv.max_dpd,

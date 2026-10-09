@@ -30,7 +30,6 @@ def test_trains_on_a_time_split_and_scores_a_serving_row() -> None:
         {
             "created": pd.date_range("2025-06-01", periods=n, freq="2h"),
             "days_to_due": rng.integers(1, 30, n),
-            "amount_ratio": rng.uniform(0.05, 1.5, n),
             "dpd": rng.integers(1, 90, n),
             "prior_broken_90d": rng.integers(0, 3, n),
             "prior_kept_ratio": rng.choice([np.nan, 0.2, 0.8], n),
@@ -38,21 +37,19 @@ def test_trains_on_a_time_split_and_scores_a_serving_row() -> None:
             "days_before_next_pay": rng.integers(1, 14, n),
         }
     )
-    rows["kept"] = (rng.uniform(0, 1, n) < 0.8 - 0.4 * (rows.amount_ratio > 0.8)).astype(int)
+    rows["kept"] = (rng.uniform(0, 1, n) < 0.8 - 0.4 * (rows.days_after_pay > 7)).astype(int)
     model, m = train(rows, cutoff=rows.created.iloc[3_000].to_pydatetime())
     assert (m["rows_train"], m["rows_test"]) == (3_000, 1_000) and m["auc"] > 0.6
     row = serving_row(
         due=date(2026, 10, 10),
         today=date(2026, 10, 4),
-        amount=50,
-        balance=500,
         payday=date(2026, 10, 9),
         frequency="biweekly",
         dpd=12,
         prior_broken_90d=None,
         prior_kept_ratio=None,
     )
-    assert row["days_after_pay"] == 1 and row["days_before_next_pay"] == 13 and row["amount_ratio"] == 0.1
+    assert row["days_after_pay"] == 1 and row["days_before_next_pay"] == 13
     (p,) = model.p_kept([row])
     assert 0 < p < 1
 
