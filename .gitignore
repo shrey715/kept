@@ -16,6 +16,7 @@ data/**
 *.jsonl
 !tests/fixtures/**/*.jsonl
 *.lance/
+.claude/*
 
 # Model artefacts and experiment tracking
 mlruns/
@@ -81,3 +82,16 @@ logs/
 *.toc
 *.out
 docs/**/*.log
+
+# Private files: never committed or pushed (put anything personal here)
+private/
+
+# Demo and video work (captures, renders, recordings)
+demo-output/
+brag-output/
+*.mp4
+*.mov
+*.webm
+demo_script*.md
+benchmark_questions_extra.xlsx
+submission/*.json
