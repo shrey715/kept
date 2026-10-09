@@ -4,16 +4,16 @@
 \subtitle{Does Kept treat protected groups differently? Checked on tonight's 96,000 cards}
 \reportnumber{Governance · fairness}
 \runninghead{Fairness}
-\date{4 October 2026}
+\date{10 October 2026}
 
 \begin{document}
 \makereporttitle
 
-\statrow{\stat{0.86–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0 of 96,000}{cards change when every protected attribute is scrambled}\stat{11}{attributes checked, from the data contract}\stat{7}{flags, all explained below}}
+\statrow{\stat{0.87–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0 of 96,000}{cards change when every protected attribute is scrambled}\stat{11}{attributes checked, from the data contract}\stat{7}{flags, all explained below}}
 
 \takeaway{\textbf{The short version.} For every protected attribute, the group that gets contacted least is within
-0.86–1.00 of the group that gets contacted most, so nothing comes near the four-fifths line. The 7 flags sit on two outcomes.
-\textbf{Calls} are rare (3.3\% of cards), so a handful of calls in a small group flips the ratio. \textbf{Hardship review}
+0.87–1.00 of the group that gets contacted most, so nothing comes near the four-fifths line. The 7 flags sit on two outcomes.
+\textbf{Calls} are rare (2.9\% of cards), so a handful of calls in a small group flips the ratio. \textbf{Hardship review}
 lands more on customers who carry the vulnerability flag, which is the protection doing its job. One gap needs a human look:
 separated customers get a hardship review 51\% of the time against 39–40\% for everyone else. Most of that is the
 vulnerability flag, and §4 shows the rest.}
@@ -52,7 +52,7 @@ questions that rank or filter people by them.
 
 \fig[0.95\linewidth]{f_ratios.png}{Each dot is the lowest group's rate ÷ the highest group's rate, for one attribute and one outcome.}
 
-\textbf{What the chart says.} The blue dots (any contact action) form a tight column at 0.86–1.00. Whichever group
+\textbf{What the chart says.} The blue dots (any contact action) form a tight column at 0.87–1.00. Whichever group
 you're in, you're about equally likely to get a next step tonight. The green dots (hardship review) are almost all
 above 0.80 too. The orange dots (calls) are the spread-out ones, and the flags sit there. The next section explains why
 that spread is noise rather than bias.
@@ -62,17 +62,17 @@ that spread is noise rather than bias.
 \toprule
 \textbf{Attribute} & \textbf{Any contact} & \textbf{Call} & \textbf{Hardship review} & \textbf{People known} \\
 \midrule
-\code{customer\_accent\_region} & 0.86 & \textcolor{kept}{0.57} & 0.82 & 1,214 \\
+\code{customer\_accent\_region} & 0.87 & \textcolor{kept}{0.57} & 0.83 & 1,214 \\
 \code{vulnerability\_type} & 0.91 & \textcolor{kept}{0.36} & 0.91 & 13,696 \\
-\code{accessibility\_type} & 0.93 & \textcolor{kept}{0.64} & 0.82 & 2,606 \\
-\code{dependants\_count} & 0.94 & 0.87 & 0.82 & 65,319 \\
-\code{marital\_status} & 0.96 & \textcolor{kept}{0.69} & \textcolor{kept}{0.76} & 85,315 \\
-\code{household\_size} & 0.98 & \textcolor{kept}{0.79} & 0.93 & 65,259 \\
-\code{gender\_code} & 0.98 & \textcolor{kept}{0.74} & 0.99 & 91,611 \\
-\code{citizenship\_status} & 0.99 & 0.83 & 0.98 & 91,609 \\
-\code{accessibility\_needs\_flag} & 0.99 & 0.95 & 0.97 & 92,542 \\
-\code{ccb\_deposit\_flag} & 1.00 & 0.90 & 0.98 & 44,864 \\
-\code{newcomer\_program\_flag} & 1.00 & 0.97 & 0.98 & 92,542 \\
+\code{dependants\_count} & 0.94 & 0.86 & 0.81 & 65,319 \\
+\code{accessibility\_type} & 0.94 & \textcolor{kept}{0.51} & 0.82 & 2,606 \\
+\code{marital\_status} & 0.96 & \textcolor{kept}{0.73} & \textcolor{kept}{0.76} & 85,315 \\
+\code{household\_size} & 0.97 & \textcolor{kept}{0.78} & 0.93 & 65,259 \\
+\code{gender\_code} & 0.98 & \textcolor{kept}{0.72} & 0.99 & 91,611 \\
+\code{citizenship\_status} & 0.99 & 0.85 & 0.98 & 91,609 \\
+\code{accessibility\_needs\_flag} & 0.99 & 0.93 & 0.97 & 92,542 \\
+\code{ccb\_deposit\_flag} & 1.00 & 0.95 & 0.98 & 44,864 \\
+\code{newcomer\_program\_flag} & 1.00 & 0.92 & 0.98 & 92,542 \\
 \bottomrule
 \end{tabular}
 \caption{Ratios per attribute; red = below 0.80. A flag is a question for compliance, not a verdict.}
@@ -80,12 +80,12 @@ that spread is noise rather than bias.
 
 \section{Why the call flags are small numbers}
 
-Only 3,192 of 96,000 cards are calls. Kept sends cheap digital nudges first, and calls go to cases where a human
+Only 2,824 of 96,000 cards are calls. Kept sends cheap digital nudges first, and calls go to cases where a human
 conversation is worth it. With a base rate that low, a ratio moves a lot on very few people:
 
 \begin{itemize}
-\item \textbf{Gender (0.74).} The X group (936 people) got 27 calls, or 2.9\%. The U group (895) got 35, or 3.9\%. F and M sit at 3.5\% and
-3.4\%. About 9 more calls to X would close the flag.
+\item \textbf{Gender (0.72).} The X group (936 people) got 21 calls, or 2.2\%. The U group (895) got 28, or 3.1\%. F and M sit at 3.1\% and
+3.0\%. About 3 more calls to X would close the flag.
 \item \textbf{Vulnerability type (0.36).} The lowest group, cognitive decline, has 166 people and 1 call. Vulnerable customers
 get a hardship review \emph{instead of} a call (next section), so their call rate is near zero across the board.
 \item \textbf{Accent region (0.57).} It's only known for 1,214 people, the ones with a recorded call. The groups are 67–502 people, so
@@ -107,8 +107,8 @@ household and accessibility show no visible difference on either outcome. Two pa
 \item \textbf{Vulnerability type.} The green bars sit near 70\%, against about 40\% everywhere else. Every customer with a vulnerability
 type also carries the vulnerability \emph{flag}, a safeguard in the data dictionary rather than a protected attribute, and the
 flag routes a case to a protective conversation before anything is sent. Of the 14,232 flagged customers, 100\% are treated as
-hardship and 68\% (9,645) get a hardship review tonight. Of the rest, 2,191 get ``wait, no contact beats waiting today'', about 1,800 are on
-insolvency or cease holds where nobody gets contacted, and 206 get a call.
+hardship and 68\% (9,661) get a hardship review tonight. Of the rest, 2,176 get ``wait, no contact beats waiting today'', 207 get a call,
+and the other 2,188 are on insolvency or cease holds or otherwise get no contact.
 \item \textbf{Marital status.} Separated customers get a hardship review 51\% of the time, against 39–40\% for every other status.
 We checked why. \textbf{30\%} of separated customers carry the vulnerability flag, against 12–15\% of the other statuses. Take
 the flagged customers out and the gap shrinks to 42.5\% against 34–35\%, a ratio of about 0.80. What's left lines up with
@@ -167,7 +167,7 @@ bit-for-bit identical, and the protected run then came back at exactly zero.}
 \section{What we read from it, and what's next}
 
 \begin{enumerate}[leftmargin=1.5em]
-\item \textbf{Contact is even.} Every attribute sits at 0.86 or above for \emph{any contact action}, and most at 0.93 or above.
+\item \textbf{Contact is even.} Every attribute sits at 0.87 or above for \emph{any contact action}, and most at 0.93 or above.
 \item \textbf{Call flags are small numbers, not bias.} Add a minimum-events rule so the nightly check stops raising them.
 \item \textbf{More hardship reviews for vulnerable customers is by design.} The vulnerability flag protects; it never scores.
 \item \textbf{Review: separated customers.} After the vulnerability flag, a gap of about 8 points remains, which comes from hardship
