@@ -24,7 +24,7 @@ intensity) doesn't move outcomes; Kept changes something else: when the promise 
 | 3-7 days after payday | 3,084 | 52.9% | 61.2% |
 | 8+ days after payday | 6,405 | 46.7% | 50.9% |
 
-- **Kept in full:** +4.6 pts [+2.4, +6.6] when due 0–2 days after payday rather than 8+, within days-past-due bands.
+- **Kept in full:** +4.6 pts [+2.5, +6.6] when due 0–2 days after payday rather than 8+, within days-past-due bands.
 - **Promised money paid (the primary metric):** +6.1 pts [+2.8, +10.6].
 - **Policy value:** dating every promise 0–2 days after payday would raise promised money paid by +2.7 pts [+0.1, +6.1] over what these 12,808 promises achieved (direct estimate, per days-past-due band).
 
@@ -55,12 +55,15 @@ leak-free model**. Kept's promise model drops this feature (phase 2).
 
 ## 4. Against the bank's own model
 
-| Model (trained on scored promises before 31 Jul, tested on the 16,435 after) | AUC |
+| Model (trained on scored promises before 31 Jul, tested on the 12,820 after) | AUC |
 |---|---:|
-| Bank's ptp_break v2.1 | 0.694 |
-| Kept, leak-free (6 features) | 0.641 |
-| Kept, leak-free + the bank's score | 0.733 |
+| Bank's ptp_break v2.1 | 0.702 |
+| Kept, leak-free (6 features) | 0.625 |
+| Kept, leak-free + the bank's score | 0.728 |
+
+Only promises the bank scored **before their outcome** are compared: the bank's score is dated 9 days after the promise on average, and 22% of its scores are dated on or after the outcome, which could know it.
 
 On its own our leak-free model is weaker than the bank's `ptp_break` score. Used together, it adds what the bank's model
-doesn't see (payday timing and the customer's own promise history) and beats it. Phase 2 ships that combination through
-the champion/challenger gate.
+doesn't see (payday timing and the customer's own promise history) and beats it. Because the bank's score only arrives
+days after a promise is made, the combination is for **re-scoring promises already made** (who needs a reminder before
+the due date); the due date itself is proposed with Kept's own model.
