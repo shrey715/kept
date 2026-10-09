@@ -213,6 +213,21 @@ The organisers' feedback names this directly, so it opens the deck and the talk.
 
 ---
 
+## 4a. Execution phases (the order we work in)
+
+The workstreams above, sequenced. Each phase ends with its PRs merged (CI green) and a short note in the track log.
+
+| Phase | When | Workstreams | Exit check |
+|---|---|---|---|
+| **0 · Safe base** ✅ | Fri 9 Oct | WS3 (BQ-006), WS6 (`kept preflight`, `kept demo-reset`), plan + ignore rules | dev 21/21; preflight GO (done: #131–#134) |
+| **1 · Measured evidence** | Sat 10 | WS2: randomised-cell results with CIs, off-policy estimate of Kept, head-to-head with the bank's `model_scores`, promise-model leakage audit | a report in `docs/reports/`, every number reproducible |
+| **2 · Model depth and voice** | Sun 11 | WS4: point-in-time payroll features + retrain (champion/challenger), `promise_intent`, cease/dispute re-gate · WS5: Whisper + WER | retrain and extraction reports; WER report |
+| **3 · Ask accuracy and robustness** | Mon 12 | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% |
+| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh · WS6: `JUDGES.md`, README trim · deck v2 · WS4: fairness follow-ups | deck v2 complete; rehearsal 1 |
+| **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, final benchmark run, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; features refreshed |
+
+Downloads (Whisper, an embedding model) and any switch of LLM provider are asked about first (`CLAUDE.md`).
+
 ## 5. The new deck and talk (outline)
 
 Built to answer "didn't go deep into the background of the problem". Real text (not images), every number linked to a file.
