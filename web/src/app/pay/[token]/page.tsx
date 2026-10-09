@@ -3,14 +3,24 @@
 // What the customer's SMS opens (#89). Every option is a plan Kept already sized: due 1-2 days after payday,
 // each instalment within the customer's spare cash. The customer picks one; there's no free date, because a
 // date before payday is the promise that breaks. No sign-in and no name, account or case ID on the page.
+// When the bank doesn't know their payday or spare cash, the page asks (next payday, how often, what they can
+// put toward it each payday) and the server sizes the plans from those answers, never from a client amount.
 import { CheckCircledIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Card, Flex, Heading, Link, RadioCards, Text } from "@radix-ui/themes";
+import { Box, Button, Callout, Card, Flex, Heading, Link, RadioCards, Select, Text, TextField } from "@radix-ui/themes";
 import { use, useEffect, useState } from "react";
 import { MapleMark } from "@/components/bits";
-import { api, type PayOffer, type PromiseSizing } from "@/lib/api";
+import { api, type PayOffer, type PromiseSizing, type StatedPay } from "@/lib/api";
 
 const money = (v: string | number) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(Number(v));
 const day = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("en-CA", { weekday: "short", day: "numeric", month: "short" });
+
+const iso = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in the customer's own time zone
+const FREQUENCIES: [StatedPay["frequency"], string][] = [
+  ["weekly", "Every week"],
+  ["biweekly", "Every two weeks"],
+  ["semi_monthly", "Twice a month"],
+  ["monthly", "Once a month"],
+];
 
 function describe(o: PromiseSizing): string {
   if (o.installments === 1) return `${money(o.amount)} on ${day(o.due_date)}, the day after your pay`;
@@ -24,21 +34,38 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
   const [done, setDone] = useState<PromiseSizing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [stated, setStated] = useState<StatedPay | null>(null);
+  const [payday, setPayday] = useState("");
+  const [frequency, setFrequency] = useState<StatedPay["frequency"]>("biweekly");
+  const [perPayday, setPerPayday] = useState("");
 
   useEffect(() => {
-    api.payOffer(token).then(
-      (o) => {
-        setOffer(o);
-        setPick(String(o.options[0]?.installments ?? ""));
-      },
-      (e: Error) => setError(e.message),
-    );
+    api.payOffer(token).then(show, (e: Error) => setError(e.message));
   }, [token]);
+
+  function show(o: PayOffer) {
+    setOffer(o);
+    setPick(String(o.options[0]?.installments ?? ""));
+  }
+
+  async function askPlans() {
+    const answers: StatedPay = { next_payday: payday, frequency, per_payday: perPayday };
+    setBusy(true);
+    setError(null);
+    try {
+      show(await api.payPlans(token, answers));
+      setStated(answers);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function confirm() {
     setBusy(true);
     try {
-      setDone(await api.payChoose(token, Number(pick)));
+      setDone(await api.payChoose(token, Number(pick), stated));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -63,12 +90,43 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
           </Flex>
         </Card>
       )}
-      {offer && !done && (
+      {offer?.ask && !done && (
+        <>
+          <Heading size="6" mb="1">Let&apos;s build a plan around your pay</Heading>
+          <Text as="p" size="2" color="gray" mb="4">
+            Three quick questions, so every payment lands right after you&apos;re paid. We only use your answers to set up this plan.
+          </Text>
+          <Flex direction="column" gap="4">
+            <label>
+              <Text as="div" size="2" weight="bold" mb="1">When&apos;s your next payday?</Text>
+              <TextField.Root type="date" value={payday} min={iso(new Date())} max={iso(new Date(Date.now() + 35 * 864e5))} onChange={(e) => setPayday(e.target.value)} />
+            </label>
+            <label>
+              <Text as="div" size="2" weight="bold" mb="1">How often are you paid?</Text>
+              <Select.Root value={frequency} onValueChange={(v) => setFrequency(v as StatedPay["frequency"])}>
+                <Select.Trigger style={{ width: "100%" }} />
+                <Select.Content>
+                  {FREQUENCIES.map(([v, label]) => <Select.Item key={v} value={v}>{label}</Select.Item>)}
+                </Select.Content>
+              </Select.Root>
+            </label>
+            <label>
+              <Text as="div" size="2" weight="bold" mb="1">How much could you put toward this each payday, after rent and essentials?</Text>
+              <TextField.Root type="number" inputMode="decimal" min="1" step="0.01" placeholder="0.00" value={perPayday} onChange={(e) => setPerPayday(e.target.value)}>
+                <TextField.Slot>$</TextField.Slot>
+              </TextField.Root>
+            </label>
+            <Button size="3" loading={busy} disabled={!payday || !(Number(perPayday) > 0)} onClick={() => void askPlans()}>Show my options</Button>
+          </Flex>
+        </>
+      )}
+      {offer && !offer.ask && !done && (
         <>
           <Heading size="6" mb="1">Pick a plan that works for you</Heading>
           {offer.amount_due != null && (
             <Text as="p" size="2" color="gray" mb="4">
-              {money(offer.amount_due)} is overdue. Every option below is timed for right after your payday and fits what you usually have left after bills.
+              {money(offer.amount_due)} is overdue. Every option below is timed for right after your payday and fits{" "}
+              {stated ? `the ${money(stated.per_payday)} a payday you told us you can manage.` : "what you usually have left after bills."}
             </Text>
           )}
           {offer.options.length === 0 ? (

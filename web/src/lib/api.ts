@@ -29,6 +29,7 @@ export type TextExtraction = S["TextExtraction"];
 export type ChartChoice = S["ChartChoice"];
 export type PayOffer = S["PayOffer"];
 export type PromiseSizing = S["PromiseSizing"];
+export type StatedPay = S["StatedPay"];
 export type ChartOption = S["ChartOption"];
 /** Demo-only route shape (kept.app.demo): a note and what was read from it. */
 export type NoteExtraction = { note: string; extraction: TextExtraction };
@@ -95,8 +96,9 @@ export const api = {
     call<ChartChoice>("/chart", post({ ...a, user_id: w.userId, role: w.role })),
   /** #89: the customer's SMS link. No sign-in; only a released SMS proposal has one. */
   payOffer: (token: string) => call<PayOffer>(`/pay/${encodeURIComponent(token)}`),
-  payChoose: (token: string, installments: number) =>
-    call<PromiseSizing>(`/pay/${encodeURIComponent(token)}`, post({ installments })),
+  payPlans: (token: string, stated: StatedPay) => call<PayOffer>(`/pay/${encodeURIComponent(token)}/plans`, post(stated)),
+  payChoose: (token: string, installments: number, stated: StatedPay | null) =>
+    call<PromiseSizing>(`/pay/${encodeURIComponent(token)}`, post({ installments, stated })),
   askSource: (citation: Citation, w: Who) => call<SourceText>("/ask/source", post({ citation, user_id: w.userId, role: w.role })),
   stewardQueue: () => call<StewardItem[]>("/steward/queue"),
   stewardResolve: (itemId: string, verdict: string, stewardId: string) =>
