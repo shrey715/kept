@@ -73,7 +73,7 @@ say them first, with evidence.
 | G6 | **`promise_intent`** is a model input that's always empty | drift report §3 | sloppy if spotted |
 | G7 | **Cease extraction failed its F1 gate**, and dispute and date extraction are weak | Track C log | a governance question ("you miss cease requests?") |
 | G8 | **Voice was never built**, although the release ships 2,000 recordings | release, design | Innovation and smart use of AI |
-| G9 | **Benchmark has room to grow**: BQ-006 wrong, the stress suite was ~50% before fixes, and the free tier rate-limits mid-run | Bench runs | Technical (30%), and live unseen questions |
+| G9 | **Benchmark has room to grow**: BQ-006 was wrong (fixed in #132, dev now 21/21), the stress suite was ~50% before fixes, and the free tier rate-limits mid-run | Bench runs | Technical (30%), and live unseen questions |
 | G10 | **The demo is fragile**: LLM quota exhaustion, stale features, a stuck server holding the DuckDB lock, a demo case that stays flipped | session logs | a live demo failing on camera |
 | G11 | **The pay link** offers plans to only ~25% of customers (payday detection coverage), so it's switched off | PR #127 | a feature we can't show |
 | G12 | **Fairness open items**: no minimum-events rule for call flags; separated customers get an 8-point hardship-review gap not yet reviewed | fairness report §6 | a governance question |
@@ -103,6 +103,24 @@ These are the mistakes that most often cost teams credibility in this challenge.
 10. **A README written for us, not for judges.** *Check:* a short judge guide on top (G13).
 
 ---
+
+## 3a. What strong submissions do: adopt all of it
+
+The habits that make a collections build convincing to judges. The workstreams below build each of them in.
+
+1. **Measured, not estimated.** Use the randomised test cells for an effect with confidence intervals, plus an off-policy
+   estimate of the new policy. Report it even when the interval includes zero (WS2).
+2. **Beat the incumbent, on the same split.** Show the new model against the bank's own scores, and say plainly where it
+   doesn't win (WS2).
+3. **Honest ablations.** Publish AUC with and without suspicious features, and headline the leak-free number (WS2).
+4. **One named primary metric with guard metrics.** A single number the whole system moves, plus the numbers it must not
+   harm (WS1, WS2).
+5. **Every result links to the report that produced it.** In the README, the deck and a short judge guide (WS6).
+6. **Problem framed by root causes,** with a clear user (the collections agent and the customer), not a feature list (WS1).
+7. **Identity measured both ways:** precision *and* recall, plus an injected-duplicate test (WS4).
+8. **Tamper-evident decisions:** an audit trail a reviewer can verify wasn't altered (WS6).
+9. **A candid "what changed and why" table,** and known limits stated before anyone asks (WS1, WS6).
+10. **Answers a judge can verify on the spot:** the cited source opens with the passage highlighted (built; demo it).
 
 ## 4. Workstreams
 
@@ -147,6 +165,9 @@ The organisers' feedback names this directly, so it opens the deck and the talk.
   only the leak-free number, and say why.
 - **Business case refresh:** feed the measured numbers in and keep the low / base / high bands. The deck shows the measured
   number first and the estimate second.
+- **One primary metric, with guards:** the primary metric is **promised money paid** (the share of promised dollars that
+  arrive). The guard metrics, which must not get worse, are complaints, contact-cap and calling-hours breaches, hardship
+  detection rate, and the any-contact fairness ratio. Every result and slide reports against these.
 - **Done when:** every business number in the deck has a measured source or an explicitly bounded estimate, all in
   `docs/reports/`.
 
@@ -178,6 +199,9 @@ The organisers' feedback names this directly, so it opens the deck and the talk.
   - re-gate on the public labels and publish precision and recall.
 - **Pay link coverage (G11):** fall back to the bank's `expected_next_payroll_date` and pay frequency when deposits are
   missing. Re-enable the page only if most customers get a plan.
+- **Identity, measured both ways:** recall (true pairs found) next to the published 99.3% precision, against the
+  release's known duplicates, plus an injected-duplicate test (plant known duplicates, check they merge, check nothing
+  else does). Add both to the quality report.
 - **Fairness follow-ups (G12):**
   - a minimum-events rule (20+) on call-ratio flags;
   - a 50-card review of separated customers' hardship reviews, written up.
@@ -203,6 +227,10 @@ The organisers' feedback names this directly, so it opens the deck and the talk.
   - a one-page, 2-minute path: what to run, what to click, where each claim's evidence lives;
   - a link at the top of the README;
   - the README trimmed to a crisp summary, with detail moved into `docs/`.
+- **Tamper-evident audit trail:** each audit event carries the hash of the one before it, and `kept audit-verify` re-walks
+  the chain and reports the first broken link. Release and hardship decisions can then be shown as unaltered.
+- **Secret scan:** scan the working tree *and the full git history* for keys and tokens (including `.env.example`).
+  Rotate anything found. This is a Phase 5 exit check.
 - **Done when:** two full dry runs pass on a cold machine with a fresh key.
 
 ### WS7 · Team work, made visible (15%): everyone
@@ -223,8 +251,8 @@ The workstreams above, sequenced. Each phase ends with its PRs merged (CI green)
 | **1 · Measured evidence** | Sat 10 | WS2: randomised-cell results with CIs, off-policy estimate of Kept, head-to-head with the bank's `model_scores`, promise-model leakage audit | a report in `docs/reports/`, every number reproducible |
 | **2 · Model depth and voice** | Sun 11 | WS4: point-in-time payroll features + retrain (champion/challenger), `promise_intent`, cease/dispute re-gate · WS5: Whisper + WER | retrain and extraction reports; WER report |
 | **3 · Ask accuracy and robustness** | Mon 12 | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% |
-| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh · WS6: `JUDGES.md`, README trim · deck v2 · WS4: fairness follow-ups | deck v2 complete; rehearsal 1 |
-| **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, final benchmark run, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; features refreshed |
+| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test | deck v2 complete; rehearsal 1 |
+| **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, final benchmark run, secret scan of history, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; no secrets in history; features refreshed |
 
 Downloads (Whisper, an embedding model) and any switch of LLM provider are asked about first (`CLAUDE.md`).
 
@@ -337,4 +365,8 @@ uv run kept serve
 - [ ] Voice: a WER report and one demo moment.
 - [ ] `JUDGES.md`, a trimmed README, `kept demo-reset`, the pre-flight script.
 - [ ] Two clean dress rehearsals; each person presents their own layer.
+- [ ] One primary metric (promised money paid) and its guard metrics, used in every result and slide.
+- [ ] Identity recall and the injected-duplicate test in the quality report.
+- [ ] Tamper-evident audit trail with `kept audit-verify`.
+- [ ] Secret scan of the working tree and full git history: clean.
 - [ ] Day-of runbook (§7a) followed on the demo machine: features refreshed the evening before, preflight GO before the slot.
