@@ -106,6 +106,9 @@ _CONVENTIONS = """Conventions (from the data dictionary):
 - Delinquency buckets are 'current', '1-30', '31-60', '61-90', '91-120', '121-150', '151-180', '180+'.
   When the question asks "by bucket", group by the stored bucket column (current_bucket, dpd_bucket) as it
   is. Work a bucket out from dpd / current_dpd only when the question gives a days-past-due range.
+- Disputes (any kind, late-fee ones included) raised in a period are counted in contact_history: one row
+  per contact with dispute_raised_flag, by contact_ts_local. collections_cases.dispute_type keeps only a
+  case's latest dispute, so never count disputes raised from collections_cases.
 - A resolved promise has ptp_status in ('kept', 'partially_kept', 'broken'); open and cancelled are not
   resolved.
 - An outbound call is direction = 'outbound' AND channel = 'call'; a right-party contact has rpc_flag.
