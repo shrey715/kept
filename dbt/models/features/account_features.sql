@@ -1,9 +1,9 @@
 -- Account, payroll and cash-flow features per (case, as_of), point in time (Track D).
 -- History features (dpd, utilisation, cash flow) read account_points known at as_of, the same way
--- for serving and training. Payroll delay, pay change (last pay vs the 3-month average per payday)
--- and spare cash exist only on the latest snapshot: null in training (the snapshot is after every
--- decision), so the model never learns from a leak.
--- ponytail: per-payday pay history would let pay change and delay into training.
+-- for serving and training. Payroll delay and pay change come from the dated monthly salary feed
+-- (salary_credit_history, employer credits only), read as of the earlier of as_of and the feed's last
+-- complete month, the same way for serving and training, so the model learns from pay shocks without
+-- a leak. Spare cash needs the deposit snapshot's spend fields: serving only, null in training.
 {% set training = var('training_spine', false) %}
 with spine as (
     select s.case_id, s.as_of, cast(s.as_of as date) as d, x.golden_customer_id
@@ -61,9 +61,7 @@ payroll_account as (  -- as gold's int_payroll: the deposit account with the lat
            arg_max(a.snapshot_date, a.last_payroll_date) as snapshot_date,
            arg_max(a.expected_next_payroll_date, a.last_payroll_date) as next_payroll,
            arg_max(a.payroll_frequency_detected, a.last_payroll_date) as pay_frequency,
-           arg_max(a.payroll_delay_days, a.last_payroll_date) as payroll_delay_days,
            arg_max(a.payroll_avg_amount_3m, a.last_payroll_date) as pay_avg_3m,  -- per payday
-           arg_max(a.payroll_amount_change_pct, a.last_payroll_date) as pay_change,
            arg_max(a.essential_spend_amount_mtd, a.last_payroll_date) as essentials,
            arg_max(a.other_lender_payment_amount_mtd, a.last_payroll_date) as other_lenders
     from {{ ref('deposit_accounts') }} a
@@ -80,6 +78,58 @@ housing as (
         on x.source_system = 'crm' and x.source_key = c.crm_customer_id and x.valid_to is null
     where x.golden_customer_id in (select golden_customer_id from spine)
     group by x.golden_customer_id
+),
+salary as (  -- employer pay per deposit account and month, keyed to the golden customer
+    select x.golden_customer_id, m.deposit_account_id as account_id,
+           cast(m.credit_month || '-01' as date) as month_start, m.credit_count,
+           m.credit_amount_total::double as amount, m.first_credit_date, m.last_credit_date
+    from {{ ref('salary_credit_history') }} m
+    join {{ ref('deposit_accounts') }} a on a.deposit_account_id = m.deposit_account_id
+    join {{ ref('identity_crosswalk') }} x
+        on x.source_system = 'deposit' and x.source_key = a.src_customer_ref and x.valid_to is null
+    where m.employer_flag = 'Y' and x.golden_customer_id in (select golden_customer_id from spine)
+),
+salary_seen as (  -- per (case, as_of): the months known at h, the earlier of as_of and the feed's end
+    select s.case_id, s.as_of, least(s.d, e.h) as h, p.*
+    from spine s
+    cross join (select max(last_day(month_start)) + 1 as h from salary) e
+    join salary p on p.golden_customer_id = s.golden_customer_id
+        and p.month_start < least(s.d, e.h) and p.month_start >= least(s.d, e.h) - interval 7 month
+),
+pay_account as (  -- the account with the most pay credits in the window
+    select case_id, as_of, account_id
+    from (select case_id, as_of, account_id, sum(credit_count) as n from salary_seen group by all)
+    where n > 0
+    qualify row_number() over (partition by case_id, as_of order by n desc, account_id) = 1
+),
+pay_months as (  -- complete months with pay, newest first (k = 1)
+    select v.*, row_number() over (partition by v.case_id, v.as_of order by v.month_start desc) as k
+    from salary_seen v join pay_account a using (case_id, as_of, account_id)
+    where last_day(v.month_start) < v.h and v.credit_count > 0
+),
+pay_shock as (
+    select case_id, as_of,
+           -- latest month's pay per credit vs the three months before it, per credit (bank: "latest vs 3m average")
+           max(amount / credit_count) filter (where k = 1)
+               / nullif(sum(amount) filter (where k between 2 and 4)
+                        / nullif(sum(credit_count) filter (where k between 2 and 4), 0), 0) - 1 as pay_change,
+           avg(credit_count) filter (where k <= 3) as pays_per_month
+    from pay_months
+    group by case_id, as_of
+),
+last_pay as (  -- the last pay date known at h: a month's first and last credit dates are known once passed
+    select v.case_id, v.as_of, any_value(v.h) as h,
+           max(greatest(case when v.first_credit_date < v.h then v.first_credit_date end,
+                        case when v.last_credit_date < v.h then v.last_credit_date end)) as paid
+    from salary_seen v join pay_account a using (case_id, as_of, account_id)
+    group by v.case_id, v.as_of
+),
+payroll_pit as (  -- bank's definition: days past the expected payday with no pay, after 2 days' tolerance
+    select l.case_id, l.as_of,
+           greatest(0, l.h - (l.paid + cast(round(30.4 / k.pays_per_month) as integer)) - 2) as payroll_delay_days,
+           round(k.pay_change, 4) as pay_change_vs_3m_avg
+    from last_pay l join pay_shock k using (case_id, as_of)
+    where l.paid is not null
 ),
 local_day as (  -- as_of's calendar date where the customer lives (kept.features.definitions)
     select s.case_id, s.as_of, s.golden_customer_id,
@@ -119,13 +169,11 @@ select
     end as days_to_next_payroll,
     case when p.pay_frequency in ('weekly', 'biweekly', 'semi_monthly', 'monthly', 'irregular')
          then p.pay_frequency end as pay_frequency,
+    y.payroll_delay_days::integer as payroll_delay_days,
+    y.pay_change_vs_3m_avg::double as pay_change_vs_3m_avg,
     {% if training %}
-    null::integer as payroll_delay_days,
-    null::double as pay_change_vs_3m_avg,
     null::decimal(14, 2) as estimated_monthly_spare_cash,
     {% else %}
-    case when p.snapshot_date <= s.d then p.payroll_delay_days end as payroll_delay_days,
-    case when p.snapshot_date <= s.d then p.pay_change::double end as pay_change_vs_3m_avg,
     -- monthly pay (pay per payday x paydays a month) minus housing, essentials and other lenders
     case when p.snapshot_date <= s.d
          then p.pay_avg_3m * case p.pay_frequency when 'weekly' then 52 / 12 when 'biweekly' then 26 / 12
@@ -142,3 +190,4 @@ left join times_30 t using (case_id, as_of)
 left join trends r using (case_id, as_of)
 left join payroll_account p on p.golden_customer_id = s.golden_customer_id
 left join housing h on h.golden_customer_id = s.golden_customer_id
+left join payroll_pit y using (case_id, as_of)

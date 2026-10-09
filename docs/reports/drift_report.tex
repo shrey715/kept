@@ -4,23 +4,26 @@
 \subtitle{Has tonight's book moved away from what the model learned on?}
 \reportnumber{Governance · model monitoring}
 \runninghead{Drift}
-\date{4 October 2026}
+\date{9 October 2026}
 
 \begin{document}
 \makereporttitle
 
-\statrow{\stat{10 · 5 · 11}{drift · watch · stable, of 26 features}\stat{690K}{training rows (Sep 2025 – Sep 2026)}\stat{96K}{cases scored tonight}\stat{3}{payroll features the model has never seen}}
+\statrow{\stat{8 · 5 · 13}{drift · watch · stable, of 26 features}\stat{690K}{training rows (Sep 2025 – Sep 2026)}\stat{96K}{cases scored tonight}\stat{0\% → 22\%}{training rows with payroll delay and pay change}}
 
-\takeaway{\textbf{The short version.} Ten features cross the drift line, but only one finding changes what we'd do.
+\takeaway{\textbf{The short version.} Eight features cross the drift line; none of them is a reason to stop scoring.
 \begin{itemize}[leftmargin=1.2em, topsep=2pt]
-\item \textbf{The big one:} the three payroll features are blank in every training row. That's deliberate: the payroll source is a
-single snapshot, so filling past rows would leak the future. The model has never learned from Kept's core signal. The rules
-and Kept sizing use it; the model doesn't. Fix: keep dated payroll snapshots and retrain.
+\item \textbf{Fixed since the last report:} payroll delay and pay change were blank in every training row. They now come
+from the dated monthly salary feed, with one definition for training and live, and are filled about equally in both (PSI
+0.02 and 0.01). We retrained with them, and the champion/challenger gate kept the current model: pay shocks don't add uplift
+signal beyond noise on this data. The payday effect lives in the promise's due date (evidence report §2), not in who to contact.
 \item \textbf{The loud but mostly mechanical ones:} cohort rates (PSI 5.5 and 4.0) and the delinquency features. Tonight is one
 snapshot of the open book, while training is a year of decision points. Within each cohort the kept rate is only 1–3 points below
 where training ended.
 \item \textbf{A silent one:} \code{promise\_intent} is a model input that is blank in both training and live. Its PSI of 0
-means ``nothing to compare'', not ``stable''.
+means ``nothing to compare'', not ``stable''. It leaves the inputs at the next promoted retrain.
+\item \textbf{An artefact of the date:} \code{contacts\_last\_7d} (4.45) is zero for every case tonight, because the
+release's contact history ends on 28 September and tonight is 9 October. Not a model input; in production the feed is daily.
 \end{itemize}}
 
 \section{How to read PSI}
@@ -37,7 +40,7 @@ too. We use the usual bank bands: \textbf{below 0.10 stable}, \textbf{0.10–0.2
   hot/.style={box, fill=kept!7, draw=kept!40},
   go/.style={-{Stealth[length=2mm]}, draw=muted, line width=0.7pt}]
 \node[box] (t) {\textbf{features\_train}\\690,062 rows, one per past decision, point in time};
-\node[box, below=0.3cm of t] (l) {\textbf{features (tonight)}\\96,000 open cases, as of 3 Oct 06:00};
+\node[box, below=0.3cm of t] (l) {\textbf{features (tonight)}\\96,000 open cases, as of 9 Oct 06:00};
 \node[hot, anchor=west] (p) at ($(t.east)!0.5!(l.east)+(0.9,0)$) {\textbf{PSI per feature}\\deciles of training; blanks get a bin};
 \node[box, right=of p] (s) {\textbf{stable / watch / drift}\\0.10 and 0.25 bands};
 \draw[go] (t.east) -- (p); \draw[go] (l.east) -- (p); \draw[go] (p) -- (s);
@@ -76,25 +79,24 @@ The direction is consistent, though. Across the training year the median rate sl
 and every cohort is a little lower again tonight. Promises are being kept slightly less often than a year ago. That's
 worth watching, but it's not a reason to stop scoring.
 
-\paragraph{Payroll features: the real finding} \code{payroll\_delay\_days}, \code{pay\_change\_vs\_3m\_avg} and
-\code{estimated\_monthly\_spare\_cash} are blank in 100\% of training rows and filled for 20–25\% of tonight's cases. The
-training build nulls them on purpose (\path{dbt/models/features/account_features.sql}): the deposit table is one snapshot
-with no history, so using it for a decision made in March would leak September's data. The point-in-time rule held, at a cost:
-\textbf{the model has never learned from payday or spare cash}, which is Kept's whole idea. The rules and Kept sizing use them
-live; the uplift model can't.
+\paragraph{Payroll features: fixed} \code{payroll\_delay\_days} and \code{pay\_change\_vs\_3m\_avg} used to come from the
+deposit snapshot, which is dated after every training decision, so training left them blank. They now come from the dated
+monthly salary feed (\code{salary\_credit\_history}, employer pay only), read as of the earlier of the as-of date and the feed's
+last complete month (\path{dbt/models/features/account_features.sql}). The same definition runs for training and live, so
+they're filled about equally (22\% and 24\%) and stable. Retrained with them, the challenger lost to the champion beyond noise,
+so the gate kept the champion. \code{estimated\_monthly\_spare\_cash} still needs the snapshot's spend fields: live only.
 
-\paragraph{Delinquency features: a different slice, as expected} \code{max\_dpd} (0.35), \code{balance\_at\_risk} (0.39) and
-\code{days\_in\_bucket} (0.49) moved because tonight is the open book, not a stream of decisions. The median open case is 46 days
-past due, against 29 at a training decision, and has \$437 at risk against \$135. \code{contacts\_last\_7d} (0.78) is the same
-effect: a training row is a moment the bank acted, usually mid-cadence, while tonight includes every open case, most with no
-contact this week (median 0, against 1).
+\paragraph{Delinquency features: a different slice, as expected} \code{max\_dpd} (0.53), \code{balance\_at\_risk} (0.39) and
+\code{days\_in\_bucket} (0.47) moved because tonight is the open book, not a stream of decisions. The median open case is 52 days
+past due, against 29 at a training decision, and has \$437 at risk against \$135. \code{contacts\_last\_7d} (4.45) is an
+artefact of the date: the release's contacts end on 28 September, so no case has one in the 7 days before 9 October.
 
 \section{What went blank, or filled in}
 
 \fig[0.92\linewidth]{d_missing.png}{Share of rows with no value: training (blue) vs tonight (green).}
 
-\textbf{What the chart says.} Most lines run right to left: features are \emph{more} complete tonight than in training. The
-payroll trio drops from 100\% blank to about 80\%. The text flags (\code{hardship\_signal}, \code{dispute\_flag},
+\textbf{What the chart says.} Most lines run right to left: features are \emph{more} complete tonight than in training. Payroll
+delay and pay change are now blank about as often in training (77–79\%) as tonight (76–77\%); spare cash goes from 100\% to 80\%. The text flags (\code{hardship\_signal}, \code{dispute\_flag},
 \code{cease\_request\_flag}) go from 50\% to 30\% blank: a blank here means no note on file, and more of tonight's open cases have a note than past
 decisions did. That fill-in is
 why those three are in ``watch'' at 0.16–0.17, not because customers changed. The four dots stuck at 100\% on both sides
@@ -109,31 +111,31 @@ problem. Their PSI is 0 because there's nothing to compare. \code{promise\_inten
 \textbf{Feature} & \textbf{PSI} & \textbf{Status} & \textbf{Blank, training} & \textbf{Blank, tonight} & \textbf{Model input} \\
 \midrule
 \code{cohort\_kept\_rate} & 5.46 & \textcolor{kept}{drift} & 0\% & 0\% & yes \\
+\code{contacts\_last\_7d} & 4.45 & \textcolor{kept}{drift} & 0\% & 0\% &  \\
 \code{cohort\_recovery\_rate} & 4.00 & \textcolor{kept}{drift} & 0\% & 0\% & yes \\
-\code{payroll\_delay\_days} & 1.98 & \textcolor{kept}{drift} & 100\% & 76\% & yes \\
-\code{pay\_change\_vs\_3m\_avg} & 1.53 & \textcolor{kept}{drift} & 100\% & 80\% & yes \\
-\code{estimated\_monthly\_spare\_cash} & 1.53 & \textcolor{kept}{drift} & 100\% & 80\% & \\
-\code{contacts\_last\_7d} & 0.78 & \textcolor{kept}{drift} & 0\% & 0\% & \\
-\code{days\_to\_next\_payroll} & 0.67 & \textcolor{kept}{drift} & 76\% & 76\% & yes \\
-\code{days\_in\_bucket} & 0.49 & \textcolor{kept}{drift} & 40\% & 12\% & yes \\
-\code{balance\_at\_risk} & 0.39 & \textcolor{kept}{drift} & 0\% & 0\% & \\
-\code{max\_dpd} & 0.35 & \textcolor{kept}{drift} & 11\% & 7\% & yes \\
-\code{hardship\_signal} & 0.17 & \textcolor{korange}{watch} & 50\% & 31\% & \\
-\code{dispute\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% & \\
-\code{cease\_request\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% & \\
+\code{estimated\_monthly\_spare\_cash} & 1.53 & \textcolor{kept}{drift} & 100\% & 80\% &  \\
+\code{days\_to\_next\_payroll} & 0.90 & \textcolor{kept}{drift} & 76\% & 76\% & yes \\
+\code{max\_dpd} & 0.53 & \textcolor{kept}{drift} & 11\% & 7\% & yes \\
+\code{days\_in\_bucket} & 0.47 & \textcolor{kept}{drift} & 40\% & 12\% & yes \\
+\code{balance\_at\_risk} & 0.39 & \textcolor{kept}{drift} & 0\% & 0\% &  \\
+\code{dispute\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% &  \\
+\code{cease\_request\_flag} & 0.16 & \textcolor{korange}{watch} & 50\% & 30\% &  \\
 \code{card\_utilisation\_trend} & 0.16 & \textcolor{korange}{watch} & 44\% & 37\% & yes \\
+\code{hardship\_signal} & 0.16 & \textcolor{korange}{watch} & 50\% & 31\% &  \\
 \code{cash\_flow\_trend} & 0.11 & \textcolor{korange}{watch} & 57\% & 53\% & yes \\
 \code{kept\_promise\_ratio} & 0.07 & stable & 67\% & 55\% & yes \\
 \code{times\_30plus\_dpd\_12m} & 0.06 & stable & 11\% & 7\% & yes \\
 \code{answer\_rate\_after\_18h} & 0.05 & stable & 69\% & 60\% & yes \\
 \code{answer\_rate} & 0.04 & stable & 50\% & 42\% & yes \\
-\code{broken\_promises\_90d} & 0.04 & stable & 0\% & 0\% & yes \\
+\code{broken\_promises\_90d} & 0.03 & stable & 0\% & 0\% & yes \\
 \code{payment\_link\_usage} & 0.03 & stable & 32\% & 25\% & yes \\
+\code{payroll\_delay\_days} & 0.02 & stable & 77\% & 76\% & yes \\
+\code{pay\_change\_vs\_3m\_avg} & 0.01 & stable & 79\% & 77\% & yes \\
 \code{pay\_frequency} & 0.00 & stable & 76\% & 76\% & yes \\
+\code{third\_party\_present\_flag} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% &  \\
 \code{promise\_intent} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & yes \\
-\code{promised\_date} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
-\code{promised\_amount} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
-\code{third\_party\_present\_flag} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% & \\
+\code{promised\_date} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% &  \\
+\code{promised\_amount} & 0.00 & \textcolor{muted}{empty} & 100\% & 100\% &  \\
 \bottomrule
 \end{tabular}
 \caption{All 26 registered features. ``Empty'' rows have nothing to compare, so a PSI of 0 there means nothing.}
@@ -142,14 +144,13 @@ problem. Their PSI is 0 because there's nothing to compare. \code{promise\_inten
 \section{What we do with this}
 
 \begin{enumerate}[leftmargin=1.5em]
-\item \textbf{Retrain with payroll.} Keep a dated copy of the deposit snapshot each night. After about 90 days of snapshots,
-the training build can fill payroll features point in time, and the model can finally learn the payday effect that the business
-case is built on. Until then the effect lives in the rules and sizing, which is where it's measured anyway.
+\item \textbf{Payroll in training: done.} Delay and pay change come from the dated salary feed; the retrain didn't beat the
+champion, so it wasn't promoted. Spare cash needs dated spend: keep a copy of the deposit snapshot each night, then add it.
 \item \textbf{Teach the check about cohorts.} Compare cohort rates to the last training value per cohort, with a tolerance
 of a few points, instead of using decile PSI. Today's check cries wolf on them every night.
 \item \textbf{Fill or drop the empty inputs.} The SetFit backfill only predicts hardship, so the promise fields can only come
-from the LLM extraction, and 0 of the 67,039 rows in \code{features.text\_features} carry one. Either wire it through or take it out of the model's inputs. A feature
-that's always blank is just noise in the registry.
+from the LLM extraction, and 0 of the 67,039 rows in \code{features.text\_features} carry one. \code{promise\_intent} leaves the model's inputs at the next promoted
+retrain (the live champion was trained with it, blank). A feature that's always blank is just noise in the registry.
 \item \textbf{Keep the nightly gate.} \code{kept drift} runs after \code{kept features}. A drifted \emph{model input} that
 none of the reasons above explains holds the new scores and pages the owner.
 \end{enumerate}
