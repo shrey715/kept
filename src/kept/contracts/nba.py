@@ -118,6 +118,14 @@ class ActionScore(_Frozen):
     score: Decimal  # expected_value - contact_cost - burden
 
 
+class StatedPay(_Frozen):
+    """What a customer tells the pay page when the bank doesn't know their payday or spare cash (#89)."""
+
+    next_payday: date
+    frequency: PayrollFrequency
+    per_payday: Money = Field(gt=0, le=Decimal("100000"))  # what they can put toward it each payday
+
+
 class PromiseSizing(_Frozen):
     """Kept sizing: plain arithmetic, no model."""
 

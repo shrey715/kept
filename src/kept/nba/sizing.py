@@ -63,13 +63,22 @@ def promise_options(
     payroll_frequency: PayrollFrequency,
     today: date,
     max_installments: int = 3,
+    stated_per_payday: Decimal | None = None,
 ) -> list[PromiseSizing]:
     """Every installment count from the smallest that fits up to max_installments (#89: the
-    customer picks one). More installments are smaller, so once one fits the rest do. [] = none fit."""
-    if spare_cash_monthly is None or expected_payday is None or spare_cash_monthly <= 0 or balance_due <= 0:
+    customer picks one). More installments are smaller, so once one fits the rest do. [] = none fit.
+    stated_per_payday: what the customer said they can put toward it each payday (the pay page asks when
+    the bank doesn't know); it replaces the spare cash estimate, and the plan stays within it."""
+    if stated_per_payday is not None:
+        spare_cash_monthly = None
+        per_period = stated_per_payday.quantize(CENT, rounding=ROUND_DOWN)
+    elif spare_cash_monthly is None or spare_cash_monthly <= 0:
         return []
-    periods = PERIODS_PER_YEAR.get(payroll_frequency, 12)
-    per_period = (spare_cash_monthly * 12 / periods).quantize(CENT, rounding=ROUND_DOWN)
+    else:
+        periods = PERIODS_PER_YEAR.get(payroll_frequency, 12)
+        per_period = (spare_cash_monthly * 12 / periods).quantize(CENT, rounding=ROUND_DOWN)
+    if expected_payday is None or balance_due <= 0:
+        return []
     due = promise_due_date(expected_payday, today=today)
     if per_period <= 0 or due is None:
         return []
@@ -85,11 +94,13 @@ def promise_options(
                 payday=expected_payday,
                 rationale="",
             )
-            out.append(s.model_copy(update={"rationale": sizing_text(s)}))
+            out.append(
+                s.model_copy(update={"rationale": sizing_text(s, stated=stated_per_payday is not None)})
+            )
     return out
 
 
-def sizing_text(s: PromiseSizing) -> str:
+def sizing_text(s: PromiseSizing, *, stated: bool = False) -> str:
     """'$140 fits inside estimated spare cash of ~$160 a month after rent; due one day after
     the expected payroll date.' Amounts formatted with $ and no trailing .00."""
     days = {1: "one day", 2: "two days"}.get(
@@ -98,6 +109,11 @@ def sizing_text(s: PromiseSizing) -> str:
     plan = _money(s.amount) + (
         f" a pay period for {s.installments} pay periods" if s.installments > 1 else ""
     )
+    if stated:
+        return (
+            f"{plan} fits inside the {_money(s.spare_cash_estimate)} a payday the customer said they can "
+            f"afford; due {days} after the payday they gave."
+        )
     return (
         f"{plan} fits inside estimated spare cash of ~{_money(s.spare_cash_estimate)} per pay period "
         f"after rent, essentials and other lenders; due {days} after the expected payroll date."
