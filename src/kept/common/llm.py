@@ -31,6 +31,7 @@ class Purpose:
     ASK_NARRATE = "ask.narrate"  # Track B: explain the result rows
     ASK_CHART = "ask.chart"  # kept.app.charts: pick a chart for the result rows (#100)
     TEXT_EXTRACT = "text.extract"  # Track C: note/transcript extraction
+    OPS_PREFLIGHT = "ops.preflight"  # kept preflight: one tiny call to prove a model answers before a demo
 
 
 class LiteLLMGateway:

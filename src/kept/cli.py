@@ -27,6 +27,8 @@ COMMANDS = {
     "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
     "map": "Track A: schema drift of data/raw against the data dictionary; --draft: LLM mapping drafts",
     "drift": "Track D: feature drift (PSI) against training (PDF: scripts/drift_report.py)",
+    "demo-reset": "Demo: delete notes typed during demos, so cards go back to their scored state",
+    "preflight": "Demo: go/no-go check (API, warehouse lock, fresh features, Gemini, Ollama, web)",
 }
 
 
@@ -576,6 +578,118 @@ def drift(args: argparse.Namespace) -> int:
     return 1 if any(r.status == "drift" for r in rows) else 0
 
 
+LIVE_NOTE = "N-LIVE-%"  # source_id of a note typed into kept serve (kept.text.live.typed_note)
+
+
+def reset_demo_notes(warehouse: Path | str, case_id: str | None = None) -> int:
+    """Delete the extractions of notes typed during demos (and only those), so each card goes back to
+    what the nightly data says. The note text itself only lived in kept serve's memory. Returns the count."""
+    import duckdb
+
+    where, params = "source_id like ?", [LIVE_NOTE]
+    if case_id:
+        where, params = where + " and case_id = ?", [*params, case_id]
+    with duckdb.connect(str(warehouse)) as c:
+        if not c.execute(
+            "select count(*) from duckdb_tables() where schema_name = 'text' and table_name = 'extractions'"
+        ).fetchone()[0]:  # type: ignore[index]
+            return 0
+        n = c.execute(f"select count(*) from text.extractions where {where}", params).fetchone()[0]  # type: ignore[index]
+        c.execute(f"delete from text.extractions where {where}", params)
+    return int(n)
+
+
+def demo_reset(args: argparse.Namespace) -> int:
+    """Demo notes off every card (or one with --case). kept serve must be stopped: DuckDB has one writer."""
+    import duckdb
+
+    try:
+        n = reset_demo_notes(WAREHOUSE_PATH, args.case)
+    except duckdb.IOException as e:
+        print(f"kept demo-reset: the warehouse is in use (stop kept serve first): {str(e).splitlines()[0]}")
+        return 1
+    where = f" on {args.case}" if args.case else ""
+    print(f"kept demo-reset: removed {n} demo note(s){where}; restart kept serve")
+    return 0
+
+
+def preflight(args: argparse.Namespace) -> int:
+    """Everything a live demo needs, checked in about a minute. Exit 1 if anything fails."""
+    import json
+    import urllib.request
+
+    import pandas as pd
+    from dotenv import load_dotenv
+
+    from kept.common.audit import DuckDBAuditLog
+    from kept.common.llm import LiteLLMGateway, Purpose
+    from kept.config import FEATURE_MAX_STALENESS
+    from kept.text.live import DEFAULT_MODEL
+    from kept.text.redact import fixed_text
+
+    load_dotenv()
+    checks: list[tuple[str, bool, str]] = []
+
+    def get(url: str) -> str | None:
+        try:
+            with urllib.request.urlopen(url, timeout=10) as r:
+                return str(r.read().decode())
+        except Exception:
+            return None
+
+    health = get(f"{args.api}/health")
+    checks.append(
+        ("API", health is not None, json.loads(health)["now"] if health else f"nothing on {args.api}")
+    )
+    if health is None:  # nothing serving: is a stale process holding the warehouse?
+        import duckdb
+
+        try:
+            duckdb.connect(str(WAREHOUSE_PATH), read_only=True).close()
+            checks.append(("warehouse lock", True, "free"))
+        except duckdb.IOException as e:
+            checks.append(("warehouse lock", False, str(e).splitlines()[0][-120:]))
+    served = EXPORT_DIR / "features" / "case_features.parquet"
+    if served.exists():
+        as_of = pd.read_parquet(served, columns=["as_of"])["as_of"].max()
+        as_of = as_of.tz_localize("UTC") if as_of.tzinfo is None else as_of
+        age = datetime.now(UTC) - as_of.to_pydatetime()
+        checks.append(
+            (
+                "features fresh",
+                age < FEATURE_MAX_STALENESS,
+                f"as of {as_of:%d %b %H:%M} UTC, {age.total_seconds() / 3600:.0f} h old (fix: kept features)",
+            )
+        )
+    else:
+        checks.append(("features fresh", False, f"no {served}"))
+    audit = DuckDBAuditLog(os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb")))
+    for label, model in (
+        ("Ask LLM", os.environ.get("KEPT_ASK_LLM_MODEL", "")),
+        ("text LLM (warm-up)", os.environ.get("KEPT_TEXT_LLM_MODEL", DEFAULT_MODEL)),
+    ):
+        if not model:
+            checks.append((label, False, "no model set in .env"))
+            continue
+        try:
+            gw = LiteLLMGateway(model=model, audit_log=audit, timeout_s=180, max_retries=1)
+            gw.complete(
+                system="Reply with OK.",
+                user=fixed_text("OK?"),
+                purpose=Purpose.OPS_PREFLIGHT,
+                actor_id="preflight",
+            )
+            checks.append((label, True, model))
+        except Exception as e:
+            checks.append((label, False, f"{model}: {str(e).splitlines()[0][:140]}"))
+    checks.append(("web", get(args.web) is not None, args.web))
+    for name, ok, detail in checks:
+        print(f"{'PASS' if ok else 'FAIL'}  {name:<20} {detail}")
+    failed = [n for n, ok, _ in checks if not ok]
+    print("kept preflight: GO" if not failed else f"kept preflight: NO GO ({', '.join(failed)})")
+    return 1 if failed else 0
+
+
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
     "land": land,
@@ -592,6 +706,8 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "nightly": nightly,
     "map": map_,
     "drift": drift,
+    "demo-reset": demo_reset,
+    "preflight": preflight,
 }
 
 
@@ -600,6 +716,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, help_text in COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
+        if name == "demo-reset":
+            p.add_argument("--case", default=None, help="only this case (default: every case)")
+        if name == "preflight":
+            p.add_argument("--api", default="http://localhost:8000")
+            p.add_argument("--web", default="http://localhost:3000")
         if name == "serve":
             p.add_argument(
                 "--demo", action="store_true", help="twelve in-memory demo cases, no warehouse needed"

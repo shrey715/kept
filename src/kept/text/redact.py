@@ -336,3 +336,9 @@ def stored_redacted(text: str, redactor_version: str) -> RedactedText:
     if not redactor_version.startswith("presidio-"):
         raise ValueError(f"not Presidio output: redactor_version={redactor_version!r}")
     return RedactedText(text=text, redactor_version=redactor_version)
+
+
+def fixed_text(text: str) -> RedactedText:
+    """A string written in our own code (an ops probe like "Reply with OK."), so there's nothing to redact.
+    Never for customer text: notes, transcripts and questions go through PresidioRedactor."""
+    return RedactedText(text=text, redactor_version="fixed-text")
