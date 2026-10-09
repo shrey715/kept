@@ -248,13 +248,19 @@ The workstreams above, sequenced. Each phase ends with its PRs merged (CI green)
 | Phase | When | Workstreams | Exit check |
 |---|---|---|---|
 | **0 · Safe base** ✅ | Fri 9 Oct | WS3 (BQ-006), WS6 (`kept preflight`, `kept demo-reset`), plan + ignore rules | dev 21/21; preflight GO (done: #131–#134) |
-| **1 · Measured evidence** | Sat 10 | WS2: randomised-cell results with CIs, off-policy estimate of Kept, head-to-head with the bank's `model_scores`, promise-model leakage audit | a report in `docs/reports/`, every number reproducible |
-| **2 · Model depth and voice** | Sun 11 | WS4: point-in-time payroll features + retrain (champion/challenger), `promise_intent`, cease/dispute re-gate · WS5: Whisper + WER | retrain and extraction reports; WER report |
-| **3 · Ask accuracy and robustness** | Mon 12 | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% |
-| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test | deck v2 complete; rehearsal 1 |
-| **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, final benchmark run, secret scan of history, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; no secrets in history; features refreshed |
+| **1 · Measured evidence** | Sat 10 | WS2: randomised-cell results with CIs, off-policy estimate of Kept, head-to-head with the bank's `model_scores`, promise-model leakage audit, all reported against the primary metric (promised money paid) and its guards | a report in `docs/reports/`, every number reproducible |
+| **2 · Model depth and voice** | Sun 11 | WS4: point-in-time payroll features + retrain (champion/challenger), `promise_intent`, cease/dispute re-gate, pay-link payday coverage · WS5: Whisper + WER · then re-run everything the model feeds: `kept score`, fairness report, invariance test, drift report | retrain, extraction and WER reports; fairness, invariance and drift regenerated on the new model |
+| **3 · Ask accuracy and robustness** | Mon 12 | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% (runs write to `data/exports/reports/`, never to `submission/`) |
+| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, README "what changed and why" and results table brought up to date, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test | deck v2 complete; every README and deck number links to a current report; rehearsal 1 |
+| **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, §6 Q&A drill with unseen questions, final benchmark run (to `data/exports/reports/`), secret scan of history, deck PDF and video link in the repo as real text, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; Q&A drill done; no secrets in history; deck and video present; features refreshed |
 
-Downloads (Whisper, an embedding model) and any switch of LLM provider are asked about first (`CLAUDE.md`).
+Every item in §2 (gaps), §3 (pitfalls) and §3a (practices) lands in one of these rows, so finishing phase 5 finishes the
+plan: no second pass.
+
+Rules that hold in every phase:
+- `submission/benchmark_answers.csv` is the file submitted on 4 Oct and is never rewritten; new benchmark runs write to
+  `data/exports/reports/`.
+- Downloads (Whisper, an embedding model) and any switch of LLM provider are asked about first (`CLAUDE.md`).
 
 ## 5. The new deck and talk (outline)
 
