@@ -21,7 +21,6 @@ import pandas as pd
 
 from kept.common.audit import DuckDBAuditLog
 from kept.common.llm import LiteLLMGateway
-from kept.config import WAREHOUSE_PATH
 from kept.text.extract import LLMExtractor
 from kept.text.live import DEFAULT_MODEL
 from kept.text.redact import PresidioRedactor
@@ -33,13 +32,16 @@ OUT = VOICE / "voice_extractions.parquet"
 
 def main() -> None:
     warnings.filterwarnings("ignore")
-    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as con:  # closed before the long part
+    with (
+        duckdb.connect() as con
+    ):  # the release files only: runs next to kept serve, which holds the warehouse
         calls = con.execute(
             f"""select v.voice_sample_id, t.case_id, t.call_start_ts::timestamp as call_start, v.duration_sec, w.text
                 from read_csv('{REPO / "data/raw/voice_samples.csv"}', header=true) v
                 join read_csv('{REPO / "data/raw/call_transcripts.csv"}', header=true) t using (voice_sample_id)
                 join read_parquet('{VOICE / "whisper.parquet"}') w using (voice_sample_id)
-                where t.case_id in (select case_id from nba.cards)
+                where t.case_id in (select case_id from read_csv('{REPO / "data/raw/collections_cases.csv"}', header=true, all_varchar=true)
+                                    where coalesce(outcome, '') = '')  -- open cases: the ones scored tonight
                 order by v.voice_sample_id"""
         ).df()
     done = pd.read_parquet(OUT) if OUT.exists() else pd.DataFrame(columns=["voice_sample_id"])
