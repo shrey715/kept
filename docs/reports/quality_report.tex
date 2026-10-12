@@ -191,6 +191,12 @@ Splink & 160 & 158 & 98.8\% \\
 \emph{except the surname}, and both scored the maximum, 1.0. No threshold would have caught them. That's the argument
 for keeping a reviewed sample in every release, and for the rule that a cluster holding two national IDs is never merged.}
 
+\paragraph{Recall, by injection} Precision says the links we make are right; recall says we make the links we should.
+The CRM's own duplicate pointer can't measure it (the matcher uses it as an exact rule), so we planted 200 copies of real
+customers with no national ID and no pointer, each damaged one way (exact copy, surname typo, no phone, new postal code,
+first initial only), and re-ran the matcher. \textbf{198 of 200 (99\%) merged with their original}; the 2 misses stayed a
+person of their own (no wrong merges), and 2 of 50,036 other clusters shifted. Details: \path{docs/reports/identity_recall.md}.
+
 \subsection{What the golden record holds}
 
 \begin{table}[htbp]\small\centering
