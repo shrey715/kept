@@ -42,7 +42,7 @@ Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has t
 | Voice | Whisper, local: word error rate **9.4%** vs the bank's speech-to-text at 12.4%; hardship from the recording itself F1 **0.97** ([voice](docs/reports/voice_wer.md)) |
 | Models | leaky promise feature found and dropped (AUC 0.92 → 0.63, calibrated within 7 pts); ours plus the bank's score beats the bank's alone, 0.728 vs 0.702 ([evidence](docs/reports/evidence.md) §3, §6) |
 | Decisions | **96,000** cards a night; payday-dated plans on cards; the pay link asks the customer's payday when the bank doesn't know it |
-| Ask | released dev split **21 of 21**; stress suite **35 of 42**; refusal recall **100%**; hybrid search finds French sections; every answer cites its SQL or source |
+| Ask | released dev split **21 of 21**; stress suite **35 of 42**; unseen drill **26 of 30**; refusals all right; hybrid search finds French sections; every answer cites its SQL or source ([accuracy](docs/reports/ask_accuracy.md)) |
 | Fairness | any-contact ratio **0.87–1.00** on every protected attribute; scrambling all of them changes **0 of 96,000** decisions ([fairness](docs/reports/fairness_report.pdf)) |
 | Governance | hash-chained audit trail (`kept audit-verify`); champion/challenger gate; drift report ([drift](docs/reports/drift_report.pdf)) |
 | Business | base **$1.55M a year**, year-one ROI **2.4×**, payback ~**2.6 months**; low $0.44M, high $4.27M ([business case](docs/reports/business_case.pdf)) |

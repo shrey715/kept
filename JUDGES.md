@@ -32,9 +32,9 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 | Every extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00** | [`docs/reports/extraction_gate.md`](docs/reports/extraction_gate.md) | `uv run python scripts/eval_extraction.py --source transcripts --split holdout` |
 | Whisper on 2,000 calls: **9.4%** word error rate vs the bank's speech-to-text at 12.4%, even across noise and accents | [`docs/reports/voice_wer.md`](docs/reports/voice_wer.md) | `uv run python scripts/voice_wer.py --report-only` |
 | One person per customer: precision **99.3%** (300 links by hand), recall **99%** (198 of 200 planted duplicates, no wrong merges) | [`QUALITY_REPORT.pdf`](QUALITY_REPORT.pdf), [`docs/reports/identity_recall.md`](docs/reports/identity_recall.md) | `uv run python scripts/identity_injection.py` |
-| Ask: released dev split **21 of 21**; our stress suite **35 of 42**; an unseen drill (see the benchmark report) | [`docs/reports/benchmark_report.pdf`](docs/reports/benchmark_report.pdf) | `uv run python scripts/bench_run.py <questions.csv> --gold <gold.csv> --out data/exports/reports/x.csv` |
+| Ask: released dev split **21 of 21**; our stress suite **35 of 42**; an unseen drill **26 of 30**; refusals all right, every miss explained | [`docs/reports/ask_accuracy.md`](docs/reports/ask_accuracy.md) | `uv run python scripts/bench_run.py benchmarks/drill_questions.csv --gold benchmarks/drill_gold.csv --out data/exports/reports/drill_answers.csv` |
 | Protected attributes never change a decision: scramble all of them, rebuild, rescore, **0 of 96,000** cards change | [`docs/reports/fairness_report.pdf`](docs/reports/fairness_report.pdf) §5 | `uv run python scripts/invariance_test.py protected` |
-| Contact is even across groups: any-contact ratio **0.87–1.00** on every protected attribute | fairness report | `uv run python scripts/fairness_report.py` |
+| Contact is even across groups: any-contact ratio **0.87–1.00** on every protected attribute; 3 small flags, reviewed ([separated customers](docs/reports/separated_review.md)) | fairness report | `uv run python scripts/fairness_report.py` |
 | No decision record can be edited unnoticed: every audit event is hash-chained | `src/kept/common/audit.py` | `uv run kept audit-verify` |
 | A worse model can't go live: when payroll features didn't help, the champion/challenger gate kept the current model | [`docs/reports/drift_report.pdf`](docs/reports/drift_report.pdf) | `uv run kept train` |
 | Business case: **$1.55M a year** base (low $0.44M, high $4.27M), every assumption named and swung | [`docs/reports/business_case.pdf`](docs/reports/business_case.pdf) | `uv run python scripts/business_case.py` |
@@ -48,5 +48,5 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 - **The uplift signal is small** (call Qini 0.0073). Payroll features added to training didn't beat the champion.
 - **About 18% of long recorded calls** get no usable reply from the local model; the panel then shows the transcript
   without signals.
-- **Fairness flags on calls** are small numbers (calls are 3% of cards); a minimum-events rule now separates them from
-  real gaps.
+- **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
+  small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
