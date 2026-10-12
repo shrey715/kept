@@ -16,7 +16,7 @@ import duckdb
 from kept.ask.grounding import extract_numbers, needs_clarification, ungrounded_numbers
 from kept.ask.lookup import draft_sql, generate_candidates, lookup_system, majority_result, normalize_result
 from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric
-from kept.ask.policy import PolicyIndex
+from kept.ask.policy import PolicyIndex, local_embedder
 from kept.ask.privacy import suppress_small_groups
 from kept.ask.router import route
 from kept.ask.scope import Classifier, check_scope, refusal_for, rule_check
@@ -715,6 +715,6 @@ def build_ask(
         classifier=make_classifier(llm, redactor, actor_id="system:ask-scope"),
         metrics=metrics | {k: d for k, (d, _) in TEMPLATES.items()},
         certified_queries=CERTIFIED_QUERIES | {k: q for k, (_, q) in TEMPLATES.items()},
-        policy_index=PolicyIndex(index_dir) if index_dir.exists() else None,
+        policy_index=PolicyIndex(index_dir, local_embedder()) if index_dir.exists() else None,
         audit_log=audit_log,
     )

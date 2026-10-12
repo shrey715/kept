@@ -7,7 +7,9 @@ a document's effective_to is the effective_date of the document that supersedes 
 
 from __future__ import annotations
 
+import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -75,20 +77,43 @@ def chunk_document(
     return out
 
 
-class PolicyIndex:
-    """LanceDB full-text (BM25) index over policy sections. Keyword search, stemmed, no model download;
-    ponytail: swap in embeddings if recall on paraphrased questions is poor."""
+EMBED_MODEL = os.environ.get("KEPT_EMBED_MODEL", "BAAI/bge-m3")  # multilingual: French sections, paraphrases
+_RRF_K = 60  # reciprocal rank fusion's usual constant
 
-    def __init__(self, path: Path) -> None:
+
+def local_embedder(model: str = EMBED_MODEL) -> Callable[[list[str]], list[list[float]]] | None:
+    """The embedding model if it's already on this machine (never downloads), else None: search is then
+    BM25 only, exactly as before. GPU when there is one."""
+    try:
+        import torch
+        from sentence_transformers import SentenceTransformer
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        st = SentenceTransformer(model, device=device, local_files_only=True)
+    except Exception:
+        return None
+
+    def embed(texts: list[str]) -> list[list[float]]:
+        return st.encode(texts, normalize_embeddings=True, batch_size=16).tolist()  # type: ignore[no-any-return]
+
+    return embed
+
+
+class PolicyIndex:
+    """LanceDB index over policy sections: BM25 full text, plus embeddings when a local model is there
+    (hybrid: the rankings fused by reciprocal rank), so a French section or a paraphrase is still found."""
+
+    def __init__(self, path: Path, embed: Callable[[list[str]], list[list[float]]] | None = None) -> None:
         import lancedb  # the `ask` extra
 
         self._db = lancedb.connect(str(path))
+        self._embed = embed
 
     def _has_table(self) -> bool:
         return "policy" in self._db.list_tables().tables
 
     def add(self, chunks: list[PolicyChunk]) -> None:
-        rows = [
+        rows: list[dict[str, Any]] = [
             {
                 "document_id": c.document_id,
                 "section": c.section,
@@ -102,6 +127,9 @@ class PolicyIndex:
         ]
         if not rows:
             return
+        if self._embed is not None:
+            for r, v in zip(rows, self._embed([r["search_text"] for r in rows]), strict=True):
+                r["vector"] = v
         if self._has_table():
             table = self._db.open_table("policy")
             table.add(rows)
@@ -114,14 +142,24 @@ class PolicyIndex:
         if not self._has_table():
             return []
         day = as_of.isoformat()  # a date, so safe to put in the filter
+        current = f"effective_from <= '{day}' AND effective_to > '{day}'"
+        table, n = self._db.open_table("policy"), max(k * 6, 20)  # over-fetch, then let authority reorder
         hits: list[dict[str, Any]] = (
-            self._db.open_table("policy")
-            .search(query, query_type="fts")
-            .where(f"effective_from <= '{day}' AND effective_to > '{day}'", prefilter=True)
-            .limit(max(k * 6, 20))  # over-fetch, then let authority reorder
-            .to_list()
+            table.search(query, query_type="fts").where(current, prefilter=True).limit(n).to_list()
         )
-        hits.sort(key=lambda h: h["doc_type"] in _LOW_AUTHORITY)  # stable: BM25 order within a group
+        if self._embed is not None and "vector" in table.schema.names:
+            vector = self._embed([query])[0]
+            by_vector: Any = table.search(vector)  # a vector query (the stubs type it as the generic builder)
+            near = by_vector.distance_type("cosine").where(current, prefilter=True).limit(n).to_list()
+            score: dict[tuple[str, str, str, str], float] = {}
+            rows: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+            for ranked in (hits, near):
+                for rank, h in enumerate(ranked):
+                    key = (h["document_id"], h["section"], h["effective_from"], h["text"][:80])
+                    score[key] = score.get(key, 0.0) + 1 / (_RRF_K + rank + 1)
+                    rows.setdefault(key, h)
+            hits = [rows[key] for key in sorted(score, key=score.__getitem__, reverse=True)]
+        hits.sort(key=lambda h: h["doc_type"] in _LOW_AUTHORITY)  # stable: fused order within a group
         return [
             Citation(
                 document_id=h["document_id"],
