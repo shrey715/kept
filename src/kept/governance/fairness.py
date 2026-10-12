@@ -13,18 +13,22 @@ if TYPE_CHECKING:
     import pandas as pd
 
 FOUR_FIFTHS = 0.8  # TBC alarm threshold
+# a ratio on a rare outcome flips on a handful of people: flag only when the lowest group would have had
+# at least this many events at the highest group's rate (fewer: reported as too few to judge, not a flag)
+MIN_EVENTS = 20
 
 
 @dataclass(frozen=True, slots=True)
 class FairnessReport:
     rates: dict[Hashable, float]
     min_ratio: float  # min rate / max rate
-    flagged: bool  # min_ratio < threshold
+    flagged: bool  # min_ratio < threshold, with enough events to judge
     groups_skipped: tuple[Hashable, ...]  # groups below min_group_size
+    too_few_events: bool = False  # under the threshold, but on too few events to mean anything
 
 
 def recommendation_rates(
-    recommended: Sequence[bool], groups: Sequence[Hashable], *, min_group_size: int = 10
+    recommended: Sequence[bool], groups: Sequence[Hashable], *, min_group_size: int = 10, min_events: int = 0
 ) -> FairnessReport:
     """Rate of recommended == True per group; groups smaller than min_group_size are
     skipped (reported). All-zero rates -> min_ratio 1.0. Lengths differ -> ValueError.
@@ -41,7 +45,12 @@ def recommendation_rates(
     best = max(rates.values(), default=0.0)
     ratio = min(rates.values()) / best if best else 1.0
     skipped = tuple(g for g, (n, _) in counts.items() if n < min_group_size)
-    return FairnessReport(rates, ratio, ratio < FOUR_FIFTHS, skipped)
+    low = min(rates, key=rates.__getitem__) if rates else None
+    enough = (
+        low is None or counts[low][0] * best >= min_events
+    )  # events the lowest group would have at the top rate
+    below = ratio < FOUR_FIFTHS
+    return FairnessReport(rates, ratio, below and enough, skipped, too_few_events=below and not enough)
 
 
 # What a recommendation means for each question the report asks. `action` is nba.cards.action:
