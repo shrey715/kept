@@ -28,20 +28,24 @@ orange border = changed from our 2 Oct [design](docs/design/SharpeShooters_Syste
 More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs/reports/fairness_report.pdf) ·
 [feature drift](docs/reports/drift_report.pdf).
 
-## Results (real data, 4 Oct)
+## Results (real data, 12 Oct)
+
+Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one.
 
 | Area | Result |
 |---|---|
-| Identity | 3,840,513 source keys → **1,052,300 golden IDs**; match precision **99.3%** on 300 human-reviewed links |
-| Data quality | contract gate **PASS** on all 8 rules; 19 data issues found, counted and handled |
+| Evidence | dating a promise to just after payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases; Kept's contact policy **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** ([evidence](docs/reports/evidence.md)) |
+| Identity | 3,840,513 source keys → **1,052,300 golden IDs**; precision **99.3%** (300 links by hand), recall **99%** (198 of 200 planted duplicates, no wrong merges) ([quality](QUALITY_REPORT.pdf), [recall](docs/reports/identity_recall.md)) |
+| Data quality | contract gate **PASS** on all 8 rules; 19 data issues found, counted and handled ([quality](QUALITY_REPORT.pdf)) |
 | Privacy | 785,594 notes and calls redacted before any model, **0** leaks in a full scan |
-| Text | 6 of 7 extracted fields pass the F1 ≥ 0.80 gate; hardship recall **0.98 / 0.99** (notes / calls, held out) |
-| Features | 26 features; training vs live parity **0 of 56,000** cells off |
-| Model | uplift Qini for calls **0.0073 vs 0.0017** for the bank's current strategy |
-| Decisions | **96,000** cards a night (~7 min end to end); agent card loads in 0.21 s |
-| Ask | dev split **20 of 21** right (17/18 in scope, 3/3 refusals); refusal recall **100%**, refusal precision **100%**; every answer cites its SQL or source |
-| Fairness | contact-action ratio across every protected group **0.86–1.00**; scrambling every protected attribute changes **0 of 96,000** decisions |
-| Business | promises dated to payday: **62% vs 52%** of the money paid; base case **$2.2M a year**, year-1 ROI **3.8x**, payback **~2 months** |
+| Text | **every** extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00 / 1.00** ([gate](docs/reports/extraction_gate.md)) |
+| Voice | Whisper, local: word error rate **9.4%** vs the bank's speech-to-text at 12.4%; hardship from the recording itself F1 **0.97** ([voice](docs/reports/voice_wer.md)) |
+| Models | leaky promise feature found and dropped (AUC 0.92 → 0.63, calibrated within 7 pts); ours plus the bank's score beats the bank's alone, 0.728 vs 0.702 ([evidence](docs/reports/evidence.md) §3, §6) |
+| Decisions | **96,000** cards a night; payday-dated plans on cards; the pay link asks the customer's payday when the bank doesn't know it |
+| Ask | released dev split **21 of 21**; stress suite **35 of 42**; unseen drill **26 of 30**; refusals all right; hybrid search finds French sections; every answer cites its SQL or source ([accuracy](docs/reports/ask_accuracy.md)) |
+| Fairness | any-contact ratio **0.87–1.00** on every protected attribute; scrambling all of them changes **0 of 96,000** decisions ([fairness](docs/reports/fairness_report.pdf)) |
+| Governance | hash-chained audit trail (`kept audit-verify`); champion/challenger gate; drift report ([drift](docs/reports/drift_report.pdf)) |
+| Business | base **$1.55M a year**, year-one ROI **2.4×**, payback ~**2.6 months**; low $0.44M, high $4.27M ([business case](docs/reports/business_case.pdf)) |
 
 ## How it works, in one breath
 
