@@ -102,7 +102,12 @@ class LiteLLMGateway:
             "drop_params": True,  # free models differ in what they accept
         }
         if json_schema is not None:
-            kwargs["response_format"] = {"type": "json_object"}
+            # a local model decodes to the schema itself; free hosted tiers accept only a subset of it
+            kwargs["response_format"] = (
+                {"type": "json_schema", "json_schema": {"name": "reply", "schema": dict(json_schema)}}
+                if self.model.startswith("ollama")
+                else {"type": "json_object"}
+            )
 
         call_id, t0, attempts = uuid.uuid4().hex, time.perf_counter(), 0
         payload: dict[str, Any] = {
