@@ -249,7 +249,8 @@ def calls(con: duckdb.DuckDBPyConnection) -> list[tuple[str, str, str]]:
     return out
 
 
-def main() -> None:
+def build(items: list[tuple[str, str, str, str, str, str, object, str]], stem: str) -> None:
+    """Gold for every item from the raw files; writes {stem}_questions.csv and {stem}_gold.csv here."""
     con = duckdb.connect()
     for t in ("contact_history", "promises_to_pay", "collections_cases", "agents", "loan_accounts", "deposit_accounts",
               "call_transcripts"):  # fmt: skip
@@ -259,9 +260,9 @@ def main() -> None:
     con.execute(
         f"CREATE VIEW account_monthly_snapshot AS SELECT * FROM read_parquet('{RAW / 'account_monthly_snapshot'}/**/*.parquet', hive_partitioning=true)"
     )
-    picked = calls(con)
+    picked = calls(con) if any(k == "call" for *_, k, _, _ in items) else []
     questions, gold = [], []
-    for qid, text, diff, metric, tol, kind, g, trap in Q:
+    for qid, text, diff, metric, tol, kind, g, trap in items:
         sql, sources, answer = "", "", ""
         if kind == "sql":
             sql = " ".join(str(g).split())
@@ -282,16 +283,20 @@ def main() -> None:
         else:
             answer = f"Refuse: {g}"
         questions.append({"question_id": qid, "question_text": text, "difficulty": diff, "metric_id": metric,
-                          "as_of_date": AS_OF, "tolerance": tol, "split": "stress"})  # fmt: skip
+                          "as_of_date": AS_OF, "tolerance": tol, "split": stem})  # fmt: skip
         gold.append({"question_id": qid, "gold_answer": answer, "gold_sql_reference": sql, "gold_sources": sources,
                      "trap_notes": trap})  # fmt: skip
         print(f"{qid} {kind:7} {answer.splitlines()[0][:70] if answer else ''}")
-    for name, rows in (("stress_questions.csv", questions), ("stress_gold.csv", gold)):
+    for name, rows in ((f"{stem}_questions.csv", questions), (f"{stem}_gold.csv", gold)):
         with (HERE / name).open("w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0]))
             w.writeheader()
             w.writerows(rows)
     print(f"{len(questions)} questions -> {HERE}")
+
+
+def main() -> None:
+    build(Q, "stress")
 
 
 if __name__ == "__main__":
