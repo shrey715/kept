@@ -10,18 +10,19 @@ The holdout split was used only to check, not to tune.
 
 ## Holdout: every field passes
 
-| Field | Notes F1 (149) | Recall | Calls F1 (139) | Recall |
+| Field | Notes F1 (149) | Recall | Calls F1 (149) | Recall |
 |---|---:|---:|---:|---:|
-| Hardship | 0.83 | **1.00** | 0.99 | **1.00** |
-| Promise to pay | 0.85 | 0.88 | 0.95 | 1.00 |
-| Promised date | 0.90 | 0.81 | 0.96 | 0.92 |
-| Promised amount | 0.93 | 0.86 | 0.99 | 0.99 |
-| Dispute | 0.86 | 1.00 | 0.95 | 1.00 |
+| Hardship | 0.84 | **1.00** | 0.99 | **1.00** |
+| Promise to pay | 0.88 | 0.92 | 0.97 | 1.00 |
+| Promised date | 0.84 | 0.73 | 0.96 | 0.92 |
+| Promised amount | 0.93 | 0.86 | 1.00 | 1.00 |
+| Dispute | 0.86 | 1.00 | 0.93 | 1.00 |
 | Cease request | 1.00 | 1.00 | 1.00 | 1.00 |
 | Third party present | 1.00 | 1.00 | 1.00 | 1.00 |
 
-Ten of the 149 calls got no usable reply from the model (a schema error after one retry); they're left out above. Cease and third party have only 1–2
-positives in each holdout, so treat those two F1s as "no misses", not as a precise rate.
+Every text gets a usable reply: the local model decodes straight to the JSON schema (each field's value typed), so it
+can't return a malformed field. Before that, 10 of the 149 calls broke the schema and were left out. Cease and third
+party have only 1–2 positives in each holdout, so treat those two F1s as "no misses", not as a precise rate.
 
 ## Cease: what the model got wrong, and the fix
 
@@ -44,11 +45,11 @@ Whisper's own transcript of the audio (`docs/reports/voice_wer.md`):
 
 | Field | Release transcript F1 | Whisper transcript F1 |
 |---|---:|---:|
-| Hardship | 1.00 | **0.97** (recall 1.00) |
-| Promise to pay | 0.99 | 0.89 |
-| Promised amount | 0.97 | 0.97 |
-| Promised date | 0.95 | 0.83 |
-| Dispute | 0.92 | 0.80 |
+| Hardship | 1.00 | **0.98** (recall 1.00) |
+| Promise to pay | 1.00 | 0.90 |
+| Promised amount | 0.97 | 1.00 |
+| Promised date | 0.96 | 0.88 |
+| Dispute | 0.86 | 0.86 |
 
 Every hardship in these calls is caught straight from the audio. Dates suffer most: the Whisper transcript has no
 speaker labels, so "the 15th" is sometimes the agent's suggestion, not the customer's promise. Transcribing the agent and
