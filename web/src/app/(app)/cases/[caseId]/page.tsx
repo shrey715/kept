@@ -5,12 +5,13 @@ import { Box, Button, Callout, Card, Flex, Grid, Heading, IconButton, Skeleton, 
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
+import { CallsPanel } from "@/components/calls-panel";
 import { CustomerPanel } from "@/components/customer-panel";
 import { ExtractionPanel } from "@/components/extraction-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
-import { ApiError, api, type AuditEvent, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
+import { ApiError, api, type AuditEvent, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
 import { useSession } from "@/lib/session";
 
@@ -28,6 +29,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   const [preset, setPreset] = useState<string | undefined>(undefined);
   const [tab, setTab] = useState("review");
   const [notes, setNotes] = useState<NoteExtraction[]>([]);
+  const [calls, setCalls] = useState<CallOut[]>([]);
 
   const loadAudit = useCallback(() => {
     if (me) api.audit(me, { caseId }).then(setEvents, () => {});
@@ -61,6 +63,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         setError(null);
         loadAudit();
         loadNotes();
+        if (!demo) api.calls(caseId, me).then(setCalls, () => setCalls([])); // no recordings here: no panel
       },
       (e: Error) => {
         if (!live) return;
@@ -71,7 +74,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
     return () => {
       live = false;
     };
-  }, [caseId, me, nonce, loadAudit, loadNotes]);
+  }, [caseId, me, nonce, loadAudit, loadNotes, demo]);
 
   async function addNote() {
     if (!me || !note.trim()) return;
@@ -182,6 +185,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
               </Card>
             )}
             <ExtractionPanel items={notes} agentId={me.userId} demo={demo} onSaved={() => setNonce((n) => n + 1)} />
+            <CallsPanel calls={calls} who={me} />
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>

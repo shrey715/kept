@@ -12,7 +12,7 @@ import { spring } from "./motion";
 
 type Field = keyof Omit<TextExtraction, "source_id" | "case_id" | "extractor" | "extracted_at" | "confirmed_by_agent_id">;
 
-const FIELDS: { key: Field; label: string; kind: "signal" | "reason" | "bool" | "amount" | "date"; color: string }[] = [
+export const FIELDS: { key: Field; label: string; kind: "signal" | "reason" | "bool" | "amount" | "date"; color: string }[] = [
   { key: "hardship_signal", label: "Hardship", kind: "signal", color: "amber" },
   { key: "stated_reason", label: "Stated reason", kind: "reason", color: "amber" },
   { key: "promise_intent", label: "Intends to pay", kind: "bool", color: "grass" },
@@ -26,7 +26,7 @@ const SIGNALS = ["none", "possible", "clear"];
 const REASONS = ["none", "job_loss", "reduced_income", "medical", "bereavement", "other"];
 
 /** The note with every evidence span marked, coloured by the field it supports. */
-function Highlighted({ note, ex }: { note: string; ex: TextExtraction }) {
+export function Highlighted({ note, ex }: { note: string; ex: TextExtraction }) {
   const spans = FIELDS.flatMap((f) => {
     const e = ex[f.key].evidence;
     return e ? [{ start: e.char_start, end: e.char_end, f }] : [];

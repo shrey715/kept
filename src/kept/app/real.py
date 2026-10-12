@@ -16,9 +16,10 @@ from pathlib import Path
 import duckdb
 
 from kept.app.api import QueueItem, Services
+from kept.app.voice import VoiceCalls
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
-from kept.config import EXPORT_DIR, REPO_ROOT, WAREHOUSE_PATH
+from kept.config import EXPORT_DIR, RAW_DIR, REPO_ROOT, WAREHOUSE_PATH
 from kept.contracts.enums import Action, HardshipSignal, HardshipStatus, HardStop, ReleaseTier, Role
 from kept.contracts.interfaces import AuditLog
 from kept.contracts.nba import CaseContext, ProposalStatus
@@ -116,6 +117,10 @@ def real_services(
         steward=load_steward_queue(warehouse=warehouse),
         scored_queue=_scored_queue(conn),
         chart=chart,
+        calls=VoiceCalls(  # the voice pack's files/voice next to the release's files/transcripts
+            EXPORT_DIR / "voice" / "voice_extractions.parquet",
+            Path(os.environ.get("KEPT_VOICE_DIR", RAW_DIR / "files" / "voice")),
+        ),
     )
 
 

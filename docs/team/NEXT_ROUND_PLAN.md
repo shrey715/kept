@@ -384,6 +384,10 @@ uv run kept demo-reset                       # removes notes typed in earlier ta
 uv run kept serve
 ```
 
+**Calls panel (voice):** the case page shows recorded calls only if the machine has the voice pack at
+`data/raw/files/voice/` (or `KEPT_VOICE_DIR`) and `data/exports/voice/voice_extractions.parquet` (made on Akshat's GPU by
+`scripts/voice_wer.py` then `scripts/voice_extract.py`; copy both from his machine). Without them the panel just doesn't appear.
+
 **Fallback:** `uv run kept serve --demo` runs twelve in-memory cases with no warehouse and no network.
 
 ---

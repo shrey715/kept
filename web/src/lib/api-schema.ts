@@ -157,6 +157,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Case Calls
+         * @description The case's recorded calls: Whisper's transcript and what the extraction read from it. Empty when
+         *     the recordings aren't on this machine, and the page hides the panel.
+         */
+        get: operations["case_calls_cases__case_id__calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calls/{voice_sample_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Call Audio */
+        get: operations["call_audio_calls__voice_sample_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ask": {
         parameters: {
             query?: never;
@@ -494,6 +532,21 @@ export interface components {
             gold: {
                 [key: string]: string;
             }[];
+        };
+        /** CallOut */
+        CallOut: {
+            /** Voice Sample Id */
+            voice_sample_id: string;
+            /**
+             * Call Start
+             * Format: date-time
+             */
+            call_start: string;
+            /** Duration Sec */
+            duration_sec: number;
+            /** Transcript */
+            transcript: string;
+            extraction: components["schemas"]["TextExtraction"] | null;
         };
         /**
          * Channel
@@ -1589,6 +1642,72 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NoteExtraction"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_calls_cases__case_id__calls_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    call_audio_calls__voice_sample_id__audio_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                voice_sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
