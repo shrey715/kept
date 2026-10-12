@@ -209,3 +209,17 @@ def test_fairness_report_does_not_compare_tiny_groups() -> None:
     cards, restricted = _frames()
     text = fairness_report(cards, restricted, ["gender_code"], min_group_size=96)
     assert "n/a (too few)" in text  # the 5-case "unknown" group and group b (95) are under 96
+
+
+def test_a_gap_on_too_few_events_is_reported_not_flagged() -> None:
+    from kept.governance.fairness import recommendation_rates
+
+    # A: 2 of 100 called; B: 4 of 100. Ratio 0.5, but A would have had only 4 calls at B's rate.
+    rec = [True] * 2 + [False] * 98 + [True] * 4 + [False] * 96
+    groups = ["A"] * 100 + ["B"] * 100
+    r = recommendation_rates(rec, groups, min_events=20)
+    assert r.min_ratio == 0.5 and not r.flagged and r.too_few_events
+    big = recommendation_rates(
+        rec * 10, groups * 10, min_events=20
+    )  # the same rates on 10x the people: 40 events
+    assert big.flagged and not big.too_few_events

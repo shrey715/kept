@@ -33,7 +33,7 @@ def collect() -> dict[str, object]:
 
     from kept.config import COHORT_MIN_GROUP_SIZE, WAREHOUSE_PATH
     from kept.contracts.data_contract import load_data_contract
-    from kept.governance.fairness import OUTCOMES, _outcome, recommendation_rates
+    from kept.governance.fairness import MIN_EVENTS, OUTCOMES, _outcome, recommendation_rates
 
     con = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
     cards = con.execute("select golden_customer_id, action from nba.cards").df()
@@ -54,11 +54,15 @@ def collect() -> dict[str, object]:
         res = {}
         for o in OUTCOMES:
             r = recommendation_rates(
-                _outcome(known["action"], o), groups, min_group_size=COHORT_MIN_GROUP_SIZE
+                _outcome(known["action"], o),
+                groups,
+                min_group_size=COHORT_MIN_GROUP_SIZE,
+                min_events=MIN_EVENTS,
             )
             res[o] = {
                 "ratio": r.min_ratio,
                 "flagged": r.flagged,
+                "too_few_events": r.too_few_events,
                 "rates": {str(k): v for k, v in r.rates.items()},
             }
         sizes = known[a].astype("string").value_counts().to_dict()

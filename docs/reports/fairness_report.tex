@@ -4,19 +4,20 @@
 \subtitle{Does Kept treat protected groups differently? Checked on tonight's 96,000 cards}
 \reportnumber{Governance · fairness}
 \runninghead{Fairness}
-\date{10 October 2026}
+\date{12 October 2026}
 
 \begin{document}
 \makereporttitle
 
-\statrow{\stat{0.87–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0 of 96,000}{cards change when every protected attribute is scrambled}\stat{11}{attributes checked, from the data contract}\stat{7}{flags, all explained below}}
+\statrow{\stat{0.87–1.00}{any-contact ratio, every attribute (flag below 0.80)}\stat{0 of 96,000}{cards change when every protected attribute is scrambled}\stat{11}{attributes checked, from the data contract}\stat{3}{flags, explained below (4 more on too few events)}}
 
 \takeaway{\textbf{The short version.} For every protected attribute, the group that gets contacted least is within
-0.87–1.00 of the group that gets contacted most, so nothing comes near the four-fifths line. The 7 flags sit on two outcomes.
-\textbf{Calls} are rare (2.9\% of cards), so a handful of calls in a small group flips the ratio. \textbf{Hardship review}
+0.87–1.00 of the group that gets contacted most, so nothing comes near the four-fifths line. Three flags remain, on two outcomes.
+\textbf{Calls} are rare (2.9\% of cards), so a handful of calls in a small group flips the ratio; four more call ratios fall
+below 0.80 on too few events to mean anything, and the check now says so instead of flagging them. \textbf{Hardship review}
 lands more on customers who carry the vulnerability flag, which is the protection doing its job. One gap needs a human look:
-separated customers get a hardship review 51\% of the time against 39–40\% for everyone else. Most of that is the
-vulnerability flag, and §4 shows the rest.}
+separated customers get a hardship review 51\% of the time against 39–40\% for everyone else. We reviewed it (§4): it comes
+from the vulnerability flag and from separation itself, a hardship the bank's own policy names, not from any model.}
 
 \section{How we checked}
 
@@ -62,12 +63,12 @@ that spread is noise rather than bias.
 \toprule
 \textbf{Attribute} & \textbf{Any contact} & \textbf{Call} & \textbf{Hardship review} & \textbf{People known} \\
 \midrule
-\code{customer\_accent\_region} & 0.87 & \textcolor{kept}{0.57} & 0.83 & 1,214 \\
-\code{vulnerability\_type} & 0.91 & \textcolor{kept}{0.36} & 0.91 & 13,696 \\
+\code{customer\_accent\_region} & 0.87 & \textcolor{muted}{0.57†} & 0.83 & 1,214 \\
+\code{vulnerability\_type} & 0.91 & \textcolor{muted}{0.36†} & 0.91 & 13,696 \\
 \code{dependants\_count} & 0.94 & 0.86 & 0.81 & 65,319 \\
-\code{accessibility\_type} & 0.94 & \textcolor{kept}{0.51} & 0.82 & 2,606 \\
+\code{accessibility\_type} & 0.94 & \textcolor{muted}{0.51†} & 0.82 & 2,606 \\
 \code{marital\_status} & 0.96 & \textcolor{kept}{0.73} & \textcolor{kept}{0.76} & 85,315 \\
-\code{household\_size} & 0.97 & \textcolor{kept}{0.78} & 0.93 & 65,259 \\
+\code{household\_size} & 0.97 & \textcolor{muted}{0.78†} & 0.93 & 65,259 \\
 \code{gender\_code} & 0.98 & \textcolor{kept}{0.72} & 0.99 & 91,611 \\
 \code{citizenship\_status} & 0.99 & 0.85 & 0.98 & 91,609 \\
 \code{accessibility\_needs\_flag} & 0.99 & 0.93 & 0.97 & 92,542 \\
@@ -75,7 +76,7 @@ that spread is noise rather than bias.
 \code{newcomer\_program\_flag} & 1.00 & 0.92 & 0.98 & 92,542 \\
 \bottomrule
 \end{tabular}
-\caption{Ratios per attribute; red = below 0.80. A flag is a question for compliance, not a verdict.}
+\caption{Ratios per attribute; red = a flag (below 0.80); grey † = below 0.80 on too few events to judge (the lowest group would have had fewer than 20 at the top rate). A flag is a question for compliance, not a verdict.}
 \end{table}
 
 \section{Why the call flags are small numbers}
@@ -92,9 +93,11 @@ get a hardship review \emph{instead of} a call (next section), so their call rat
 the rates swing on a few calls.
 \end{itemize}
 
-\insight{What we'd do about it}{Nothing to the model. The four-fifths rule is meant for outcomes where both groups have
-enough events. We'd add a minimum-events rule to the nightly check (for example, at least 20 calls in the smaller group)
-so compliance sees flags that mean something.}
+\insight{What we did about it}{Nothing to the model. The four-fifths rule is meant for outcomes where both groups have
+enough events, so the nightly check now has a minimum-events rule: a ratio below 0.80 is a flag only if the lowest group
+would have had at least 20 events at the top group's rate (\code{kept.governance.fairness.MIN\_EVENTS}). Four call
+ratios now read ``too few events to judge'' instead of raising a flag; gender (0.72) still flags, at 21 calls against an
+expected 29, and stays with compliance.}
 
 \section{Group by group}
 
@@ -168,10 +171,14 @@ bit-for-bit identical, and the protected run then came back at exactly zero.}
 
 \begin{enumerate}[leftmargin=1.5em]
 \item \textbf{Contact is even.} Every attribute sits at 0.87 or above for \emph{any contact action}, and most at 0.93 or above.
-\item \textbf{Call flags are small numbers, not bias.} Add a minimum-events rule so the nightly check stops raising them.
+\item \textbf{Call flags are mostly small numbers.} The minimum-events rule now separates them; the gender and marital-status
+call ratios still flag, at a few dozen calls, and are for compliance to watch.
 \item \textbf{More hardship reviews for vulnerable customers is by design.} The vulnerability flag protects; it never scores.
-\item \textbf{Review: separated customers.} After the vulnerability flag, a gap of about 8 points remains, which comes from hardship
-signals. We'd ask compliance to sample 50 of these cards and confirm the signals are real.
+\item \textbf{Reviewed: separated customers.} Of their 4,390 hardship reviews, 441 state separation itself as the hardship
+(a cause the bank's hardship policy lists), against 44 among everyone else's 33,078, and 16\% carry the vulnerability flag
+against 10\%. The source mix is the same as everyone's (64\% coded by agents against 59\%). A sample of 50 cards: 29 agent-coded
+hardship, 11 vulnerability flag, 7 separation, 3 from notes or cash flow. No model input involves marital status (§5).
+Details: \path{docs/reports/separated_review.md}.
 \item \textbf{Blank attributes.} Customers with no marital status on file (10,685) get fewer actions of any kind (54\% vs 79\%) and fewer hardship reviews (27\% vs 40\%).
 That's a data-coverage question for the data team, not a fairness fix.
 \end{enumerate}
