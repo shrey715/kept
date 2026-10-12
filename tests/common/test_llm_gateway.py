@@ -55,7 +55,7 @@ def test_json_schema_validated_and_parsed(patched: list[dict[str, Any]]) -> None
     r = gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema)
     assert r.parsed == {"ok": True} and r.call_id
     with pytest.raises(ValueError):
-        gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema)
+        gw.complete(system="s", user=_text("u2"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema)
 
 
 def test_every_call_logged_including_failures(patched: list[dict[str, Any]]) -> None:
@@ -67,14 +67,14 @@ def test_every_call_logged_including_failures(patched: list[dict[str, Any]]) -> 
     )
     with pytest.raises(ValueError):
         gw.complete(
-            system="s", user=_text("u"), purpose=Purpose.TEXT_EXTRACT, actor_id="system:x", json_schema=schema
+            system="s", user=_text("u2"), purpose=Purpose.TEXT_EXTRACT, actor_id="system:x", json_schema=schema
         )
     events = log.read(kind=AuditKind.LLM_CALL)
     assert len(events) == 2
     assert {e.payload["purpose"] for e in events} == {Purpose.TEXT_EXTRACT}
     assert all("model" in e.payload for e in events)
     # the prompt text itself is not copied into the audit payload
-    assert all(v != "u" for e in events for v in e.payload.values())
+    assert all(v not in ("u", "u2") for e in events for v in e.payload.values())
 
 
 def test_model_is_configurable(patched: list[dict[str, Any]]) -> None:
@@ -103,5 +103,32 @@ def test_rate_limit_is_retried_then_gives_up(monkeypatch: pytest.MonkeyPatch) ->
 
     n["calls"] = -10  # never succeeds within the retry budget
     with pytest.raises(litellm.RateLimitError):
-        gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_NARRATE, actor_id="u1")
+        gw.complete(
+            system="s", user=_text("u2"), purpose=Purpose.ASK_NARRATE, actor_id="u1"
+        )  # not the cached one
     assert log.read(kind=AuditKind.LLM_CALL)[-1].payload["ok"] is False
+
+
+def test_a_repeated_prompt_is_answered_from_the_cache_and_still_audited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    litellm = pytest.importorskip("litellm")
+    n = {"calls": 0}
+
+    def flaky(**kw: Any) -> Any:  # one 503 first: transient errors are retried, not just rate limits
+        n["calls"] += 1
+        if n["calls"] == 1:
+            raise litellm.ServiceUnavailableError("busy", llm_provider="test", model="test-model")
+        return _reply('{"ok": true}')
+
+    monkeypatch.setattr(litellm, "completion", flaky)
+    log = InMemoryAuditLog()
+    gw = LiteLLMGateway(model="test-model", audit_log=log, backoff_s=0)
+    ask = {"system": "s", "purpose": Purpose.ASK_SQL, "actor_id": "u1", "json_schema": {"type": "object"}}
+    first = gw.complete(user=_text("same"), **ask)  # type: ignore[arg-type]
+    again = gw.complete(user=_text("same"), **ask)  # type: ignore[arg-type]
+    assert first.parsed == again.parsed == {"ok": True} and n["calls"] == 2  # 503, then one real reply
+    events = log.read(kind=AuditKind.LLM_CALL)
+    assert len(events) == 2 and events[1].payload["cached"] is True
+    gw.complete(user=_text("same"), temperature=0.3, **ask)  # type: ignore[arg-type]
+    assert n["calls"] == 3  # sampled replies are never cached
