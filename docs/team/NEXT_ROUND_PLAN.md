@@ -250,8 +250,8 @@ The workstreams above, sequenced. Each phase ends with its PRs merged (CI green)
 | **0 · Safe base** ✅ | Fri 9 Oct | WS3 (BQ-006), WS6 (`kept preflight`, `kept demo-reset`), plan + ignore rules | dev 21/21; preflight GO (done: #131–#134) |
 | **1 · Measured evidence** ✅ | Sat 10 (done 9 Oct, #140–#142) | WS2: randomised-cell results with CIs, off-policy estimate of Kept, head-to-head with the bank's `model_scores`, promise-model leakage audit, all reported against the primary metric (promised money paid) and its guards | a report in `docs/reports/`, every number reproducible |
 | **2 · Model depth and voice** ✅ | Sun 11 (done 10 Oct, #143–#146) | WS4: point-in-time payroll features + retrain (champion/challenger), `promise_intent`, cease/dispute re-gate, pay-link payday coverage · WS5: Whisper + WER · then re-run everything the model feeds: `kept score`, fairness report, invariance test, drift report | retrain, extraction and WER reports; fairness, invariance and drift regenerated on the new model |
-| **3 · Ask accuracy and robustness** | Mon 12 | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% (runs write to `data/exports/reports/`, never to `submission/`) |
-| **4 · Story and judge path** | Tue 13 | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, README "what changed and why" and results table brought up to date, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test · **last:** update `docs/explanation.html` (the whole system in plain English; kept on Akshat's machine, not in git) to match everything above | deck v2 complete; every README and deck number links to a current report; `explanation.html` current; rehearsal 1 |
+| **3 · Ask accuracy and robustness** ✅ | Mon 12 (done 12 Oct, #153, #154, #158, #161) | WS3: stress suite ≥ 80%, hybrid retrieval (French, paraphrase), rate-limit retry and cache, 30-question unseen drill | dev 21/21, stress ≥ 80%, drill ≥ 85% (runs write to `data/exports/reports/`, never to `submission/`) |
+| **4 · Story and judge path** ✅ | Tue 13 (done 12 Oct, #155–#157, #159, #162, #163) | WS1: problem background and Jane's story · WS2: business case refresh against the primary and guard metrics · WS6: `JUDGES.md`, README trim, README "what changed and why" and results table brought up to date, hash-chained audit · deck v2 · WS4: fairness follow-ups, identity recall + injected-duplicate test · **last:** update `docs/explanation.html` (the whole system in plain English; kept on Akshat's machine, not in git) to match everything above | deck v2 complete; every README and deck number links to a current report; `explanation.html` current; rehearsal 1 |
 | **5 · Rehearse and freeze** | Wed 14 – Thu 15 | WS7 and everything: two cold-machine dress rehearsals, §6 Q&A drill with unseen questions, final benchmark run (to `data/exports/reports/`), secret scan of history, deck PDF and video link in the repo as real text, freeze Thu 18:00, §7a runbook | rehearsal 2 clean; Q&A drill done; no secrets in history; deck and video present; features refreshed |
 
 > **Phases 0–2 done (12 Oct).** One to-do left for Akshat: **check the pay page in a browser** (release a payment-link
@@ -259,6 +259,13 @@ The workstreams above, sequenced. Each phase ends with its PRs merged (CI green)
 > case). Decided 10 Oct: `promise_intent` stays in the live model (the retrain without it was worse beyond noise); the
 > gate's noise band (0.0003) ignores training variance (two runs of one recipe gave 0.0053 and 0.0073), so a
 > bootstrap-based margin is worth adding later.
+
+**Phases 3 and 4 (12 Oct).** Ask: released dev 21/21, stress 35/42, unseen drill 26/30, every miss explained
+(`docs/reports/ask_accuracy.md`); hybrid policy search; rate-limit retries and a reply cache. Story and judge path:
+`docs/story.md` (background, Jane, root causes), `JUDGES.md`, README results; business case on the measured payday effect
+($1.55M base, ROI 2.4×); identity recall by injection (99%); hash-chained audit (`kept audit-verify`); fairness
+minimum-events rule (3 flags left) and the separated-customers review; deck v2 (13 slides, a private claude.ai artifact:
+share it from its Share menu, export PPTX or PDF); `explanation.html` updated (local only).
 
 **Results so far.** Phase 1: `docs/reports/evidence.md`. Phase 2: payroll features in training (gate kept the champion:
 no uplift gain), promise model leak-free and calibrated, every extraction field passes the gate
