@@ -8,10 +8,12 @@ Every LLM call in the system goes through here so that:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -43,11 +45,15 @@ class LiteLLMGateway:
         model: str,
         audit_log: AuditLog,
         timeout_s: float = 30.0,
-        max_retries: int = 4,
+        max_retries: int = 5,
         backoff_s: float = 2.0,
+        cache_size: int = 512,
     ) -> None:
         self.model, self.audit_log, self.timeout_s = model, audit_log, timeout_s
-        self.max_retries, self.backoff_s = max_retries, backoff_s
+        self.max_retries, self.backoff_s = max_retries, backoff_s  # 2+4+...+32 s: past a per-minute quota
+        # temperature-0 replies by prompt: a repeated question costs no quota (each hit is still audited)
+        self._cache: OrderedDict[str, tuple[str, Any, str]] = OrderedDict()
+        self._cache_size = cache_size
 
     def complete(
         self,
@@ -68,7 +74,21 @@ class LiteLLMGateway:
         if not isinstance(user, RedactedText):
             raise TypeError("LLM input must be a RedactedText")
         import litellm  # lazy: core installs (contracts, Purpose) don't carry it
-        from litellm.exceptions import RateLimitError
+        from litellm.exceptions import (
+            APIConnectionError,
+            InternalServerError,
+            RateLimitError,
+            ServiceUnavailableError,
+            Timeout,
+        )
+
+        transient = (
+            RateLimitError,
+            ServiceUnavailableError,
+            InternalServerError,
+            APIConnectionError,
+            Timeout,
+        )
 
         if json_schema is not None:
             system += "\n\nReply with only a JSON object matching this JSON schema:\n" + json.dumps(
@@ -90,18 +110,34 @@ class LiteLLMGateway:
             "model": self.model,
             "redactor_version": user.redactor_version,
         }
+        key = (
+            hashlib.sha256(
+                json.dumps([self.model, kwargs["messages"], json_schema], sort_keys=True).encode()
+            ).hexdigest()
+            if temperature == 0
+            else None
+        )
         try:
+            if key is not None and key in self._cache:
+                self._cache.move_to_end(key)
+                text, parsed, model = self._cache[key]
+                payload |= {"ok": True, "cached": True}
+                return LLMResponse(text=text, parsed=parsed, model=model, call_id=call_id)
             while True:
                 attempts += 1
                 try:
                     reply = litellm.completion(**kwargs)
                     break
-                except RateLimitError:
+                except transient:
                     if attempts > self.max_retries:
                         raise
                     time.sleep(self.backoff_s * 2 ** (attempts - 1))
             text = reply.choices[0].message.content or ""
             parsed = _validated(text, json_schema) if json_schema is not None else None
+            if key is not None:  # only a reply that validated is worth repeating
+                self._cache[key] = (text, parsed, getattr(reply, "model", self.model))
+                while len(self._cache) > self._cache_size:
+                    self._cache.popitem(last=False)
             usage = getattr(reply, "usage", None)
             payload |= {
                 "ok": True,
