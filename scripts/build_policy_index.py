@@ -10,7 +10,7 @@ import shutil
 from datetime import date
 from pathlib import Path
 
-from kept.ask.policy import PolicyIndex, build_policy_index
+from kept.ask.policy import PolicyIndex, build_policy_index, local_embedder
 
 DOCS = Path("data/policy")
 INDEX = Path(os.environ.get("KEPT_LANCEDB_DIR", "data/policy/lancedb"))
@@ -31,7 +31,9 @@ def main() -> None:
     ops = Path("data/raw/ops_events.csv")
     events = list(csv.DictReader(ops.open(encoding="utf-8", newline=""))) if ops.exists() else []
     shutil.rmtree(INDEX, ignore_errors=True)  # rebuild from scratch: the documents are the source of truth
-    index = PolicyIndex(INDEX)
+    embed = local_embedder()  # None: BM25 only, the model is not on this machine
+    print("hybrid: BM25 + embeddings" if embed else "BM25 only (no local embedding model)")
+    index = PolicyIndex(INDEX, embed)
     print(f"{build_policy_index(index, docs, DOCS, events)} chunks from {len(docs)} documents -> {INDEX}")
     for q in QUESTIONS:
         print(f"\n{q}")

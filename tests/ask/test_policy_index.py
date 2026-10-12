@@ -129,3 +129,29 @@ def test_an_ops_event_answers_why_a_number_changed(tmp_path: Path) -> None:
         idx.search("why did outbound call volume drop", as_of=date(2026, 9, 1), k=2)[0].document_id
         == "POL-COLL-001"
     )  # before the event
+
+
+def test_hybrid_search_finds_a_french_section_bm25_misses(tmp_path: Path) -> None:
+    """A question in English, the answer only in French: keywords share nothing, the embeddings do."""
+    pytest.importorskip("lancedb")
+    concepts = ("call", "appel", "payment", "paiement")
+
+    def embed(texts: list[str]) -> list[list[float]]:  # a toy embedding: the same concept, the same direction
+        out = []
+        for t in texts:
+            v = [float(any(w in t.lower() for w in concepts[i : i + 2])) for i in (0, 2)]
+            out.append([x + 0.01 for x in v])
+        return out
+
+    chunks = [
+        PolicyChunk(
+            "QC", "§3 Appels", "Au plus trois appels par période de sept jours.", date(2026, 1, 1), None
+        ),
+        PolicyChunk("POL", "§9 Paiement", "Payment by cheque is accepted.", date(2026, 1, 1), None),
+    ]
+    plain, hybrid = PolicyIndex(tmp_path / "bm25"), PolicyIndex(tmp_path / "hybrid", embed)
+    plain.add(chunks)
+    hybrid.add(chunks)
+    question = "How many call attempts in a week?"
+    assert [c.document_id for c in plain.search(question, as_of=date(2026, 9, 1), k=1)] != ["QC"]
+    assert [c.document_id for c in hybrid.search(question, as_of=date(2026, 9, 1), k=1)] == ["QC"]
