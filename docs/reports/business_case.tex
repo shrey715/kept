@@ -4,19 +4,20 @@
 \subtitle{What Kept is worth to Maple Bank, measured on the bank's own data}
 \reportnumber{Business value · cost · ROI}
 \runninghead{Business case}
-\date{4 October 2026}
+\date{12 October 2026}
 
 \begin{document}
 \makereporttitle
 
-\statrow{\stat{\$2.2M}{a year, base case (\$1.0M–4.2M)}\stat{3.8×}{year-one ROI, base case}\stat{\textasciitilde 2 mo}{to pay back the build}\stat{62\% vs 52\%}{promised money paid: payday-dated vs not}}
+\statrow{\stat{\$1.55M}{a year, base case (\$0.44M–4.3M)}\stat{2.4×}{year-one ROI, base case}\stat{\textasciitilde 2.6 mo}{to pay back the build}\stat{+2.7 pts}{promised money paid, measured on randomised cases}}
 
 \takeaway{\textbf{The short version.} Collections loses money in one place: cases that \emph{roll} into a worse bucket.
-The cheapest way to stop a roll is a promise the customer can actually keep, and the bank's own history says
-promises due right after payday get \textbf{11 points more} of the promised money paid. Kept dates every promise to
-payday, contacts the people a contact actually helps, swaps letters for near-free digital nudges, and gives agents
-and QA reviewers time back. Counted conservatively, that's \textbf{\$2.2M a year} against \$150K to run and \$300K to
-build, so it pays back in about two months. Every number below comes from the release, except six assumptions
+The cheapest way to stop a roll is a promise the customer can actually keep. Measured on the bank's own randomised
+cases, within days-past-due bands, dating every promise to just after payday would raise promised money paid by
+\textbf{2.7 points} (95\% CI 0.1 to 6.1; \path{docs/reports/evidence.md} §2). Kept dates promises to payday where it
+knows or can ask for it, contacts the people a contact actually helps, swaps letters for near-free digital nudges, and
+gives agents and QA reviewers time back. Counted conservatively, that's \textbf{\$1.55M a year} against
+\$150K to run and \$300K to build, so it pays back in under three months. Every number below comes from the release, except seven assumptions
 that are named, explained and stress-tested in §7.}
 
 \section{Where the money leaks}
@@ -50,11 +51,11 @@ moves more than the count panel, because a late-dated promise that does get paid
 \caption{Where we can see the customer's salary (32,000 resolved promises).}
 \end{table}
 
-\paragraph{From the chart to dollars} Today half of the promised money sits in the worst bucket. Moving the 3+ day
-promises to 0–2 days, at the 0–2 day paid rate, lifts the paid share by \textbf{5.9 points} on the \textbf{\$41.7M}
-promised in the last 12 months. That's \$2.46M. We count \textbf{half} of it, \textbf{\$1.23M}, because the gap is
-descriptive: part of it is \emph{who} gets offered which date, not the date itself. The 5\% hold-out measures the real
-effect after launch.
+\paragraph{From the chart to dollars} The chart is descriptive: part of the gap is \emph{who} gets offered which
+date. So the money uses the effect \textbf{measured on the bank's randomised cases}, within days-past-due bands: dating
+every promise to just after payday raises the promised money paid by \textbf{2.7 points} (95\% CI 0.1 to 6.1). On the
+\textbf{\$41.7M} promised in the last 12 months, for the 55\% of promises whose payday Kept knows or is told, that's
+\textbf{\$0.62M} a year. The 5\% hold-out measures the real effect after launch.
 
 \insight{How Kept uses this}{Kept sizing is plain arithmetic, not a model: the due date is 1–2 days after the expected
 payroll date (detected from salary deposits), and the amount is split into up to three instalments that each fit inside
@@ -121,26 +122,27 @@ payday effect twice. The high case adds one point.
 \fig[0.9\linewidth]{bc_scenarios.png}{Annual value by component and scenario.}
 
 \textbf{What the chart says.} In every scenario the payday effect is the largest block, and the contact mix the second.
-The low case still clears \$1M a year with half the payday capture, half the book passes and half the time saved. The
-high case more than doubles the base mostly because of the roll-rate point it adds.
+The low case takes the payday effect at the bottom of its confidence interval with only the bank's own payday data,
+and halves the book passes and the time saved: \$0.44M a year, which doesn't pay back the build within
+year one. The high case adds the roll-rate point and the top of the interval.
 
 \begin{table}[htbp]\small\centering
 \begin{tabular}{@{}lrrr@{}}
 \toprule
 \textbf{Annual value (CAD)} & \textbf{Low} & \textbf{Base} & \textbf{High} \\
 \midrule
-Promises dated to payday & 614,603 & 1,229,207 & 1,843,810 \\
+Promises dated to payday & 10,018 & 619,866 & 1,909,690 \\
 Cheaper contact mix & 253,239 & 506,479 & 1,012,957 \\
 Agent wrap-up time (call summaries) & 157,359 & 377,661 & 660,907 \\
 QA reviewer time & 18,883 & 45,319 & 79,309 \\
 Roll-rate reduction (charge-offs avoided) & 0 & 0 & 603,362 \\
 \midrule
-\textbf{Total benefit a year} & \textbf{1,044,084} & \textbf{2,158,666} & \textbf{4,200,345} \\
+\textbf{Total benefit a year} & \textbf{439,499} & \textbf{1,549,325} & \textbf{4,266,225} \\
 Run cost a year & 150,000 & 150,000 & 150,000 \\
 Build, one-off & 300,000 & 300,000 & 300,000 \\
 \midrule
-\textbf{Year-one ROI} & \textbf{1.3×} & \textbf{3.8×} & \textbf{8.3×} \\
-\textbf{Payback} & 4.0 months & 1.8 months & 0.9 months \\
+\textbf{Year-one ROI} & \textbf{-0.0×} & \textbf{2.4×} & \textbf{8.5×} \\
+\textbf{Payback} & 12.4 months & 2.6 months & 0.9 months \\
 \bottomrule
 \end{tabular}
 \caption{Year-one ROI = (benefit − run − build) ÷ (run + build). Payback = build ÷ (benefit − run), in months.}
@@ -155,8 +157,8 @@ compute and hosted-model use at production volume. The \$300K build is four engi
 
 \fig[0.88\linewidth]{bc_sensitivity.png}{Each assumption swung from its low to its high value, everything else at base.}
 
-\textbf{What the chart says.} The answer hinges on one question: \textbf{how much of the payday gap is causal?} That
-assumption swings the total by about \$1.2M. The next biggest are how often the book is worked (contact savings) and
+\textbf{What the chart says.} The answer hinges on one question: \textbf{how big is the payday effect, and for how many
+promises can Kept know the payday?} Together they swing the total by about \$1.9M. The next biggest are how often the book is worked (contact savings) and
 the roll-rate point. Minutes saved and QA time barely move it. That's why the rollout plan is built around measuring the
 payday effect first.
 
@@ -165,7 +167,8 @@ payday effect first.
 \toprule
 \textbf{Assumption} & \textbf{Low} & \textbf{Base} & \textbf{High} & \textbf{Why this range} \\
 \midrule
-Payday gap we capture & 25\% & 50\% & 75\% & the gap is observational; half is a cautious read \\
+Payday effect (measured) & 0.1 pts & 2.7 pts & 6.1 pts & 95\% interval, randomised cases (evidence §2) \\
+Promises Kept can date & 24\% & 55\% & 75\% & bank's payday data; plus what customers state; plus the pay page asking \\
 Passes over the book a year & 26 & 52 & 104 & weekly work-through under the contact cap \\
 After-call work saved & 30 s & 60 s & 90 s & the summary pre-fills the wrap-up note \\
 Loaded agent cost & \$30/h & \$36/h & \$42/h & \textasciitilde \$50K salary + 30\% on-cost \\
@@ -173,7 +176,7 @@ QA reviewer time saved & 25\% & 50\% & 75\% & reviewers skip pre-scored clean ca
 Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
 \bottomrule
 \end{tabularx}
-\caption{The only assumptions in the model. Everything else is measured.}
+\caption{The assumptions in the model, with the measured payday effect's interval. Everything else is measured.}
 \end{table}
 
 \section{Risks, costs we're honest about, and how we'll know}
@@ -182,7 +185,8 @@ Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
 \item \textbf{Specialist workload.} 38,115 of tonight's cards (40\%) are Red: a hardship specialist reviews before anything
 is sent. That's the protection working, but it's real time. A rule for customers already on an active hardship plan would
 cut it, and it's the next thing we'd ship.
-\item \textbf{Observational evidence.} The payday gap and the model's \$2.06M estimate are both observational. A permanent
+\item \textbf{Not yet a trial.} The payday effect is measured on randomised cases, but the due dates themselves weren't
+randomised, so it is still an estimate (its interval is wide). A permanent
 \textbf{5\% hold-out} stays on the old strategy, so the real effect on promises kept, roll rate and cost is measured
 from day 30, and a \textbf{kill switch} reverts everyone if it isn't there.
 \item \textbf{What isn't in the numbers.} Fewer complaints and less regulator risk from finding hardship when the customer
