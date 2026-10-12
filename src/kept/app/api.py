@@ -20,10 +20,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kept import __version__
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
+from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.config import DATA_DIR, REPO_ROOT
 from kept.contracts.ask import AskRequest, AskResponse, Citation, SourceText
@@ -75,6 +77,7 @@ class Services:
     note_text: Callable[[str], str | None] | None = None  # source_id -> the note's text, for the panel
     scored_queue: Callable[[str, Role], list[QueueItem]] | None = None  # real: nba.cards from kept score
     chart: Callable[[ChartRequest], ChartChoice] | None = None  # real: the LLM picks; None: the rules pick
+    calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
     demo: bool = False
 
 
@@ -364,6 +367,24 @@ def create_app(services: Services) -> FastAPI:
         found = sorted(services.extractions.for_case(case_id), key=lambda x: x.extracted_at, reverse=True)
         text = services.note_text or (lambda _: None)
         return [NoteExtraction(note=text(x.source_id) or "", extraction=x) for x in found[:20]]
+
+    @app.get("/cases/{case_id}/calls", response_model=list[CallOut])
+    def case_calls(case_id: str, user_id: str, role: Role) -> list[CallOut]:
+        """The case's recorded calls: Whisper's transcript and what the extraction read from it. Empty when
+        the recordings aren't on this machine, and the page hides the panel."""
+        guard_case(case_id, user_id, role)
+        return services.calls.for_case(case_id) if services.calls else []
+
+    @app.get("/calls/{voice_sample_id}/audio", response_class=FileResponse)
+    def call_audio(voice_sample_id: str, user_id: str, role: Role) -> FileResponse:
+        case_id = services.calls.case_of(voice_sample_id) if services.calls else None
+        if case_id is None:
+            raise HTTPException(404, "no such recording")
+        guard_case(case_id, user_id, role)  # a recording is as private as the case
+        path = services.calls.audio(voice_sample_id) if services.calls else None
+        if path is None:
+            raise HTTPException(404, "the voice pack isn't on this machine")
+        return FileResponse(path, media_type="audio/wav")
 
     @app.post("/ask", response_model=AskResponse)
     def ask(request: AskRequest) -> AskResponse:

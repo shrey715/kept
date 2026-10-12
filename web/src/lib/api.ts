@@ -30,6 +30,7 @@ export type ChartChoice = S["ChartChoice"];
 export type PayOffer = S["PayOffer"];
 export type PromiseSizing = S["PromiseSizing"];
 export type StatedPay = S["StatedPay"];
+export type CallOut = S["CallOut"];
 export type ChartOption = S["ChartOption"];
 /** Demo-only route shape (kept.app.demo): a note and what was read from it. */
 export type NoteExtraction = { note: string; extraction: TextExtraction };
@@ -79,6 +80,9 @@ export const api = {
   note: (caseId: string, text: string, w: Who) =>
     call<NBACard>(`/cases/${encodeURIComponent(caseId)}/notes`, post({ text, user_id: w.userId, role: w.role })),
   /** A case's notes and their extractions, newest first: the demo world, or C's store. */
+  calls: (caseId: string, w: Who) => call<CallOut[]>(`/cases/${encodeURIComponent(caseId)}/calls?${q(w)}`),
+  /** For an <audio> src: the browser fetches it, so the role travels in the query like every case route. */
+  callAudioUrl: (voiceSampleId: string, w: Who) => `/api/calls/${encodeURIComponent(voiceSampleId)}/audio?${q(w)}`,
   extractions: (caseId: string, w: Who, demo: boolean) =>
     call<NoteExtraction[]>(`${demo ? "/demo" : ""}/cases/${encodeURIComponent(caseId)}/extractions?${q(w)}`),
   /** Confirm or edit at wrap-up. Demo route in demo mode, C's /extractions route otherwise. */
