@@ -6,6 +6,7 @@ Dev: a DuckDB table with no UPDATE/DELETE path. Prod: append-only storage.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import threading
 import time
@@ -30,7 +31,15 @@ create table if not exists audit_events (
     subject_id varchar,
     body      varchar not null   -- the full event as JSON, so reads are lossless
 );
+-- tamper evidence: hash = sha256(previous event's hash + body), so editing or deleting any past event breaks
+-- every hash after it (kept audit-verify). Logs written before the chain existed keep those rows unhashed.
+alter table audit_events add column if not exists hash varchar;
 """
+_GENESIS = "0" * 64
+
+
+def chain_hash(previous: str, body: str) -> str:
+    return hashlib.sha256((previous + body).encode()).hexdigest()
 
 
 def _micros(at: datetime) -> int:
@@ -73,9 +82,16 @@ class DuckDBAuditLog:
             with self._conn() as c:
                 c.execute("begin")
                 try:
+                    last = c.execute(
+                        "select hash from audit_events where hash is not null order by seq desc limit 1"
+                    ).fetchone()
+                    previous = last[0] if last else _GENESIS
+                    for r in rows:  # inside the transaction: one writer, so the chain can't fork
+                        previous = chain_hash(previous, str(r[4]))
+                        r.append(previous)
                     c.executemany(
-                        "insert into audit_events (event_id, at_us, kind, subject_id, body)"
-                        " values (?, ?, ?, ?, ?)",
+                        "insert into audit_events (event_id, at_us, kind, subject_id, body, hash)"
+                        " values (?, ?, ?, ?, ?, ?)",
                         rows,
                     )
                 except Exception:
@@ -109,6 +125,25 @@ class DuckDBAuditLog:
                 f"select body from audit_events where {' and '.join(where)} order by seq", params
             )
             return [AuditEvent.model_validate_json(b) for (b,) in rows.fetchall()]
+
+
+def verify_chain(log: DuckDBAuditLog) -> tuple[int, int, str | None]:
+    """Re-walk the chain in append order: (events checked, unhashed events from before the chain, the first
+    event whose hash doesn't match, or None if every link holds)."""
+    with log._conn() as c:
+        rows = c.execute("select event_id, body, hash from audit_events order by seq").fetchall()
+    previous, checked, legacy = _GENESIS, 0, 0
+    for event_id, body, stored in rows:
+        if stored is None:
+            if checked:  # an unhashed row after the chain began was inserted around the log
+                return checked, legacy, event_id
+            legacy += 1
+            continue
+        previous = chain_hash(previous, body)
+        if previous != stored:
+            return checked, legacy, event_id
+        checked += 1
+    return checked, legacy, None
 
 
 _id_lock = threading.Lock()

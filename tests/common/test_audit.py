@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kept.common.audit import DuckDBAuditLog, new_event_id
+from kept.common.audit import DuckDBAuditLog, new_event_id, verify_chain
 from kept.contracts import AuditEvent, AuditKind, Role
 
 T0 = datetime(2026, 10, 2, 22, 0, tzinfo=UTC)
@@ -87,3 +87,24 @@ def test_append_many_is_all_or_nothing(tmp_path) -> None:  # type: ignore[no-unt
     with pytest.raises(ValueError, match="duplicate"):
         log.append_many([ev(10), first[0]])  # one duplicate: nothing from this batch lands
     assert [e.event_id for e in log.read()] == [e.event_id for e in first]
+
+
+def test_the_hash_chain_catches_an_edited_or_deleted_event(tmp_path: Path) -> None:
+    log = DuckDBAuditLog(tmp_path / "audit.duckdb")
+    log.append_many([ev(i) for i in range(5)])
+    log.append(ev(5))  # a later batch continues the same chain
+    assert verify_chain(log) == (6, 0, None)
+    with log._conn() as c:  # someone edits a past release decision behind the API's back
+        c.execute(
+            "update audit_events set body = replace(body, '\"n\":2', '\"n\":99') where event_id = 'E-0002'"
+        )
+    assert verify_chain(log) == (2, 0, "E-0002")
+
+
+def test_rows_from_before_the_chain_are_counted_not_failed(tmp_path: Path) -> None:
+    log = DuckDBAuditLog(tmp_path / "audit.duckdb")
+    log.append(ev(0))
+    with log._conn() as c:  # a log written before this change: no hash
+        c.execute("update audit_events set hash = null")
+    log.append(ev(1))
+    assert verify_chain(log) == (1, 1, None)

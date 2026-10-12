@@ -29,6 +29,7 @@ COMMANDS = {
     "drift": "Track D: feature drift (PSI) against training (PDF: scripts/drift_report.py)",
     "demo-reset": "Demo: delete notes typed during demos, so cards go back to their scored state",
     "preflight": "Demo: go/no-go check (API, warehouse lock, fresh features, Gemini, Ollama, web)",
+    "audit-verify": "Governance: re-walk the audit log's hash chain and name the first altered event",
 }
 
 
@@ -690,6 +691,20 @@ def preflight(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def audit_verify(args: argparse.Namespace) -> int:
+    """Each audit event carries sha256(previous hash + event): an edited or deleted event breaks it."""
+    from kept.common.audit import DuckDBAuditLog, verify_chain
+
+    path = os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb"))
+    checked, legacy, broken = verify_chain(DuckDBAuditLog(path))
+    before = f" ({legacy:,} older events from before the chain began)" if legacy else ""
+    if broken:
+        print(f"kept audit-verify: BROKEN at {broken}, after {checked:,} intact events{before}")
+        return 1
+    print(f"kept audit-verify: intact, {checked:,} events chained{before}")
+    return 0
+
+
 HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "serve": serve,
     "land": land,
@@ -708,6 +723,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "drift": drift,
     "demo-reset": demo_reset,
     "preflight": preflight,
+    "audit-verify": audit_verify,
 }
 
 
