@@ -40,11 +40,12 @@ BOOK_PASSES_PER_YEAR = (
     26,
     104,
 )  # how often the whole open book is actually worked through (contact cap, capacity)
-PAYDAY_CAPTURE = (
-    0.5,
-    0.25,
-    0.75,
-)  # share of the observed payday gap we actually capture when we pick the date
+# measured, not assumed: promised money paid if every promise fell due 0-2 days after payday, minus what promises
+# achieved, on the bank's randomised cases within days-past-due bands (docs/reports/evidence.md §2: +2.7 [+0.1, +6.1])
+POLICY_VALUE_PTS = (2.7, 0.1, 6.1)
+# share of promises Kept can date to payday: bank's deposit data only 24%; plus the payday customers state to agents
+# 55%; plus the pay page asking the rest (assumed 75%)
+PAYDAY_COVERAGE = (0.55, 0.24, 0.75)
 ROLL_POINTS = (
     0.0,
     0.0,
@@ -172,7 +173,7 @@ def model(d: dict, i: int) -> dict[str, float]:  # type: ignore[type-arg]
     rolled_per_pt = d["inflow"][0] * 0.01 * d["co_rolled"][0] * d["co_rolled"][1]
     qa_hours = d["calls"] * QA_MANUAL_SHARE * QA_MINUTES / 60
     return {
-        "Promises dated to payday": promised_year * gap * PAYDAY_CAPTURE[i],
+        "Promises dated to payday": promised_year * POLICY_VALUE_PTS[i] / 100 * PAYDAY_COVERAGE[i],
         "Cheaper contact mix": per_pass * BOOK_PASSES_PER_YEAR[i],
         "Agent wrap-up time (call summaries)": d["calls"]
         * WRAPUP_SECONDS_SAVED[i]
@@ -289,7 +290,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     base_total = total["Base"]
     swings = []
     for label, key in (
-        ("payday capture 25–75%", "Promises dated to payday"),
+        ("payday value 0.1–6.1 pts × coverage 24–75%", "Promises dated to payday"),
         ("book passes 26–104 a year", "Cheaper contact mix"),
         ("wrap-up saved 30–90 s", "Agent wrap-up time (call summaries)"),
         ("QA time saved 25–75%", "QA reviewer time"),
