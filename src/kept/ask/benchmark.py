@@ -219,6 +219,8 @@ def is_correct(case: BenchmarkCase, gold: dict[str, str], response: AskResponse)
         # a policy source is cited by its document id ("POL-COLL-001 §5.2"); a call by its transcript
         # ("transcript 5010384", the section of the text.redacted_notes citation)
         cited = {c.document_id for c in response.citations} | {c.section for c in response.citations}
+        # a versioned id (POL-X-V4.1) is a version of the document (POL-X)
+        cited |= {re.sub(r"-V\d+(\.\d+)*$", "", d, flags=re.I) for d in cited}
         figures = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", gold["gold_answer"])}
         have = {str(float(n)) for n in re.findall(r"\d+(?:\.\d+)?", response.narrative)}
         return (

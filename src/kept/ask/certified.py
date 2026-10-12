@@ -36,10 +36,10 @@ _CASE_SELECT = ", ".join(sorted(_CASE_COLS | {"hardship_flag", "current_dpd", "o
 _CONTACT_COLS = frozenset({"contact_hour_local", "agent_site", "test_cell", "strategy_code", "day_of_week"})
 # "on outbound calls" must narrow the metric, not be dropped: direction and channel are filters, not groups
 _CONTACT_FILTERS = _CONTACT_COLS | {"direction", "channel"}
-_ACCOUNTS = """(SELECT 'card' AS product_family, product_code, dpd, dpd_bucket, snapshot_date
+_ACCOUNTS = """(SELECT 'card' AS product_family, 'card' AS product_type, product_code, dpd, dpd_bucket, snapshot_date
       FROM silver.card_accounts WHERE account_status IN ('active', 'blocked') AND dpd IS NOT NULL
       UNION ALL
-      SELECT 'loan', product_code, dpd, dpd_bucket, snapshot_date
+      SELECT 'loan', product_type, product_code, dpd, dpd_bucket, snapshot_date
       FROM silver.loan_accounts WHERE NOT chargeoff_flag AND dpd IS NOT NULL) t"""
 _NO_SYSTEM = ("channel <> 'system'",)
 _BUCKETS = "['current','1-30','31-60','61-90','91-120','121-150','151-180','180+']"
@@ -186,8 +186,10 @@ WHERE 1=1 {where} {group_by}""",
             f"SELECT {{group_by_select}} avg(CASE WHEN dpd >= 1 THEN 1.0 ELSE 0.0 END) AS delinquency_rate, "
             f"count(*) AS n FROM {_ACCOUNTS} WHERE 1=1 {{where}} {{group_by}}",
             (),
-            frozenset({"product_family", "product_code"}),  # not dpd_bucket: the metric is dpd >= 1, so a
-            frozenset({"product_family", "product_code"}),  # rate per bucket is always 0% or 100%
+            frozenset({"product_family", "product_type", "product_code"}),  # not dpd_bucket: the metric is
+            frozenset(
+                {"product_family", "product_type", "product_code"}
+            ),  # dpd >= 1, so a bucket is 0% or 100%
             "snapshot_date",
         ),
         _cases("average_dpd", "avg(current_dpd) AS average_dpd", ("outcome IS NULL",), None),

@@ -38,7 +38,10 @@ it is not a date range. Leave out what the question does not say. For a metric u
 group_by columns listed for it, and never repeat its default filters (they are already applied). To
 compare groups ("is it higher for A than for B", "do X achieve more than the rest") group by that column; do
 not filter down to one group. A question
-about randomised cases needs the filter assignment_method = "random" where the metric allows it.
+about randomised cases needs the filter assignment_method = "random" where the metric allows it. The
+strategies (champion, challenger_A, challenger_B, no_contact_holdout) are values of test_cell: comparing them
+groups by test_cell, never by assignment_method. "By product type" is product_type; "by product" on cards and
+loans together is product_family.
 {metrics}
 confidence is 0 to 1: how sure you are of the whole intent.{as_of}"""
 
