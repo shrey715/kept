@@ -108,6 +108,7 @@ def relevant(question: str, metric_id: str, name: str, synonyms: Any) -> bool:
     return bool(_words(question) & _words(about))
 
 
+_NOW = re.compile(r"\b(today|now|currently|as of today|at the (last|latest) snapshot)\b", re.I)
 _OPEN = re.compile(r"\b(open|still open|currently open|active|outstanding)\b", re.I)
 
 
@@ -310,7 +311,20 @@ def build_graph(ask: CollectionsAsk) -> Any:
             and len(spans) == 2
             and len(points) == 2
         )
-        if filled:  # the question names one period and the router left the range empty: fill it
+        q_date = getattr(ask._queries.get(intent.metric_id or ""), "date_column", None) or ""
+        today = (  # a snapshot table holds every snapshot: "today" or "the last snapshot" is the as-of date
+            as_of is not None
+            and intent.kind is IntentKind.METRIC
+            and intent.date_from is None
+            and intent.date_to is None
+            and not spans
+            and "snapshot" in q_date
+            and _NOW.search(q.text)
+        )
+        if today:
+            intent = intent.model_copy(update={"date_from": as_of, "date_to": as_of})
+            spans, filled = [("today", as_of, as_of)], True
+        elif filled:  # the question names one period and the router left the range empty: fill it
             intent = intent.model_copy(update={"date_from": spans[0][1], "date_to": spans[0][2]})
         elif cohort:
             first = min(points, key=lambda sp: sp[1])
