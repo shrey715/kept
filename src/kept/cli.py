@@ -28,7 +28,7 @@ COMMANDS = {
     "map": "Track A: schema drift of data/raw against the data dictionary; --draft: LLM mapping drafts",
     "drift": "Track D: feature drift (PSI) against training (PDF: scripts/drift_report.py)",
     "demo-reset": "Demo: delete notes typed during demos, so cards go back to their scored state",
-    "preflight": "Demo: go/no-go check (API, warehouse lock, fresh features, Gemini, Ollama, web)",
+    "preflight": "Demo: go/no-go check (API, warehouse lock, fresh features, the local models, web)",
     "audit-verify": "Governance: re-walk the audit log's hash chain and name the first altered event",
 }
 

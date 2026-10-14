@@ -1,7 +1,7 @@
 """LiteLLM gateway (owner: Track B; used by A, B, C).
 
 Every LLM call in the system goes through here so that:
-  * the model is set by config (KEPT_ASK_LLM_MODEL hosted for the Ask, KEPT_TEXT_LLM_MODEL local for text),
+  * the model is set by config (KEPT_ASK_LLM_MODEL for the Ask, KEPT_TEXT_LLM_MODEL for text; both local),
   * the user content is a RedactedText (PII redaction before any LLM),
   * every call is written to the audit log (purpose, actor, model, latency, tokens).
 """

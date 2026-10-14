@@ -36,7 +36,7 @@ the rest of the Q&A appendix (DK-17), the video link (DK-18), and a dress-rehear
 - [~] **DK-04 · Text and voice slide: the pipeline and the privacy boundary**
   - Redaction first (Presidio), then the local model (Gemma 3 12B, schema-constrained JSON), every value with the exact
     quote it rests on. Voice: Whisper on this machine, word error rate 9.4% against the bank's 12.4%.
-  - Draw the privacy boundary: customer words never leave the machine; the hosted model only sees the analyst's question.
+  - Draw the privacy boundary: every model runs on this machine; nothing leaves it.
   - Numbers: every extraction field passes F1 ≥ 0.80; hardship recall 1.00; 1,172 of 1,172 recorded calls read.
   - Source: `docs/reports/extraction_gate.md`, `docs/reports/voice_wer.md`.
 - [~] **DK-05 · Decide slide: from features to a released action, step by step**
@@ -69,7 +69,7 @@ the rest of the Q&A appendix (DK-17), the video link (DK-18), and a dress-rehear
   - Uplift, not propensity: contact whoever a contact changes, not whoever would pay anyway.
   - Timing over channel: the bank's own A/B shows strategies keep promises at the same rate (66.4% vs 66.4–66.7%,
     every 95% interval overlaps), while due-after-payday adds 6.1 points.
-  - Local model for customer text, a free hosted model only for analyst questions: privacy and cost.
+  - Local models only (since 14 Oct): no hosted API and no keys, so nothing leaves the machine and no quota can stop a demo.
   - Certified metrics before free SQL: reviewed definitions answer most questions with no model-written SQL.
   - Two-person release for Red: hardship decisions are never one person's or a model's.
   - Schema-constrained decoding: 152 of 1,172 call replies were malformed before; 0 after.

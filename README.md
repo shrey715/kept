@@ -89,8 +89,7 @@ cp .env.example .env       # then fill it in (below)
 | Variable | Set it to |
 |---|---|
 | `KEPT_HOLDOUT_SALT` | **the team's one shared value.** It decides which cases are in the 5% hold-out; every machine must match, and it never changes after go-live |
-| `GEMINI_API_KEY` | your own free key (the Ask: `KEPT_ASK_LLM_MODEL=gemini/gemini-3.5-flash-lite`) |
-| `KEPT_TEXT_LLM_MODEL`, `OLLAMA_API_BASE` | leave as in `.env.example` (local gemma3 through Ollama) |
+| `KEPT_TEXT_LLM_MODEL`, `KEPT_ASK_LLM_MODEL`, `OLLAMA_API_BASE` | leave as in `.env.example`: local Gemma 3 12B through Ollama for everything. No API keys |
 | `MLFLOW_TRACKING_URI` | `sqlite:///mlflow.db` (MLflow 3 refuses the old `file:./mlruns`) |
 | `KEPT_KILL_SWITCH` | `false`; `true` falls every card back to the current strategy |
 
@@ -185,8 +184,8 @@ Open <http://localhost:3000> (use `localhost`, not `127.0.0.1`), then **Guided d
 `/signin?as=agent-7&next=/queue` (agent, works agent AG-8365's queue on real data),
 `/signin?as=hs-1&next=/approvals` (hardship specialist), `/signin?as=tl-1&next=/approvals` (team lead),
 `/signin?as=c-1&next=/audit` (compliance), `/signin?as=an-1&next=/ask` (analyst),
-`/signin?as=ds-1&next=/steward` (data steward). The Ask needs `GEMINI_API_KEY` in `.env`; restart
-`kept serve` after setting it.
+`/signin?as=ds-1&next=/steward` (data steward). The Ask runs on the local model:
+Ollama must be up with `gemma3:12b-it-qat` pulled.
 
 **Serve it** (the API owns the warehouse while it runs: no batch jobs against it at the same time):
 
@@ -198,13 +197,13 @@ make web                   # or the production build above
 - `/queue` reads the nightly's cards (an agent sees their own cases); opening a case re-checks it live.
 - **Add a note** on a case runs live extraction (Presidio + gemma3, a few seconds) and re-checks the card:
   a hardship note turns it Red. A possible cease request shows a red banner the assigned agent confirms.
-- The Ask answers with the free Gemini tier; policy questions cite the section.
+- The Ask answers with the local model; policy questions cite the section.
 - Without Presidio installed (`make setup-c`) adding a note answers 503; everything else works.
 
 ### Before a live demo
 
 ```bash
-uv run kept preflight      # go/no-go: API, warehouse lock, fresh features, Gemini, Ollama (warmed), web
+uv run kept preflight      # go/no-go: API, warehouse lock, fresh features, the local models (warmed), web
 uv run kept demo-reset     # with kept serve stopped: removes notes typed in earlier demos, so cards reset
 ```
 
@@ -293,10 +292,10 @@ cd web && pnpm lint && npx tsc --noEmit
 - **The demo runs on real data (C, in D's web app):** the guided demo uses a real case and agent when the server
   is not in demo mode, and the agent persona works a real agent's queue (179 open cases).
 
-- **Ask on a free hosted model (B):** `gemini/gemini-3.5-flash-lite` through LiteLLM, one free key per
-  person, because a paid key is not an option. Every question is redacted (Presidio) before any LLM call,
-  and each call is logged without the prompt text. The free tier allows 500 requests a day per project, so
-  a full benchmark run (about 110 calls) is rationed.
+- **The Ask on a local model (B):** Gemma 3 12B on this machine through LiteLLM, like text extraction. It began on
+  a free hosted tier; since 14 October everything is local: no API keys, no quota, and no question leaves the
+  machine. Every question is still redacted (Presidio) before any LLM call, and each call is logged without the
+  prompt text.
 - **Certified SQL for 14 of 15 metrics (B):** the metric definitions' formulas are pseudo-SQL, so each
   certified metric is hand-translated to reviewed SQL and the LLM never writes it. `write_off_rate` is
   not certified: its period bounds only the numerator, and one date column cannot express that. That SQL
@@ -330,7 +329,7 @@ cd web && pnpm lint && npx tsc --noEmit
 - **gemma3 12B (local, Ollama):** extracts the text features from redacted notes, and labelled 1,604 notes to
   train SetFit. Tuned and gated on the release's public labels (30% held out).
 - **SetFit (`BAAI/bge-small-en-v1.5`):** the fast classifier that backfills hardship for all history.
-- **Gemini 3.5 Flash-Lite (hosted, free tier):** the Ask's scope check, question routing, SQL drafting for
+- **Gemma 3 12B, local (the Ask too, since 14 Oct):** the Ask's scope check, question routing, SQL drafting for
   lookups, and plain-English narration of results. Its output is checked by code: the SQL guard before anything
   runs, and the grounding check on every number.
 

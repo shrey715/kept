@@ -270,7 +270,7 @@
     Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify} & WORM storage, same chain \\
     Models & LightGBM uplift + promise, MLflow, champion/challenger gate & model risk management sign-off \\
     Local language models & Gemma 3 12B (Ollama or llama.cpp), Whisper, bge-m3 on one GPU & an on-prem inference cluster \\
-    Hosted model & Gemini free tier, analyst questions only & the bank's approved model \\
+    The Ask's model & the same local Gemma 3 12B: no hosted API, no keys & the bank's approved model \\
     API and app & FastAPI; Next.js workspace; personas & SSO, the bank's design system \\
     \bottomrule
   \end{tabular}\\[0.7em]
@@ -287,7 +287,7 @@
     \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
     Uplift per action & a propensity-to-pay score & propensity contacts people who'd pay anyway; uplift finds who a contact changes \\
     Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds +6.1 pts \\
-    Local model for customer text & a hosted model for everything & customer words never leave the bank; no per-call cost; no quota mid-demo \\
+    Local models for everything & a hosted model & customer words never leave the bank; no per-call cost; no quota or outage mid-demo \\
     Certified metrics first & free-form SQL from a model & reviewed definitions answer most questions with no model-written SQL \\
     A graph with checks (LangGraph) & one prompt & each step is testable, traced, and fixable without retuning a prompt \\
     Two people for Red & one approver or the model & hardship decisions are never one person's or a model's \\
@@ -418,7 +418,7 @@
       \begin{itemize}\setlength\itemsep{0.45em}
         \item Data · Ask · Text and GPU · Decisions, integrated at gates G0--G4.
         \item 170+ pull requests, each through CI; 1,322 tests.
-        \item Free and local models only; nothing leaves the bank but an analyst's question.
+        \item Local models only: no hosted API and no keys; nothing leaves the machine.
         \item \texttt{JUDGES.md}: every claim, its report, and the command that reproduces it.
       \end{itemize}
     \end{column}
