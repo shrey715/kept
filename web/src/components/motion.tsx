@@ -66,3 +66,26 @@ export function Meter({ value, max = 1, muted, tick, delay = 0 }: { value: numbe
     </div>
   );
 }
+
+/** A small ring for a probability (0-1): the arc in the tint's ink over a hatch-coloured track. */
+export function Donut({ value, size = 26, label }: { value: number; size?: number; label?: string }) {
+  const r = (size - 5) / 2;
+  const c = 2 * Math.PI * r;
+  const v = Math.max(0, Math.min(1, value));
+  return (
+    <svg className="k-donut" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label ?? `${Math.round(v * 100)}%`}>
+      <circle className="track" cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={4.5} />
+      <circle
+        className="arc"
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        strokeWidth={4.5}
+        strokeLinecap="round"
+        strokeDasharray={`${v * c} ${c}`}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    </svg>
+  );
+}

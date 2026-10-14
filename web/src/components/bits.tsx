@@ -22,6 +22,9 @@ export function TierBadge({ tier, size = "2", long = true }: { tier: Tier; size?
 
 export const tierColor = (tier: Tier) => TIER[tier].color;
 
+/** The pastel tint a tier wears (globals.css .t-*): Red rose, Amber butter, Green mint. */
+export const tierTint = (tier: Tier) => ({ red: "rose", amber: "butter", green: "mint", blocked: "ice" } as const)[tier];
+
 const LEAF =
   "M12 2l1.6 3.6 2.3-1.1-.6 4.6 3.1-2.2.7 2.5 2.9-.6-1.5 3.6 1.5.9-4.8 3.8.6 1.7-4.3-.6V22h-1V18.2l-4.3.6.6-1.7L4 13.3l1.5-.9L4 8.8l2.9.6.7-2.5 3.1 2.2-.6-4.6 2.3 1.1z";
 

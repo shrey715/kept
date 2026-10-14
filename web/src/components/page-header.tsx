@@ -103,3 +103,31 @@ export function SectionTitle({
     </Flex>
   );
 }
+
+/** A table set in a tinted panel: a display title, an optional sum on the right, then the table. */
+export function TablePanel({
+  title,
+  sum,
+  tint,
+  aside,
+  children,
+}: {
+  title: React.ReactNode;
+  sum?: React.ReactNode;
+  tint?: "rose" | "butter" | "mint" | "ice" | "lilac";
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`k-tpanel${tint ? ` t-${tint}` : ""}`}>
+      <div className="k-tpanel-head">
+        <Flex align="center" gap="3">
+          <h2 className="k-tpanel-title">{title}</h2>
+          {aside}
+        </Flex>
+        {sum !== undefined && <span className="k-tpanel-sum">{sum}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
