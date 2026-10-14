@@ -115,6 +115,112 @@ WHERE 1=1 {where} {group_by}""",
             "CAST(contact_ts_local AS DATE)",
         ),
     ),
+    # Events on contacts: calls, disputes and complaints raised, right-party contacts, payments taken. One row per
+    # contact in contact_history, dated by the customer's local time (the data dictionary's rule).
+    "contact_events": (
+        _md(
+            "contact_events",
+            "Contact counts: calls, emails, texts; disputes and complaints raised; right-party contacts; by day",
+            (
+                "calls made",
+                "contacts",
+                "disputes raised",
+                "complaints raised",
+                "right party contacts",
+                "payments taken",
+                "outbound calls",
+                "number of contacts",
+                "per day",
+                "each day",
+            ),
+            "How many outbound calls were made on each day from 20 to 26 September 2026?",
+            "count",
+        ),
+        CertifiedQuery(
+            "contact_events",
+            """SELECT {group_by_select} count(*) AS n
+FROM (SELECT CAST(contact_ts_local AS DATE) AS contact_date, channel, sub_channel, direction, agent_site,
+             contact_hour_local, test_cell, dial_result, rpc_flag, dispute_raised_flag, complaint_raised_flag,
+             hardship_mentioned_flag, cease_request_flag, ptp_made_flag, payment_taken_flag, interpreter_used_flag
+      FROM silver.contact_history) t
+WHERE 1=1 {where} {group_by}""",
+            (),
+            frozenset(
+                {"channel", "sub_channel", "direction", "agent_site", "test_cell", "dial_result", "rpc_flag"}
+                | {
+                    "dispute_raised_flag",
+                    "complaint_raised_flag",
+                    "hardship_mentioned_flag",
+                    "cease_request_flag",
+                }
+                | {"ptp_made_flag", "payment_taken_flag", "interpreter_used_flag", "contact_hour_local"}
+            ),
+            frozenset(
+                {"contact_date", "channel", "sub_channel", "direction", "agent_site", "contact_hour_local"}
+            )
+            | frozenset({"test_cell", "dial_result"}),
+            "contact_date",
+        ),
+    ),
+    # QA: calls a reviewer scored (qa_selected_flag with a score), averaged; the site is the agent's at the time.
+    "qa_score": (
+        _md(
+            "qa_score",
+            "Average QA score of reviewed calls, by agent site or day",
+            ("qa score", "quality score", "reviewed calls", "call quality", "quality assurance"),
+            "What was the average QA score of reviewed calls in September 2026, by agent site?",
+            "score",
+        ),
+        CertifiedQuery(
+            "qa_score",
+            """SELECT {group_by_select} avg(qa_score) AS avg_qa_score, count(*) AS n
+FROM (SELECT CAST(contact_ts_local AS DATE) AS contact_date, agent_site, channel, direction, qa_score
+      FROM silver.contact_history WHERE qa_selected_flag AND qa_score IS NOT NULL) t
+WHERE 1=1 {where} {group_by}""",
+            ("agent_site IS NOT NULL",),
+            frozenset({"agent_site", "channel", "direction"}),
+            frozenset({"agent_site", "contact_date", "channel"}),
+            "contact_date",
+        ),
+    ),
+    # Open cases (outcome not yet set), counted by the case's own columns.
+    "open_cases": (
+        _md(
+            "open_cases",
+            "Open collections cases: how many, by bucket, queue, product or province",
+            ("open cases", "cases open", "how many cases", "caseload", "number of cases"),
+            "How many collections cases are open today, by current bucket?",
+            "count",
+        ),
+        CertifiedQuery(
+            "open_cases",
+            """SELECT {group_by_select} count(*) AS open_cases
+FROM silver.collections_cases WHERE outcome IS NULL {where} {group_by}""",
+            (),
+            _CASE_COLS,
+            _CASE_COLS,
+            "case_open_date",
+        ),
+    ),
+    # Deposit overdrafts past due (overdraft_dpd, added to deposit_accounts), at a snapshot.
+    "overdraft_past_due": (
+        _md(
+            "overdraft_past_due",
+            "Deposit accounts with an overdraft past due, by overdraft bucket",
+            ("overdraft past due", "overdrawn accounts", "overdraft bucket", "overdraft delinquency"),
+            "How many deposit accounts have an overdraft that is past due today, by overdraft bucket?",
+            "count",
+        ),
+        CertifiedQuery(
+            "overdraft_past_due",
+            """SELECT {group_by_select} count(*) AS accounts
+FROM silver.deposit_accounts WHERE overdraft_dpd >= 1 {where} {group_by}""",
+            (),
+            frozenset({"product_type", "overdraft_dpd_bucket"}),
+            frozenset({"product_type", "overdraft_dpd_bucket"}),
+            "snapshot_date",
+        ),
+    ),
 }
 
 # ---------------------------------------------------------------- dates, worked out in code
@@ -186,7 +292,7 @@ def date_hints(question: str, as_of: date | None) -> str:
         for p, s, e in found
     ]
     compare = ""
-    if len(found) >= 2 and _COMPARE.search(question):  # "..., compared with the 8 days before"
+    if len(found) >= 2 and COMPARE.search(question):  # "..., compared with the 8 days before"
         compare = (
             "\nThe question compares these periods: return one row per period, with a first column naming the"
             " period (its dates), then the measure. Count each period over its own dates only."
@@ -198,7 +304,7 @@ def date_hints(question: str, as_of: date | None) -> str:
     )
 
 
-_COMPARE = re.compile(r"\b(compared?|versus|vs\.?|against|than)\b|days before|the previous|the prior", re.I)
+COMPARE = re.compile(r"\b(compared?|versus|vs\.?|against)\b|days before|the previous|the prior", re.I)
 
 
 # ---------------------------------------------------------------- worked examples for free SQL

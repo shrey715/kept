@@ -188,7 +188,6 @@ def test_router_returns_validated_intent() -> None:
 @pytest.mark.parametrize(
     "reply",
     [
-        {"kind": "metric", "metric_id": "made_up_metric", "confidence": 0.9},
         {"kind": "teleport", "confidence": 0.9},
         {"kind": "lookup", "confidence": 7},
         "not json at all",
@@ -199,6 +198,22 @@ def test_router_rejects_bad_replies(reply: object) -> None:
     q = PassThroughRedactor().redact("anything")
     with pytest.raises(ValueError):
         route(q, llm, known_metric_ids=frozenset({"promise_kept_rate"}), actor_id="u1")
+
+
+def test_router_turns_an_unknown_metric_into_a_lookup() -> None:
+    """A "metric" route naming no metric we certify never runs as one; it's still a data question."""
+    for reply in (
+        {"kind": "metric", "metric_id": "made_up_metric", "confidence": 0.9},
+        {"kind": "metric", "confidence": 0.9},
+    ):
+        llm = PurposeLLM({Purpose.ASK_ROUTE: [reply]})
+        i = route(
+            PassThroughRedactor().redact("anything"),
+            llm,
+            known_metric_ids=frozenset({"promise_kept_rate"}),
+            actor_id="u1",
+        )
+        assert i.kind is IntentKind.LOOKUP and i.metric_id is None
 
 
 # ----------------------------------------------------------------- certified metrics

@@ -40,7 +40,7 @@ extraction F1, uplift Qini. A layer can be replaced without touching the others.
 fresh data, Red needs two people, and one switch reverts everyone to the bank's strategy.
 
 ## 7 · The Ask, as a graph
-**Say:** every answer walks the graph and shows its path; the checks keep a 12B local model on the rails.
+**Say:** every answer walks the graph and shows its path; the checks keep the local model on the rails.
 **If asked "why a graph?":** each step is testable and traced; when the router slips (a dropped "calls", an "opened"
 read as "open"), a deterministic check fixes it without retuning a prompt. Scores on the slide are from the local model.
 
@@ -57,6 +57,9 @@ read as "open"), a deterministic check fixes it without retuning a prompt. Score
 **Say:** each choice with the alternative we rejected and why.
 **If asked "why local models only?":** customer words never leave the machine, there's no per-call cost, and a quota
 can't stop a demo or a collector mid-shift.
+**If asked "why Qwen3.8-27B, and why llama.cpp?":** we measured. The 12B model kept missing conventions; tracing showed
+Ollama ran a 4k window under a 9k-token prompt. llama.cpp sets the window explicitly and runs two requests at once;
+Qwen3.8-27B (Aug 2026, Apache 2.0) is the strongest open model that fits 16 GB at 3-bit, about 51 tokens a second.
 
 ## 11 · What we didn't ship
 **Say:** a bigger model, a tuned uplift model and a leaky feature, each measured and rejected.

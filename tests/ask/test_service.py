@@ -124,7 +124,7 @@ def test_lookup_majority_answer(build) -> None:  # type: ignore[no-untyped-def]
     a = svc.ask(_req("how many cases per product"))
     assert isinstance(a, AskAnswer)
     assert a.rows == (("credit_card", 30), ("personal_loan", 30))
-    assert llm.purposes().count(Purpose.ASK_SQL) == 3
+    assert llm.purposes().count(Purpose.ASK_SQL) == 4  # 3 drafts; the one with no GROUP BY is linted once
 
 
 def test_ungrounded_narrative_never_reaches_the_user(build) -> None:  # type: ignore[no-untyped-def]
@@ -185,7 +185,7 @@ def test_disagreeing_drafts_escalate_then_the_judge_picks(build) -> None:  # typ
             Purpose.ASK_NARRATE: ["Cases by product."],
         }
     )
-    r = svc.ask(_req("open cases by product"))
+    r = svc.ask(_req("case counts"))  # nothing for the linter to flag: only the vote and the judge
     assert isinstance(r, AskAnswer) and r.sql.startswith("SELECT primary_product")
     assert llm.purposes().count(Purpose.ASK_SQL) == 6  # 3 drafts, 2 more, then the judge
     assert any("picked one" in t for t in r.trace)
@@ -361,8 +361,8 @@ def test_a_draft_that_will_not_run_is_repaired_once_with_the_error(build) -> Non
     )
     a = svc.ask(_req("how many cases per product"))
     assert isinstance(a, AskAnswer) and a.rows == (("credit_card", 30), ("personal_loan", 30))
-    repair = [c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL][-1]
-    assert "failed with" in repair["user"].text and "nope" in repair["user"].text
+    repair = next(c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL and "failed with" in c["user"].text)
+    assert "nope" in repair["user"].text
 
 
 # ----------------------------------------------------------------- "summarise the most recent call on case X"
@@ -578,3 +578,99 @@ def test_a_can_we_question_is_a_policy_question() -> None:
     assert _POLICY.search("How many call attempts can we make on a mid-stage account in a week?")
     assert _POLICY.search("Are collection calls allowed on Sundays?")
     assert not _POLICY.search("What share of outbound calls were outside permitted calling hours?")
+
+
+def test_lint_sql_flags_clear_convention_misses_only() -> None:
+    from kept.ask.lookup import lint_sql
+
+    calls = "SELECT count(*) AS n FROM silver.contact_history WHERE direction = 'outbound'"
+    assert lint_sql("How many outbound calls were made in September 2026?", calls) == [
+        "The question is about calls: filter contact_history on channel = 'call'."
+    ]
+    by = lint_sql("What share rolled by the end of June 2026, by product?", "SELECT 1 AS n")
+    assert by == ["The question asks for a breakdown (by product): GROUP BY that column."]
+    ok = "SELECT current_bucket, count(*) AS n FROM silver.collections_cases WHERE outcome IS NULL GROUP BY 1"
+    assert lint_sql("How many collections cases are open today, by current bucket?", ok) == []
+
+
+def test_check_bucket_adds_the_named_bucket_unless_grouped() -> None:
+    from kept.ask.graph import check_bucket
+    from kept.contracts.ask import Intent, IntentKind
+
+    q = "Of accounts 1-30 days past due at the end of March 2026, what share rolled by the end of June 2026?"
+    i = Intent(kind=IntentKind.METRIC, metric_id="roll_rate", confidence=0.9)
+    allowed = frozenset({"product_type", "dpd_bucket"})
+    fixed, note = check_bucket(q, i, allowed)
+    assert fixed.filters == {"dpd_bucket": "1-30"} and note
+    grouped = i.model_copy(update={"group_by": ("dpd_bucket",)})
+    assert check_bucket(q, grouped, allowed) == (grouped, None)
+    assert check_bucket("roll rate by product", i, allowed) == (i, None)
+
+
+def test_qualify_tables_adds_the_schema_to_bare_allowed_tables_only() -> None:
+    from kept.ask.lookup import qualify_tables
+
+    allowed = {"silver.contact_history", "silver.agents"}
+    sql = "WITH agents AS (SELECT 1 AS x) SELECT * FROM contact_history h JOIN agents a ON 1 = 1"
+    assert qualify_tables(sql, allowed) == (
+        "WITH agents AS (SELECT 1 AS x) SELECT * FROM silver.contact_history h JOIN agents a ON 1 = 1"
+    )
+    assert qualify_tables("SELECT EXTRACT(day FROM ts) FROM silver.agents", allowed) == (
+        "SELECT EXTRACT(day FROM ts) FROM silver.agents"
+    )
+
+
+def test_lint_sql_holds_drafts_to_the_resolved_dates_and_period_rows() -> None:
+    from datetime import date
+
+    from kept.ask.lookup import lint_sql
+    from kept.ask.templates import resolve_dates
+
+    q = "How many complaints were raised from 14 to 20 September 2026, compared with the 7 days before?"
+    dates = resolve_dates(q, date(2026, 9, 28))
+    wrong = "SELECT count(*) AS n FROM silver.contact_history WHERE d BETWEEN '2026-08-25' AND '2026-09-20'"
+    issues = lint_sql(q, wrong, dates)
+    assert any("2026-08-25" in i for i in issues) and any("one row per period" in i for i in issues)
+    right = (
+        "SELECT CASE WHEN d >= '2026-09-14' THEN 'later' ELSE 'earlier' END AS period, count(*) AS n "
+        "FROM silver.contact_history WHERE d BETWEEN '2026-09-07' AND '2026-09-20' GROUP BY period"
+    )
+    assert lint_sql(q, right, dates) == []
+
+
+def test_new_templates_compile_to_reviewed_sql() -> None:
+    from datetime import date
+
+    from kept.ask.metrics import compile_metric
+    from kept.ask.templates import TEMPLATES
+    from kept.contracts.ask import Intent, IntentKind
+
+    defs = {k: d for k, (d, _) in TEMPLATES.items()}
+    queries = {k: q for k, (_, q) in TEMPLATES.items()}
+    i = Intent(
+        kind=IntentKind.METRIC,
+        metric_id="contact_events",
+        filters={"complaint_raised_flag": True},
+        group_by=("contact_date",),
+        date_from=date(2026, 9, 14),
+        date_to=date(2026, 9, 20),
+        confidence=0.9,
+    )
+    sql, params = compile_metric(i, defs, queries)
+    assert "silver.contact_history" in sql and "GROUP BY contact_date" in sql
+    assert params == [True, date(2026, 9, 14), date(2026, 9, 20)]
+    for mid in ("qa_score", "open_cases", "overdraft_past_due"):
+        compile_metric(Intent(kind=IntentKind.METRIC, metric_id=mid, confidence=0.9), defs, queries)
+
+
+def test_daily_questions_group_by_the_day_column_when_the_metric_allows_it() -> None:
+    from kept.ask.graph import check_daily, repair_intent
+    from kept.ask.templates import TEMPLATES
+    from kept.contracts.ask import Intent, IntentKind
+
+    q = TEMPLATES["contact_events"][1]
+    i = Intent(kind=IntentKind.METRIC, metric_id="contact_events", confidence=0.9)
+    fixed, note = check_daily("How many calls were made on each day last week?", i, q)
+    assert fixed.group_by == ("contact_date",) and note
+    kept_day, _ = repair_intent(i.model_copy(update={"group_by": ("contact_date",)}), q)
+    assert kept_day.group_by == ("contact_date",)  # a breakdown column here, not just the date range

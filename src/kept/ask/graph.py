@@ -21,7 +21,7 @@ from kept.ask.metrics import compile_metric
 from kept.ask.router import route
 from kept.ask.scope import check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import guard_sql
-from kept.ask.templates import date_hints, resolve_dates
+from kept.ask.templates import COMPARE, date_hints, resolve_dates
 from kept.contracts import AskRequest, AskResponse, IntentKind, RedactedText, RefusalReason
 from kept.contracts.ask import GuardResult, Intent
 
@@ -108,6 +108,7 @@ def relevant(question: str, metric_id: str, name: str, synonyms: Any) -> bool:
     return bool(_words(question) & _words(about))
 
 
+_NOW = re.compile(r"\b(today|now|currently|as of today|at the (last|latest) snapshot)\b", re.I)
 _OPEN = re.compile(r"\b(open|still open|currently open|active|outstanding)\b", re.I)
 
 
@@ -120,6 +121,34 @@ def check_open(question: str, intent: Intent) -> tuple[Intent, str | None]:
     return intent.model_copy(
         update={"filters": filters}
     ), "Intent check: dropped is_open (the question doesn't ask about open cases)"
+
+
+_BUCKET = re.compile(r"(?<![\d-])(1-30|31-60|61-90|91-120|121-150|151-180|180\+)(?![\d])")
+
+
+def check_bucket(question: str, intent: Intent, allowed: frozenset[str]) -> tuple[Intent, str | None]:
+    """A delinquency bucket the question names ("1-30 days past due") is a filter when the metric has one and
+    the router left it out (and the answer isn't grouped by bucket, which would compare them all)."""
+    col = next((c for c in ("dpd_bucket", "current_bucket") if c in allowed), None)
+    m = _BUCKET.search(question)
+    if col is None or m is None or col in intent.filters or col in intent.group_by:
+        return intent, None
+    return intent.model_copy(update={"filters": {**intent.filters, col: m[1]}}), (
+        f"Intent check: the question names the {m[1]} bucket, so {col} = '{m[1]}'"
+    )
+
+
+_DAILY = re.compile(r"\b(each|every|per|by) day\b|\bdaily\b|\bday by day\b", re.I)
+
+
+def check_daily(question: str, intent: Intent, q: Any) -> tuple[Intent, str | None]:
+    """ "On each day" / "daily" is a breakdown by the metric's day column when it has one to group by."""
+    col = q.date_column
+    if not col or col not in q.allowed_group_by or col in intent.group_by or not _DAILY.search(question):
+        return intent, None
+    return intent.model_copy(
+        update={"group_by": (*intent.group_by, col)}
+    ), f"Intent check: grouped by {col} (daily)"
 
 
 def as_lookup(intent: Intent) -> Intent:
@@ -196,7 +225,8 @@ def repair_intent(intent: Intent, q: Any) -> tuple[Intent, list[str]]:
             filters[to] = v
     groups: list[str] = []
     for col in intent.group_by:
-        to = None if col == q.date_column else _closest(col, q.allowed_group_by)
+        dated = col == q.date_column and col not in q.allowed_group_by  # a range column, not a breakdown
+        to = None if dated else _closest(col, q.allowed_group_by)
         if to is None:
             notes.append(f"Intent repair: dropped grouping {col}")
         elif to not in groups:
@@ -287,8 +317,36 @@ def build_graph(ask: CollectionsAsk) -> Any:
             and intent.date_to is None
             and len(spans) == 1
         )
-        if filled:  # the question names one period and the router left the range empty: fill it
+        points = [sp for sp in spans if sp[1] == sp[2]]
+        point_days = {sp[1] for sp in points}
+        # "at the end of March ... by the end of June": the cohort is the first point in time, even when the
+        # router wrote the two points as a range
+        cohort = (
+            intent.kind is IntentKind.METRIC
+            and len(spans) == 2
+            and len(points) == 2
+            and {intent.date_from, intent.date_to} <= point_days | {None}
+            and (intent.date_from, intent.date_to) != (min(point_days), min(point_days))
+        )
+        q_date = getattr(ask._queries.get(intent.metric_id or ""), "date_column", None) or ""
+        today = (  # a snapshot table holds every snapshot: "today" or "the last snapshot" is the as-of date
+            as_of is not None
+            and intent.kind is IntentKind.METRIC
+            and intent.date_from is None
+            and intent.date_to is None
+            and not spans
+            and "snapshot" in q_date
+            and _NOW.search(q.text)
+        )
+        if today:
+            intent = intent.model_copy(update={"date_from": as_of, "date_to": as_of})
+            spans, filled = [("today", as_of, as_of)], True
+        elif filled:  # the question names one period and the router left the range empty: fill it
             intent = intent.model_copy(update={"date_from": spans[0][1], "date_to": spans[0][2]})
+        elif cohort:
+            first = min(points, key=lambda sp: sp[1])
+            intent = intent.model_copy(update={"date_from": first[1], "date_to": first[1]})
+            spans, filled = [first], True
         out: AskState = {"fresh": fresh, "as_of": as_of, "intent": intent}
         label = f"Route: {intent.kind.value}" + (f" {intent.metric_id}" if intent.metric_id else "")
         if needs_clarification(router_confidence=intent.confidence, candidates_agree=None):
@@ -322,8 +380,20 @@ def build_graph(ask: CollectionsAsk) -> Any:
         intent, repaired = repair_intent(s["intent"], query)
         intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
         intent, open_note = check_open(s["request"].question, intent)
+        intent, bucket_note = check_bucket(s["request"].question, intent, query.allowed_filters)
+        intent, daily_note = check_daily(s["request"].question, intent, query)
+        open_note = "; ".join(n for n in (open_note, bucket_note, daily_note) if n) or None
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
         notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
+        spans = resolve_dates(s["request"].question, s.get("as_of"))
+        if query.date_column and len(spans) >= 2 and COMPARE.search(s["request"].question):
+            if query.date_column in intent.group_by and not _DAILY.search(s["request"].question):
+                # the period is the grouping: one total per period, not per day
+                intent = intent.model_copy(
+                    update={"group_by": tuple(c for c in intent.group_by if c != query.date_column)}
+                )
+                notes = [*notes, f"Intent check: one total per period, so not grouped by {query.date_column}"]
+            return compare_periods(intent, spans[:2], notes)
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
         except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
@@ -345,6 +415,40 @@ def build_graph(ask: CollectionsAsk) -> Any:
             "guarded": guarded,
             "ran": ask._run(guarded, params),
             "trace": [*notes, f"Certified metric: {intent.metric_id}", "SQL guard: allowed"],
+        }
+
+    def compare_periods(intent: Intent, spans: list[tuple[str, Any, Any]], notes: list[str]) -> AskState:
+        """A period compared with the days before: the reviewed query runs once per period and the rows are
+        stacked under a period column, so the comparison is exact and the model writes no SQL."""
+        cols: tuple[str, ...] = ()
+        rows: list[tuple[Any, ...]] = []
+        guarded = None
+        for _, start, end in spans:
+            try:
+                one = intent.model_copy(update={"date_from": start, "date_to": end})
+                sql, params = compile_metric(one, ask._metrics, ask._queries)
+            except ValueError as e:
+                return {
+                    "reroute": True,
+                    "intent": as_lookup(intent),
+                    "trace": [*notes, f"Certified metric: can't compile ({e}); trying a lookup"],
+                }
+            guarded = guard_sql(sql, ask._sql_policy())
+            ran = ask._run(guarded, params) if guarded.allowed else None
+            if ran is None:
+                return {"reroute": True, "intent": as_lookup(intent), "trace": [*notes, "Period run failed"]}
+            cols = ran[0]
+            label = f"{start.isoformat()} to {end.isoformat()}" if start != end else start.isoformat()
+            rows += [(label, *r) for r in ran[1]]
+        return {
+            "intent": intent,
+            "guarded": guarded,
+            "ran": (("period", *cols), tuple(rows)),
+            "trace": [
+                *notes,
+                f"Certified metric: {intent.metric_id}, run once per period ({len(spans)} periods)",
+                "SQL guard: allowed",
+            ],
         }
 
     seen_values: dict[tuple[str, str], list[Any] | None] = {}

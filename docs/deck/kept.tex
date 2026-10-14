@@ -72,7 +72,7 @@
   \begin{tikzpicture}[node distance=0.35cm]
     \node[layer] (d) {\textbf{1 · Data and identity}\\[0.3em] 31 source tables\\ dbt silver and gold\\ exact links, then Splink\\ one golden ID};
     \node[layer, right=of d] (a) {\textbf{2 · Ask}\\[0.3em] LangGraph pipeline\\ certified metrics\\ SQL guard, vote\\ policy search, cited};
-    \node[layer, right=of a] (t) {\textbf{3 · Text and voice}\\[0.3em] redaction first\\ local Gemma 3 12B\\ Whisper on the GPU\\ every value quoted};
+    \node[layer, right=of a] (t) {\textbf{3 · Text and voice}\\[0.3em] redaction first\\ local Qwen3.8-27B\\ Whisper on the GPU\\ every value quoted};
     \node[layer, right=of t] (n) {\textbf{4 · Decide and release}\\[0.3em] point-in-time features\\ uplift per action\\ payday sizing\\ tiers, two people};
     \draw[flow] (d) -- node[above, font=\tiny]{golden ID} (a);
     \draw[flow] (a) -- node[above, font=\tiny]{questions} (t);
@@ -96,8 +96,8 @@
     Warehouse & DuckDB file, dbt silver/gold, Feast online store & the bank's lakehouse; dbt models carry over \\
     Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify} & WORM storage, same chain \\
     Models & LightGBM uplift + promise, MLflow, champion/challenger gate & model risk management sign-off \\
-    Local language models & Gemma 3 12B (Ollama or llama.cpp), Whisper, bge-m3 on one GPU & an on-prem inference cluster \\
-    The Ask's model & the same local Gemma 3 12B: no hosted API, no keys & the bank's approved model \\
+    Local language models & Qwen3.8-27B on llama.cpp, Whisper, bge-m3 on one machine & an on-prem inference cluster \\
+    The Ask's model & the same local Qwen3.8-27B: no hosted API, no keys & the bank's approved model \\
     API and app & FastAPI; Next.js workspace; personas & SSO, the bank's design system \\
     \bottomrule
   \end{tabular}\\[0.7em]
@@ -187,7 +187,7 @@
       \begin{tikzpicture}[node distance=0.3cm]
         \node[node box] (in) {Note or call\\{\tiny Whisper large-v3-turbo}};
         \node[node box, right=of in] (red) {Redaction\\{\tiny Presidio}};
-        \node[node box, hot, right=of red] (llm) {Local Gemma 3 12B\\{\tiny JSON schema, quoted}};
+        \node[node box, hot, right=of red] (llm) {Local Qwen3.8-27B\\{\tiny JSON schema, quoted}};
         \node[node box, below=0.5cm of llm] (card) {Card and\\hardship flag};
         \draw[flow] (in) -- (red); \draw[flow] (red) -- (llm); \draw[flow] (llm) -- (card);
         \draw[maple, dashed, rounded corners] ($(red.north west)+(-0.12,0.18)$) rectangle ($(card.south east)+(0.12,-0.12)$);
@@ -251,6 +251,7 @@
     A graph with checks (LangGraph) & one prompt & each step is testable, traced, and fixable without retuning a prompt \\
     Two people for Red & one approver or the model & hardship decisions are never one person's or a model's \\
     Schema-constrained decoding & parse-and-retry & malformed replies 152 $\to$ 0 of 1,172 calls \\
+    Qwen3.8-27B on llama.cpp & Gemma 3 12B on Ollama & Ollama ran a 4k window under a 9k prompt; released 18 $\to$ \KReleased{} \\
     \bottomrule
   \end{tabular}
 \end{frame}
@@ -260,7 +261,7 @@
   \kicker{Rigour}\frametitle{What we tried, measured, and didn't ship}
   \source{docs/reports/tuning.md, evidence.md §3, PR \#169}
   \begin{columns}[T]
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Gemma 3 stays.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Rejected; the dense Qwen3.8-27B fits and is faster.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). The gate kept the champion.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. Ours plus the bank's score: 0.728 vs 0.702.}\end{column}
   \end{columns}
@@ -466,9 +467,9 @@
   \end{columns}
   \vspace{0.8em}
   \begin{itemize}\setlength\itemsep{0.3em}\scriptsize
-    \item Every model call is local (Gemma 3 12B): no hosted API, no keys, no quota. The graph's deterministic checks
-      (channel, stored values, column repair, date fill, open versus opened, relevance, "can we" means policy) keep a
-      12B model on the rails.
+    \item Every model call is local (Qwen3.8-27B on llama.cpp): no hosted API, no keys, no quota. The graph's deterministic checks
+      (channel, stored values, column repair, dates, cohorts, relevance, "can we" means policy) and a convention linter
+      keep the model on the rails; drafts that disagree escalate to five, then the model judges the results.
     \item A refusal must refuse; a number must match gold within the stated tolerance; a policy answer must cite the section.
   \end{itemize}
 \end{frame}
