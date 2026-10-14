@@ -267,8 +267,8 @@ td b{font-weight:600}
   <div class="grid stagger" style="grid-template-columns:1.35fr 1fr;margin-top:3.5vh;align-items:start">
     <table>
       <tr><th>Option</th><th>Verdict</th><th>Evidence</th></tr>
-      <tr><td><b>Qwen3.8-27B</b><br><span class="muted small">Aug 2026, Apache 2.0, 3-bit, llama.cpp</span></td><td><span class="pill ok">chosen</span></td><td class="small">Released {{KReleased}}, stress {{KStress}} with the same checks; about 51 tokens a second; fits in 15 GB.</td></tr>
-      <tr><td>Gemma 3 12B on Ollama</td><td><span class="pill no">replaced</span></td><td class="small">18/21 and 31/42 on the same harness, and Ollama ran a 4,096-token window under a 9,000-token prompt.</td></tr>
+      <tr><td><b>Qwen3.8-27B</b><br><span class="muted small">Aug 2026, Apache 2.0, 3-bit, llama.cpp</span></td><td><span class="pill ok">chosen</span></td><td class="small">Released {{KReleased}}, stress {{KStress}}, unseen {{KDrill}}; passes the extraction gate on notes and calls; about 51 tokens a second in 15 GB.</td></tr>
+      <tr><td>Gemma 3 12B on Ollama</td><td><span class="pill no">replaced</span></td><td class="small">18/21, 30/42 and 22/30, and Ollama ran a 4,096-token window under a 9,000-token prompt.</td></tr>
       <tr><td>Gemma 4 26B</td><td><span class="pill no">rejected</span></td><td class="small">Needs experts on the CPU: 24 s a note, runaway replies, no better on held-out notes.</td></tr>
       <tr><td>Hosted API (free tier)</td><td><span class="pill no">dropped</span></td><td class="small">Customer words leave the bank; a quota ran out mid-benchmark and turned answers into refusals.</td></tr>
     </table>
