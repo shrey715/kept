@@ -163,7 +163,7 @@ export default function DemoPage() {
 
             {step === 0 && customer && (
               <Grid columns={{ initial: "1", lg: "1fr 1fr" }} gap="4">
-                <Card size="3"><Convergence c={customer} /></Card>
+                <Card size="3" className="k-dots"><Convergence c={customer} /></Card>
                 <Card size="3"><CustomerPanel c={customer} /></Card>
               </Grid>
             )}
@@ -215,7 +215,7 @@ export default function DemoPage() {
               <Grid columns={{ initial: "1", lg: step === 3 ? "1fr 340px" : "1fr" }} gap="4" align="start">
                 <NbaCard card={card} />
                 {step === 3 && (
-                  <Card size="3">
+                  <Card size="3" className="t-butter">
                     <SectionTitle eyebrow="Step 4" title="Agent note" mb="3" />
                     <TextArea rows={5} value={note} onChange={(e) => setNote(e.target.value)} />
                     <Button mt="3" size="3" style={{ width: "100%" }} loading={busy} onClick={() => void run(async () => setCard(await api.note(CASE, note, AGENT)))}>
@@ -230,7 +230,7 @@ export default function DemoPage() {
                 {[SPECIALIST, LEAD].map((who, i) => {
                   const r = results[i];
                   return (
-                    <Card key={who.userId} size="3">
+                    <Card key={who.userId} size="3" className={r?.released ? "t-mint" : "t-rose"}>
                       <Text size="1" color="gray" weight="bold">STEP {i + 1} OF 2</Text>
                       <Heading size="5" mt="1">{who.name}</Heading>
                       <Text size="2" color="gray">{who.title}</Text>

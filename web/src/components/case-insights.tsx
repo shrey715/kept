@@ -34,11 +34,113 @@ export function WhyChart({ card }: { card: NBACard }) {
       <Text as="p" size="1" color="gray" mb="4">
         Percentage points of paid-in-14-days over waiting, per feature (TreeSHAP on the model that scored it). Fixed labels; no LLM text.
       </Text>
-      <div role="list" aria-label="Feature contributions">
-        {ds.map((d, i) => (
-          <DriverRow key={d.feature} d={d} max={max} i={i} hover={hover === d.feature} onHover={(on) => setHover(on ? d.feature : null)} />
+      <Grid columns={{ initial: "1", lg: "minmax(0, 1fr) 260px" }} gap="5" align="center">
+        <div role="list" aria-label="Feature contributions">
+          {ds.map((d, i) => (
+            <DriverRow key={d.feature} d={d} max={max} i={i} hover={hover === d.feature} onHover={(on) => setHover(on ? d.feature : null)} />
+          ))}
+        </div>
+        <DriverRadar drivers={ds} />
+      </Grid>
+    </div>
+  );
+}
+
+/** Model inputs fall into six families; the radar shows how hard each family pushes (sum of |TreeSHAP|). */
+const FAMILIES: { name: string; match: RegExp }[] = [
+  { name: "Similar cases", match: /cohort|similar/ },
+  { name: "Cash flow", match: /cash|utilis|balance|spare|income|deposit/ },
+  { name: "Payday", match: /payroll|pay_freq|payday|salary/ },
+  { name: "Promises", match: /promise|ptp|kept/ },
+  { name: "Reachability", match: /answer|contact|rpc|link|channel|call|sms|email/ },
+  { name: "Delinquency", match: /dpd|bucket|overdue|arrears|30plus/ },
+];
+
+/** A soft closed curve through the points (Catmull-Rom as cubic Béziers): the studio's blob, not a polygon. */
+function blob(pts: [number, number][]) {
+  const n = pts.length;
+  const p = (i: number) => pts[(i + n) % n];
+  let d = `M${p(0)[0]},${p(0)[1]}`;
+  for (let i = 0; i < n; i++) {
+    const [x0, y0] = p(i - 1);
+    const [x1, y1] = p(i);
+    const [x2, y2] = p(i + 1);
+    const [x3, y3] = p(i + 2);
+    d += ` C${x1 + (x2 - x0) / 6},${y1 + (y2 - y0) / 6} ${x2 - (x3 - x1) / 6},${y2 - (y3 - y1) / 6} ${x2},${y2}`;
+  }
+  return d + "Z";
+}
+
+export function DriverRadar({ drivers }: { drivers: Driver[] }) {
+  const fam = FAMILIES.map((f) => {
+    const ds = drivers.filter((d) => f.match.test(d.feature));
+    return { name: f.name, weight: ds.reduce((a, d) => a + Math.abs(d.pts), 0), net: ds.reduce((a, d) => a + d.pts, 0) };
+  });
+  const max = Math.max(...fam.map((f) => f.weight), 0.1);
+  const top = fam.reduce((a, f) => (f.weight > a.weight ? f : a), fam[0]);
+  const [hover, setHover] = useState<string | null>(null);
+  const shown = fam.find((f) => f.name === hover) ?? top;
+  const C = 130;
+  const R = 76;
+  const at = (i: number, r: number): [number, number] => {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / fam.length;
+    return [C + r * Math.cos(a), C + r * Math.sin(a)];
+  };
+  const pts = fam.map((f, i) => at(i, 14 + (f.weight / max) * (R - 14)));
+  const ti = fam.indexOf(shown);
+  const [tx, ty] = pts[ti];
+  return (
+    <div className="k-radar t-lilac" aria-label="How hard each family of inputs pushes">
+      <svg viewBox="0 0 260 260" role="img">
+        {[0.33, 0.66, 1].map((k) => (
+          <polygon key={k} points={fam.map((_, i) => at(i, R * k).join(",")).join(" ")} fill="none" stroke="var(--k-dash)" strokeWidth={k === 1 ? 1.2 : 0.8} />
         ))}
-      </div>
+        {fam.map((_, i) => {
+          const [x, y] = at(i, R);
+          return <line key={i} x1={C} y1={C} x2={x} y2={y} stroke="var(--k-dash)" strokeWidth={0.8} />;
+        })}
+        <motion.path
+          d={blob(pts)}
+          fill="var(--t-2)"
+          stroke="var(--t-ink)"
+          strokeWidth={1.5}
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: 1, scale: 1 }}
+          style={{ transformOrigin: "130px 130px" }}
+          transition={{ type: "spring", stiffness: 120, damping: 18 }}
+        />
+        {fam.map((f, i) => {
+          const [x, y] = at(i, R + 16);
+          return (
+            <text
+              key={f.name}
+              x={x}
+              y={y}
+              textAnchor={Math.abs(x - C) < 8 ? "middle" : x > C ? "start" : "end"}
+              dominantBaseline="middle"
+              className="k-radar-axis"
+              data-on={f.name === shown.name}
+              onMouseEnter={() => setHover(f.name)}
+              onMouseLeave={() => setHover(null)}
+            >
+              {f.name}
+            </text>
+          );
+        })}
+        {pts.map(([x, y], i) => (
+          <circle key={i} cx={x} cy={y} r={i === ti ? 4.5 : 3} fill="var(--k-frame)" stroke="var(--t-ink)" strokeWidth={1.5} onMouseEnter={() => setHover(fam[i].name)} onMouseLeave={() => setHover(null)} />
+        ))}
+      </svg>
+      {shown.weight > 0 && (
+        <span
+          className="k-pill-tip"
+          data-below={ty < C}
+          style={{ left: `${Math.min(74, Math.max(26, (tx / 260) * 100))}%`, top: `${(ty / 260) * 100}%` }}
+        >
+          net {shown.net >= 0 ? "+" : "−"}
+          {Math.abs(shown.net).toFixed(1)} pts
+        </span>
+      )}
     </div>
   );
 }

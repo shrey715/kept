@@ -16,11 +16,11 @@ import { Box, Callout, Flex, Grid, Select, Skeleton, Table, Text, TextField } fr
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TierBadge } from "@/components/bits";
-import { CountUp, Rise, Stagger } from "@/components/motion";
+import { TierBadge, initials, tierTint } from "@/components/bits";
+import { CountUp, Donut, Rise, Stagger } from "@/components/motion";
 import { BriefCard } from "@/components/brief-card";
 import { ModelPanels } from "@/components/model-panels";
-import { PageHeader, SectionTitle } from "@/components/page-header";
+import { PageHeader, SectionTitle, TablePanel } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
 import { download, toCsv } from "@/lib/csv";
 import { ACTION_LABEL, api, money, type Action, type Governance, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
@@ -30,9 +30,9 @@ import { can, useSession } from "@/lib/session";
 const BUCKETS = ["current", "1-30", "31-60", "61-90", "91-120", "121+"];
 const PAGE = 50;
 const TONE = {
-  good: { icon: <StarIcon />, color: "var(--grass-10)" },
-  warn: { icon: <ExclamationTriangleIcon />, color: "var(--k-red)" },
-  info: { icon: <InfoCircledIcon />, color: "var(--viz-1)" },
+  good: { icon: <StarIcon />, tint: "mint" },
+  warn: { icon: <ExclamationTriangleIcon />, tint: "rose" },
+  info: { icon: <InfoCircledIcon />, tint: "ice" },
 } as const;
 
 export default function PortfolioPage() {
@@ -80,14 +80,14 @@ export default function PortfolioPage() {
 
       <Grid columns={{ initial: "2", md: "5" }} gap="3">
         {[
-          { label: "Open cases", v: p?.cases, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <DashboardIcon /> },
-          { label: "Balance at risk", v: p?.balance, f: (n: number) => money(n), icon: <TargetIcon /> },
+          { label: "Open cases", v: p?.cases, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <DashboardIcon />, tint: "ice" },
+          { label: "Balance at risk", v: p?.balance, f: (n: number) => money(n), icon: <TargetIcon />, tint: "butter" },
           { label: "Expected recovery", v: p?.expected, f: (n: number) => money(n), icon: <StarIcon />, hi: true },
-          { label: "With an action", v: p ? share(p.actionable, p.cases) * 100 : undefined, f: (n: number) => `${Math.round(n)}%`, icon: <LightningBoltIcon /> },
-          { label: "Need a specialist", v: p?.red, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <ExclamationTriangleIcon /> },
+          { label: "With an action", v: p ? share(p.actionable, p.cases) * 100 : undefined, f: (n: number) => `${Math.round(n)}%`, icon: <LightningBoltIcon />, tint: "mint" },
+          { label: "Need a specialist", v: p?.red, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <ExclamationTriangleIcon />, tint: "rose" },
         ].map((k) => (
           <Rise key={k.label}>
-            <div className={`k-card${k.hi ? " hi" : ""}`} style={{ height: "100%" }}>
+            <div className={`k-card${k.hi ? " hi" : ""}${k.tint ? ` t-${k.tint}` : ""}`} style={{ height: "100%" }}>
               <Flex align="center" gap="2">
                 <span className="k-chip" style={{ width: 32, height: 32, borderRadius: 10, ...(k.hi ? { background: "var(--k-hi-chip)", color: "var(--k-hi-ink)" } : {}) }}>
                   {k.icon}
@@ -192,9 +192,7 @@ function InsightCard({ i }: { i: Portfolio["insights"][number] }) {
   return (
     <div className="k-card" style={{ height: "100%" }}>
       <Flex gap="3" align="start">
-        <span className="k-chip" style={{ color: t.color }}>
-          {t.icon}
-        </span>
+        <span className={`k-chip round t-${t.tint}`}>{t.icon}</span>
         <Box style={{ minWidth: 0, flex: 1 }}>
           <Text as="div" size="3" weight="medium" style={{ letterSpacing: "-0.01em" }}>
             {i.title}
@@ -438,11 +436,19 @@ function CaseExplorer() {
 
   return (
     <Box mt="5">
-      <div className="k-card" style={{ padding: 0, overflow: "hidden" }}>
-        <Flex align="center" gap="3" wrap="wrap" px="5" pt="4" pb="3">
-          <SectionTitle eyebrow="Explorer" title="Every case tonight" mb="0" />
-          {page && <span className="k-badge">{page.total.toLocaleString("en-CA")}</span>}
-          <Flex gap="2" ml="auto" wrap="wrap" align="center">
+      <TablePanel
+        title="Every case tonight"
+        aside={page && <span className="k-badge">{page.total.toLocaleString("en-CA")}</span>}
+        sum={
+          page && page.rows.length > 0 ? (
+            <>
+              Expected on this page <b>{money(page.rows.reduce((s, r) => s + Number(r.expected_value), 0))}</b>
+            </>
+          ) : undefined
+        }
+      >
+        <Flex align="center" gap="3" wrap="wrap" px="4" pb="3">
+          <Flex gap="2" wrap="wrap" align="center">
             <div className="k-tabs">
               {["all", "red", "amber", "green", "none"].map((t) => (
                 <button key={t} className="k-tab" data-active={tier === t} style={{ height: 34 }} onClick={() => reset(() => setTier(t))}>
@@ -507,14 +513,19 @@ function CaseExplorer() {
               {page?.rows.map((r) => (
                 <Table.Row key={r.case_id} className="row-link">
                   <Table.Cell pl="5">
-                    <Link href={`/cases/${r.case_id}`} style={{ color: "inherit", textDecoration: "none" }}>
-                      <Text as="div" weight="medium">
-                        {r.display_name ?? r.case_id}
-                      </Text>
-                      <Text as="div" size="1" color="gray" className="tabular">
-                        {r.case_id} · {r.max_dpd} dpd {r.hardship ? "· hardship" : ""}
-                        {r.hard_stop ? " · hard stop" : ""}
-                      </Text>
+                    <Link href={`/cases/${r.case_id}`} style={{ color: "inherit", textDecoration: "none", display: "flex", alignItems: "center", gap: 12 }}>
+                      <span className={`k-ava${r.tier ? ` t-${tierTint(r.tier as Tier)}` : ""}`} aria-hidden>
+                        {initials(r.display_name ?? r.case_id)}
+                      </span>
+                      <span>
+                        <Text as="div" weight="medium">
+                          {r.display_name ?? r.case_id}
+                        </Text>
+                        <Text as="div" size="1" color="gray" className="tabular">
+                          {r.case_id} · {r.max_dpd} dpd {r.hardship ? "· hardship" : ""}
+                          {r.hard_stop ? " · hard stop" : ""}
+                        </Text>
+                      </span>
                     </Link>
                   </Table.Cell>
                   <Table.Cell className="tabular">{r.current_bucket ?? "—"}</Table.Cell>
@@ -524,7 +535,14 @@ function CaseExplorer() {
                     {money(r.total_overdue, true)}
                   </Table.Cell>
                   <Table.Cell justify="end" className="tabular">
-                    {r.p_paid_14d == null ? "—" : `${Math.round(r.p_paid_14d * 100)}%`}
+                    {r.p_paid_14d == null ? (
+                      "—"
+                    ) : (
+                      <Flex align="center" justify="end" gap="2" className={r.tier ? `t-${tierTint(r.tier as Tier)}` : undefined}>
+                        {Math.round(r.p_paid_14d * 100)}%
+                        <Donut value={r.p_paid_14d} size={22} />
+                      </Flex>
+                    )}
                   </Table.Cell>
                   <Table.Cell justify="end" className="tabular" pr="5">
                     {r.expected_value > 0 ? money(r.expected_value) : "—"}
@@ -549,7 +567,7 @@ function CaseExplorer() {
             </Flex>
           </Flex>
         )}
-      </div>
+      </TablePanel>
     </Box>
   );
 }

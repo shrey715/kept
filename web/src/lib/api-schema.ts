@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Calendar */
+        get: operations["get_calendar_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/approvals": {
         parameters: {
             query?: never;
@@ -132,6 +149,27 @@ export interface paths {
         };
         /** Portfolio Brief */
         get: operations["portfolio_brief_portfolio_brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Portfolio Models
+         * @description The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+         *     the page shows exactly what the reports say.
+         */
+        get: operations["portfolio_models_portfolio_models_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -682,6 +720,67 @@ export interface components {
             text: string;
             /** Cites */
             cites: string[];
+        };
+        /** CalendarEvent */
+        CalendarEvent: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "promise_due" | "contact" | "approval_deadline" | "payday" | "hardship_review";
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** End */
+            end?: string | null;
+            /** All Day */
+            all_day: boolean;
+            /** Title */
+            title: string;
+            /** Detail */
+            detail?: string | null;
+            /** Case Id */
+            case_id?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            tier?: components["schemas"]["ReleaseTier"] | null;
+            /** Status */
+            status?: string | null;
+            /** Amount */
+            amount?: string | null;
+            /** Proposal Id */
+            proposal_id?: string | null;
+            /** Count */
+            count?: number | null;
+        };
+        /** CalendarFeed */
+        CalendarFeed: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "own" | "queue" | "aggregate";
+            /** Events */
+            events: components["schemas"]["CalendarEvent"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
         };
         /** CallOut */
         CallOut: {
@@ -1933,6 +2032,40 @@ export interface operations {
             };
         };
     };
+    get_calendar_calendar_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarFeed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     approvals_approvals_get: {
         parameters: {
             query: {
@@ -2018,6 +2151,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Brief"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_models_portfolio_models_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

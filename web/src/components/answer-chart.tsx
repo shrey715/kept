@@ -9,7 +9,7 @@ import type { ChartOption } from "@/lib/api";
 
 type Unit = ChartOption["unit"];
 type Series = { name: string; color: string; values: (number | null)[] };
-type Tip = { x: number; y: number; title: string; rows: { name: string; color: string; value: string }[] } | null;
+type Tip = { x: number; y: number; w?: number; title: string; rows: { name: string; color: string; value: string }[] } | null;
 
 const COLORS = ["var(--viz-1)", "var(--viz-2)", "var(--viz-3)", "var(--viz-4)"];
 const INK = "var(--gray-12)";
@@ -148,12 +148,12 @@ export function AnswerChart({ option, columns, rows }: { option: ChartOption; co
 
   const move = (e: ReactPointerEvent<Element>, title: string, rowsOut: NonNullable<Tip>["rows"]) => {
     const box = (e.currentTarget as Element).closest("[data-chart]")!.getBoundingClientRect();
-    setTip({ x: e.clientX - box.left, y: e.clientY - box.top, title, rows: rowsOut });
+    setTip({ x: e.clientX - box.left, y: e.clientY - box.top, w: box.width, title, rows: rowsOut });
   };
 
   const tooltip = tip && (
     <Box
-      style={{ position: "absolute", left: Math.min(tip.x + 12, 9999), top: tip.y + 12, pointerEvents: "none", background: "var(--color-panel-solid)", border: "1px solid var(--gray-a5)", borderRadius: 6, padding: "6px 10px", boxShadow: "var(--shadow-3)", zIndex: 2, whiteSpace: "nowrap" }}
+      style={{ position: "absolute", ...(tip.w && tip.x > tip.w * 0.6 ? { right: tip.w - tip.x + 12 } : { left: tip.x + 12 }), top: tip.y + 12, pointerEvents: "none", background: "var(--color-panel-solid)", border: "1px solid var(--gray-a5)", borderRadius: 6, padding: "6px 10px", boxShadow: "var(--shadow-3)", zIndex: 2, whiteSpace: "nowrap" }}
     >
       <Text as="div" size="1" color="gray">{tip.title}</Text>
       {tip.rows.map((r) => (

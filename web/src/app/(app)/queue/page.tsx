@@ -1,14 +1,14 @@
 "use client";
 
-import { SectionTitle } from "@/components/page-header";
+import { SectionTitle, TablePanel } from "@/components/page-header";
 import { ArrowRightIcon, ArrowTopRightIcon, LayersIcon, MagnifyingGlassIcon, StarIcon, TargetIcon } from "@radix-ui/react-icons";
-import { Avatar, Badge, Box, Callout, Flex, Grid, Kbd, Skeleton, Table, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Callout, Flex, Grid, Kbd, Skeleton, Table, Text, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { MapleMark, TierBadge, initials, tierColor } from "@/components/bits";
-import { CountUp, Rise, Stagger } from "@/components/motion";
+import { MapleMark, TierBadge, initials, tierTint } from "@/components/bits";
+import { CountUp, Donut, Rise, Stagger } from "@/components/motion";
 import { NAV } from "@/components/shell";
 import { ACTION_LABEL, api, humanize, money, type QueueItem } from "@/lib/api";
 import { keys, load, peek, prefetch } from "@/lib/live";
@@ -133,6 +133,7 @@ export default function QueuePage() {
           <Grid columns={{ initial: "1", sm: "2", md: "3" }} gap="3">
             <Rise>
               <StatCard
+                tint="ice"
                 icon={<TargetIcon />}
                 title="With an action today"
                 big={items ? <CountUp value={actionable.length} format={(n) => Math.round(n).toString()} /> : <Skeleton>000</Skeleton>}
@@ -191,11 +192,17 @@ export default function QueuePage() {
           </Rise>
 
           <Rise>
-            <div className="k-card" style={{ padding: 0, overflow: "hidden" }}>
-              <Flex align="center" gap="3" px="5" pt="4" pb="2">
-                <SectionTitle eyebrow="Worklist" title="Cases" mb="0" />
-                <span className="k-badge">{shown.length}</span>
-              </Flex>
+            <TablePanel
+              title="Worklist"
+              aside={<span className="k-badge">{shown.length}</span>}
+              sum={
+                items ? (
+                  <>
+                    Overdue <b>{money(shown.reduce((s, i) => s + Number(i.total_overdue), 0))}</b>
+                  </>
+                ) : undefined
+              }
+            >
               <Table.Root variant="ghost">
                 <Table.Header>
                   <Table.Row>
@@ -237,13 +244,9 @@ export default function QueuePage() {
                       >
                         <Table.Cell pl="5">
                           <Flex align="center" gap="3">
-                            <Avatar
-                              size="2"
-                              radius="full"
-                              variant="soft"
-                              color={i.tier ? tierColor(i.tier) : "gray"}
-                              fallback={initials(i.display_name ?? i.golden_customer_id)}
-                            />
+                            <span className={`k-ava${i.tier ? ` t-${tierTint(i.tier)}` : ""}`} aria-hidden>
+                              {initials(i.display_name ?? i.golden_customer_id)}
+                            </span>
                             <Box>
                               <Text as="div" weight="medium">
                                 {i.display_name ?? i.golden_customer_id}
@@ -282,7 +285,18 @@ export default function QueuePage() {
                           {money(i.total_overdue, true)}
                         </Table.Cell>
                         <Table.Cell justify="end" className="tabular" pr="5">
-                          <Text weight="medium">{Number(i.expected_value) > 0 ? money(i.expected_value) : "—"}</Text>
+                          <Flex align="center" justify="end" gap="2">
+                            <Text weight="medium">{Number(i.expected_value) > 0 ? money(i.expected_value) : "—"}</Text>
+                            {Number(i.expected_value) > 0 && Number(i.total_overdue) > 0 && (
+                              <span className={i.tier ? `t-${tierTint(i.tier)}` : undefined} style={{ display: "inline-flex" }}>
+                                <Donut
+                                  value={Number(i.expected_value) / Number(i.total_overdue)}
+                                  size={22}
+                                  label={`${Math.round((Number(i.expected_value) / Number(i.total_overdue)) * 100)}% of the overdue balance`}
+                                />
+                              </span>
+                            )}
+                          </Flex>
                         </Table.Cell>
                       </motion.tr>
                     ))}
@@ -294,7 +308,7 @@ export default function QueuePage() {
                   <Text color="gray">No cases match.</Text>
                 </Flex>
               )}
-            </div>
+            </TablePanel>
           </Rise>
         </Flex>
 
@@ -304,7 +318,7 @@ export default function QueuePage() {
             {links.slice(0, 2).map((n) => (
               <Rise key={n.href}>
                 <Link href={n.href} className="k-card k-link" style={{ display: "grid", placeItems: "center", gap: 10, minHeight: 112, textAlign: "center" }}>
-                  <span className="k-chip">
+                  <span className={`k-chip round t-${n.tint}`}>
                     <n.icon />
                   </span>
                   <Text size="2" weight="medium">
@@ -318,7 +332,7 @@ export default function QueuePage() {
             <Rise key={n.href}>
               <Link href={n.href} className="k-card k-link">
                 <Flex justify="between" align="start">
-                  <span className="k-chip">
+                  <span className={`k-chip round t-${n.tint}`}>
                     <n.icon />
                   </span>
                   <ArrowTopRightIcon className="arrow" width={18} height={18} />
@@ -338,10 +352,26 @@ export default function QueuePage() {
   );
 }
 
-function StatCard({ icon, title, big, of, share, hi = false }: { icon: React.ReactNode; title: string; big: React.ReactNode; of: string; share: number; hi?: boolean }) {
+function StatCard({
+  icon,
+  title,
+  big,
+  of,
+  share,
+  hi = false,
+  tint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  big: React.ReactNode;
+  of: string;
+  share: number;
+  hi?: boolean;
+  tint?: "rose" | "butter" | "mint" | "ice" | "lilac";
+}) {
   const pct = Math.round(share * 100);
   return (
-    <div className={`k-card${hi ? " hi" : ""}`} style={{ height: "100%", minHeight: 196 }}>
+    <div className={`k-card${hi ? " hi" : ""}${tint ? ` t-${tint}` : ""}`} style={{ height: "100%", minHeight: 196 }}>
       <Flex align="center" gap="3">
         <span className="k-chip" style={hi ? { background: "var(--k-hi-chip)", color: "var(--k-hi-ink)" } : undefined}>
           {icon}
@@ -393,9 +423,11 @@ function DpdChart({ items }: { items: QueueItem[] }) {
         {bands.map((b, k) => {
           const h = b.n ? 18 + (b.n / max) * 82 : 62;
           const part = b.n ? Math.max(b.acted ? 18 : 0, (b.acted / b.n) * 100) : 0;
+          const flip = k >= bands.length - 2; // near the right edge the pills sit on the bar's left
           return (
+            <div key={b.label} style={{ position: "relative", height: "100%", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <span className="k-capsule-track" aria-hidden />
             <motion.div
-              key={b.label}
               className={`k-capsule${b.n ? "" : " empty"}`}
               initial={{ height: 0 }}
               animate={{ height: `${h}%` }}
@@ -409,16 +441,25 @@ function DpdChart({ items }: { items: QueueItem[] }) {
                 </span>
               )}
               {k === top && b.n > 0 && (
-                <span className="tag k-badge" style={{ top: 4, background: "var(--k-strong)", color: "var(--k-on-strong)" }}>
+                <span className={`tag k-badge${flip ? " flip" : ""}`} style={{ top: 4, background: "var(--k-strong)", color: "var(--k-on-strong)" }}>
                   {b.n}
                 </span>
               )}
               {k === top && b.acted > 0 && (
-                <span className="tag k-badge" style={{ bottom: `calc(${part}% - 30px)`, background: "var(--k-hi)", color: "var(--k-hi-ink)" }}>
+                // a nearly full bar would put this pill on top of the count: stack it just under instead
+                <span
+                  className={`tag k-badge${flip ? " flip" : ""}`}
+                  style={{
+                    ...(part > 70 ? { top: 34 } : { bottom: `calc(${part}% - 30px)` }),
+                    background: "var(--k-hi)",
+                    color: "var(--k-hi-ink)",
+                  }}
+                >
                   {Math.round((b.acted / b.n) * 100)}%
                 </span>
               )}
             </motion.div>
+            </div>
           );
         })}
       </div>

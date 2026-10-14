@@ -2,10 +2,12 @@
 
 import { PageHeader, SectionTitle } from "@/components/page-header";
 import {
+  ArchiveIcon,
   ArrowUpIcon,
   BarChartIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
+  CheckIcon,
   CounterClockwiseClockIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
@@ -13,6 +15,7 @@ import {
   MixIcon,
   QuestionMarkCircledIcon,
   ReaderIcon,
+  TargetIcon,
 } from "@radix-ui/react-icons";
 import { Badge, Box, Button, Callout, Flex, Grid, Skeleton, Table, Text } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
@@ -30,23 +33,26 @@ const AnswerChart = dynamic(() => import("@/components/answer-chart").then((m) =
 });
 
 // released benchmark questions the Ask gets right on the dev split, one per path (metric, policy, comparison, guardrail)
-const EXAMPLES: { q: string; path: string; icon: React.ReactNode }[] = [
-  { q: "What is the average days past due of open cases by queue?", path: "Certified metric", icon: <BarChartIcon /> },
-  { q: "How many collections cases are open today, by current bucket?", path: "Lookup, voted", icon: <MagnifyingGlassIcon /> },
+type Tint = "rose" | "butter" | "mint" | "ice" | "lilac";
+
+const EXAMPLES: { q: string; path: string; icon: React.ReactNode; tint: Tint }[] = [
+  { q: "What is the average days past due of open cases by queue?", path: "Certified metric", icon: <BarChartIcon />, tint: "ice" },
+  { q: "How many collections cases are open today, by current bucket?", path: "Lookup, voted", icon: <MagnifyingGlassIcon />, tint: "lilac" },
   {
     q: "Among randomised cases, compare the promise-kept rate of the champion strategy with challenger_A and challenger_B.",
     path: "Comparison",
     icon: <MixIcon />,
+    tint: "butter",
   },
-  { q: "How many call attempts can we make on a mid-stage account in a week?", path: "Policy, quoted", icon: <ReaderIcon /> },
-  { q: "List the gender and marital status of customers who broke a promise last month.", path: "Guardrail", icon: <LockClosedIcon /> },
+  { q: "How many call attempts can we make on a mid-stage account in a week?", path: "Policy, quoted", icon: <ReaderIcon />, tint: "mint" },
+  { q: "List the gender and marital status of customers who broke a promise last month.", path: "Guardrail", icon: <LockClosedIcon />, tint: "rose" },
 ];
 
 const LADDER = [
-  { icon: <BarChartIcon />, title: "Certified metric", body: "A reviewed SQL definition, run on the warehouse. The SQL and tables are one click away." },
-  { icon: <MixIcon />, title: "Checked template", body: "Comparisons and breakdowns from templates that only touch allowed columns." },
-  { icon: <ReaderIcon />, title: "Policy, quoted", body: "Rules come from the policy text itself, with the section quoted." },
-  { icon: <LockClosedIcon />, title: "Refuse", body: "Protected attributes or single customers: refused, with a safe question to ask instead." },
+  { tint: "ice" as Tint, icon: <BarChartIcon />, title: "Certified metric", body: "A reviewed SQL definition, run on the warehouse. The SQL and tables are one click away." },
+  { tint: "butter" as Tint, icon: <MixIcon />, title: "Checked template", body: "Comparisons and breakdowns from templates that only touch allowed columns." },
+  { tint: "mint" as Tint, icon: <ReaderIcon />, title: "Policy, quoted", body: "Rules come from the policy text itself, with the section quoted." },
+  { tint: "rose" as Tint, icon: <LockClosedIcon />, title: "Refuse", body: "Protected attributes or single customers: refused, with a safe question to ask instead." },
 ];
 
 const STEPS = ["Reading the question", "Choosing a grounded path", "Running it on the warehouse", "Checking every number has a source"];
@@ -141,7 +147,7 @@ export default function AskPage() {
                     onClick={() => void ask(e.q)}
                   >
                     <Flex align="center" gap="2" mb="3">
-                      <span className="k-chip" style={{ width: 32, height: 32, borderRadius: 10 }}>
+                      <span className={`k-chip round t-${e.tint}`} style={{ width: 32, height: 32 }}>
                         {e.icon}
                       </span>
                       <Text size="1" color="gray" weight="medium">
@@ -305,7 +311,7 @@ export default function AskPage() {
               <Flex direction="column" gap="3">
                 {LADDER.map((s, i) => (
                   <Flex key={s.title} gap="3" align="start">
-                    <span className="k-chip" style={{ width: 32, height: 32, borderRadius: 10 }}>
+                    <span className={`k-chip round t-${s.tint}`} style={{ width: 32, height: 32 }}>
                       {s.icon}
                     </span>
                     <Box>
@@ -362,22 +368,80 @@ function Thinking() {
   );
 }
 
-/** The path the Ask actually took (kept.ask.graph): one chip per step, in order. */
+/** Which tile a trace step gets: its tint (lilac model, butter deterministic check, ice data, mint passed gate)
+    and its icon. A step that refused, failed or was blocked is rose. */
+function stepLook(head: string, bad: boolean): { tint: Tint; icon: React.ReactNode } {
+  const h = head.toLowerCase();
+  const icon = h.startsWith("safety")
+    ? <LockClosedIcon />
+    : h.startsWith("scope")
+      ? <TargetIcon />
+      : h.startsWith("route")
+        ? <MixIcon />
+        : h.startsWith("policy")
+          ? <ReaderIcon />
+          : h.startsWith("certified")
+            ? <BarChartIcon />
+            : h.startsWith("lookup")
+              ? <MagnifyingGlassIcon />
+              : h.startsWith("sql")
+                ? <LockClosedIcon />
+                : h.startsWith("warehouse")
+                  ? <ArchiveIcon />
+                  : h.startsWith("narration") || h.startsWith("call summary")
+                    ? <ChatBubbleIcon />
+                    : <CheckIcon />;
+  if (bad) return { tint: "rose", icon };
+  if (h.startsWith("route") || h.startsWith("narration") || h.startsWith("call summary")) return { tint: "lilac", icon };
+  if (h.startsWith("safety") || h.startsWith("scope") || h.startsWith("sql")) return { tint: "mint", icon };
+  if (/^(certified|lookup|warehouse|policy)/.test(h)) return { tint: "ice", icon };
+  return { tint: "butter", icon };
+}
+
+/** The path the Ask actually took (kept.ask.graph), drawn as a flow: one tile per node, in order, joined by
+    connectors. Tints say what kind of step it was; hovering a tile shows the step in full. */
 function Trace({ steps }: { steps: readonly string[] }) {
   return (
-    <div className="k-card" style={{ marginTop: 12, padding: "14px 18px" }}>
-      <div className="k-eyebrow">How this was answered · LangGraph path</div>
-      <ol className="k-trace">
+    <div className="k-card k-flow-card" style={{ marginTop: 12 }}>
+      <Flex align="center" justify="between" gap="3" wrap="wrap" mb="3">
+        <div className="k-eyebrow">How this was answered · LangGraph path</div>
+        <Flex gap="3" wrap="wrap" aria-hidden>
+          {(
+            [
+              ["lilac", "local model"],
+              ["butter", "check"],
+              ["ice", "data"],
+              ["mint", "gate passed"],
+            ] as const
+          ).map(([t, l]) => (
+            <Flex key={t} align="center" gap="1">
+              <span className={`k-flow-key t-${t}`} />
+              <Text size="1" color="gray">
+                {l}
+              </Text>
+            </Flex>
+          ))}
+        </Flex>
+      </Flex>
+      <ol className="k-flow">
         {steps.map((t, i) => {
           const [head, ...rest] = t.split(": ");
           const bad = /refused|failed|blocked|too low|disagreed|out \(/.test(t);
+          const look = stepLook(head, bad);
           return (
-            <motion.li key={`${i}-${t}`} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.06 } }} data-bad={bad}>
-              <span className="k-trace-n">{i + 1}</span>
-              <span>
+            <motion.li
+              key={`${i}-${t}`}
+              initial={{ opacity: 0, y: 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1, transition: { delay: i * 0.07 } }}
+              data-bad={bad}
+              title={t}
+            >
+              {i > 0 && <span className="k-flow-link" aria-hidden />}
+              <div className={`k-node t-${look.tint}`}>
+                <span className="k-chip round">{look.icon}</span>
                 <b>{head}</b>
-                {rest.length > 0 && <span style={{ color: "var(--gray-11)" }}> · {rest.join(": ")}</span>}
-              </span>
+                {rest.length > 0 && <span className="sub">{rest.join(": ")}</span>}
+              </div>
             </motion.li>
           );
         })}

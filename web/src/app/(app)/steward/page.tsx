@@ -104,7 +104,7 @@ export default function StewardPage() {
                       <RecordKey k={i.right_key} />
                     </Flex>
                     <Flex align="center" gap="2" mt="2">
-                      <Box style={{ width: 72 }}>
+                      <Box className="t-ice" style={{ width: 72 }}>
                         <Meter value={i.score} />
                       </Box>
                       <Text size="1" color="gray">

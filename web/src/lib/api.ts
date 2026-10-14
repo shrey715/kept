@@ -11,6 +11,8 @@ export type Brief = S["Brief"];
 export type { Governance } from "@/components/model-panels";
 import type { Governance } from "@/components/model-panels";
 export type PortfolioPage = S["CasePage"];
+export type CalendarFeed = S["CalendarFeed"];
+export type CalendarEvent = S["CalendarEvent"];
 export type Driver = S["Driver"];
 export type NotificationFeed = S["NotificationFeed"];
 export type Proposal = S["Proposal"];
@@ -87,6 +89,7 @@ export const api = {
   card: (caseId: string, w: Who) => call<NBACard>(`/cases/${encodeURIComponent(caseId)}/nba?${q(w)}`),
   customer: (caseId: string, w: Who) => call<Customer>(`/cases/${encodeURIComponent(caseId)}/customer?${q(w)}`),
   approvals: (w: Who) => call<ApprovalItem[]>(`/approvals?${q(w)}`),
+  calendar: (w: Who, start: string, end: string) => call<CalendarFeed>(`/calendar?${q(w, { start, end })}`),
   audit: (w: Who, opts: { caseId?: string; kind?: AuditKind } = {}) =>
     call<AuditEvent[]>(
       `/audit?${q(w, { ...(opts.caseId ? { case_id: opts.caseId } : {}), ...(opts.kind ? { kind: opts.kind } : {}) })}`,

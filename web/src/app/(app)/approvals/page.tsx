@@ -5,7 +5,7 @@ import { Badge, Box, Button, Callout, Card, Dialog, Flex, Grid, Progress, Skelet
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TierBadge } from "@/components/bits";
+import { TierBadge, tierTint } from "@/components/bits";
 import { CountUp, Rise, Stagger, spring } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { ReviewPanel } from "@/components/review-panel";
@@ -18,6 +18,13 @@ const STAGE_ICON: Record<ApprovalItem["stage"], React.ReactNode> = {
   second_person: <CheckCircledIcon />,
   green_batch: <StackIcon />,
   assigned_agent: <LightningBoltIcon />,
+};
+/** Each stage wears its tier's tint: Red rose, Green mint, Amber butter. */
+const STAGE_TINT: Record<ApprovalItem["stage"], "rose" | "mint" | "butter"> = {
+  specialist: "rose",
+  second_person: "rose",
+  green_batch: "mint",
+  assigned_agent: "butter",
 };
 const CONCURRENCY = 6; // the green batch releases this many at once; each release re-runs every check
 
@@ -70,9 +77,9 @@ export default function ApprovalsPage() {
       {!items && !error && <Skeleton height="240px" mt="5" />}
       {items && items.length === 0 && (
         <Rise>
-          <div className="k-card" style={{ padding: 40 }}>
+          <div className="k-card t-mint" style={{ padding: 40 }}>
             <Flex direction="column" align="center" gap="3">
-              <span className="k-chip" style={{ width: 56, height: 56, borderRadius: 18, color: "var(--grass-10)" }}>
+              <span className="k-chip round" style={{ width: 56, height: 56 }}>
                 <CheckCircledIcon width={22} height={22} />
               </span>
               <Text size="7" style={{ letterSpacing: "-0.03em" }}>Inbox zero</Text>
@@ -83,20 +90,18 @@ export default function ApprovalsPage() {
       )}
       {stages.length > 0 && stage && (
         <>
-          <Grid columns={{ initial: "1", sm: String(Math.min(stages.length, 4)) }} gap="3">
+          <Grid columns={{ initial: "1", sm: "2", lg: "4" }} gap="3">
             {stages.map((st) => (
               <Rise key={st}>
                 <motion.button
-                  className={`k-card k-link${st === stage ? " hi" : ""}`}
+                  className={`k-card k-link t-${STAGE_TINT[st]}${st === stage ? " k-picked" : ""}`}
                   style={{ border: 0, width: "100%", textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit" }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setPicked(st)}
                   aria-pressed={st === stage}
                 >
                   <Flex align="center" gap="3">
-                    <span className="k-chip" style={st === stage ? { background: "var(--k-hi-chip)", color: "var(--k-hi-ink)" } : undefined}>
-                      {STAGE_ICON[st]}
-                    </span>
+                    <span className="k-chip round">{STAGE_ICON[st]}</span>
                     <Text size="2" weight="medium">
                       {STAGES[st].label}
                     </Text>
@@ -166,6 +171,9 @@ function ApprovalRow({ item, onOpen }: { item: ApprovalItem; onOpen: () => void 
   return (
     <Card size="2">
       <Flex align="center" gap="4" wrap="wrap">
+        <span className={`k-ava t-${tierTint(p.tier)}`} aria-hidden style={{ width: 40, height: 40 }}>
+          {STAGE_ICON[item.stage]}
+        </span>
         <Box style={{ flex: 1, minWidth: 240 }}>
           <Flex align="center" gap="2" wrap="wrap">
             <TierBadge tier={p.tier} long={false} />
@@ -173,7 +181,7 @@ function ApprovalRow({ item, onOpen }: { item: ApprovalItem; onOpen: () => void 
             {p.sizing && <Text color="gray">· {money(p.sizing.amount)} × {p.sizing.installments}</Text>}
           </Flex>
           <Text as="div" size="1" color="gray" mt="1" className="tabular">
-            <Link href={`/cases/${p.case_id}`}>{p.case_id}</Link>
+            <Link href={`/cases/${p.case_id}?tab=review`}>{p.case_id}</Link>
             {p.window_start && ` · ${when(p.window_start)}`} · expires {when(p.expires_at)}
             {item.first_approver && ` · approved by ${item.first_approver}`}
           </Text>
@@ -212,7 +220,7 @@ function GreenBatch({ items, now, onDone }: { items: ApprovalItem[]; now: Date |
   }
 
   return (
-    <Card size="3">
+    <Card size="3" className="t-mint">
       <Flex justify="between" align="center" wrap="wrap" gap="3">
         <Text size="2">
           Sampled <Text weight="bold">{sample.length}</Text> of {items.length} for review. Check them, then release the batch.
@@ -227,9 +235,9 @@ function GreenBatch({ items, now, onDone }: { items: ApprovalItem[]; now: Date |
           const s = state[a.proposal.proposal_id];
           return (
             <motion.div key={a.proposal.proposal_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.03 } }}>
-              <Flex justify="between" align="center" py="1" style={{ borderBottom: "1px solid var(--gray-a3)" }}>
+              <Flex justify="between" align="center" py="2" style={{ borderBottom: "1px solid var(--k-line)" }}>
                 <Text size="2">
-                  {ACTION_LABEL[a.proposal.action]} · <Link href={`/cases/${a.proposal.case_id}`}>{a.proposal.case_id}</Link>
+                  {ACTION_LABEL[a.proposal.action]} · <Link href={`/cases/${a.proposal.case_id}?tab=review`}>{a.proposal.case_id}</Link>
                 </Text>
                 <AnimatePresence mode="wait">
                   {s && (
