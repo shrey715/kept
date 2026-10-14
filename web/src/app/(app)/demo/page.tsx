@@ -121,7 +121,7 @@ export default function DemoPage() {
       <Box>
         <Text size="1" weight="bold" color="ruby">GUIDED DEMO</Text>
         <Heading size="6" mt="1" mb="4">Jane&apos;s case, start to finish</Heading>
-        <Flex direction="column" gap="1" position="relative">
+        <Flex direction={{ initial: "row", md: "column" }} gap="1" position="relative" className="k-steps">
           {STEPS.map((st, i) => (
             <button key={st.title} onClick={() => setStep(i)} style={{ all: "unset", cursor: "pointer", position: "relative" }}>
               {i === step && (
@@ -131,12 +131,12 @@ export default function DemoPage() {
                 <Flex align="center" justify="center" style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, background: i < step ? "var(--accent-9)" : "var(--gray-a3)", color: i < step ? "white" : "var(--gray-11)", transition: "background 200ms" }}>
                   {i < step ? <CheckIcon /> : <Text size="1" weight="bold">{i + 1}</Text>}
                 </Flex>
-                <Text size="2" weight={i === step ? "bold" : "regular"} color={i === step ? undefined : "gray"}>{st.title}</Text>
+                <Text size="2" weight={i === step ? "bold" : "regular"} color={i === step ? undefined : "gray"} className="k-step-title">{st.title}</Text>
               </Flex>
             </button>
           ))}
         </Flex>
-        <Text as="p" size="1" color="gray" mt="4"><Kbd><ArrowLeftIcon aria-label="left arrow" /></Kbd> <Kbd><ArrowRightIcon aria-label="right arrow" /></Kbd> to move between steps</Text>
+        <Text as="p" size="1" color="gray" mt="4" className="k-desktop-only"><Kbd><ArrowLeftIcon aria-label="left arrow" /></Kbd> <Kbd><ArrowRightIcon aria-label="right arrow" /></Kbd> to move between steps</Text>
       </Box>
 
       <Box>

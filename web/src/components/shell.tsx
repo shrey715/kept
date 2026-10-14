@@ -70,7 +70,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="k-frame">
       <nav className="k-rail" aria-label="Main" style={{ viewTransitionName: "k-rail" }}>
-        <Link href="/" aria-label="Kept: back to the landing page" style={{ marginBottom: 14 }}>
+        <Link href="/" aria-label="Kept: back to the landing page" style={{ marginBottom: 14 }} className="k-rail-logo">
           <LogoMark size={44} />
         </Link>
         {items.map((n) => (
@@ -85,7 +85,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         ))}
         <span className="k-rail-gap" style={{ flex: 1 }} />
         <Tooltip content={dark ? "Light mode" : "Dark mode"} side="right">
-          <button className="k-rail-btn" aria-label="Toggle colour mode" onClick={() => setTheme(dark ? "light" : "dark")}>
+          <button className="k-rail-btn k-rail-theme" aria-label="Toggle colour mode" onClick={() => setTheme(dark ? "light" : "dark")}>
             {dark ? <SunIcon /> : <MoonIcon />}
           </button>
         </Tooltip>
@@ -99,6 +99,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <DropdownMenu.Label>
               {me.name} · {me.title}
             </DropdownMenu.Label>
+            <DropdownMenu.Item onSelect={() => setTheme(dark ? "light" : "dark")}>
+              {dark ? <SunIcon /> : <MoonIcon />} {dark ? "Light mode" : "Dark mode"}
+            </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Label>Switch persona</DropdownMenu.Label>
             {PERSONAS.map((p) => (
@@ -129,14 +132,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       <main className="k-main">
         <Flex align="center" justify="between" gap="3" wrap="wrap" mb="5">
-          <Box>
+          <Flex align="center" gap="3">
+            <Link href="/" aria-label="Kept: back to the landing page" className="k-mobile-only">
+              <LogoMark size={36} />
+            </Link>
+            <Box>
             <Text as="div" size="1" color="gray">
               {me.title}
             </Text>
             <Text as="div" size="3" weight="medium">
               {me.name}
             </Text>
-          </Box>
+            </Box>
+          </Flex>
           <Flex align="center" gap="2">
             <NotificationCenter me={me} />
             {health?.demo && now && (
@@ -147,8 +155,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Tooltip>
             )}
             {!path.startsWith("/demo") && (
-              <Link href="/demo" className="k-strong-btn">
-                <PlayIcon /> Guided demo
+              <Link href="/demo" className="k-strong-btn k-demo-btn">
+                <PlayIcon /> <span className="k-desktop-only">Guided demo</span>
               </Link>
             )}
           </Flex>

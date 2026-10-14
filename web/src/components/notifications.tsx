@@ -181,7 +181,7 @@ export function NotificationCenter({ me }: { me: Persona }) {
             </AnimatePresence>
           </button>
         </Popover.Trigger>
-        <Popover.Content align="end" sideOffset={10} className="k-pop" style={{ width: 380, padding: 0 }}>
+        <Popover.Content align="end" sideOffset={10} className="k-pop" style={{ width: "min(380px, calc(100vw - 24px))", padding: 0 }}>
           <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 16px 10px" }}>
               <Text size="4" weight="medium" style={{ letterSpacing: "-0.02em" }}>
