@@ -153,18 +153,31 @@ def models(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
     r = r[before].reset_index(drop=True)  # a score dated on or after the outcome could know it
     cut = r.created.quantile(0.5)
     tr = r.created < cut
-    h2h = [
-        f"| Model (trained on scored promises before {cut:%d %b}, tested on the {(~tr).sum():,} after) | AUC |",
-        "|---|---:|",
-        f"| Bank's ptp_break v2.1 | {roc_auc_score(r.kept[~tr], -r.bank_break[~tr]):.3f} |",
-    ]
+    y = r.kept[~tr].to_numpy()
+    preds = {"Bank's ptp_break v2.1": -r.bank_break[~tr].to_numpy()}
     for name, feats in [
         ("Kept, leak-free (6 features)", clean),
         ("Kept, leak-free + the bank's score", [*clean, "bank_break"]),
     ]:
         m = LGBMClassifier(**lgbm).fit(r.loc[tr, feats].astype(float), r.kept[tr])
+        preds[name] = m.predict_proba(r.loc[~tr, feats].astype(float))[:, 1]
+    # paired bootstrap: every model is scored on the same resampled promises, so the gap's interval is tight
+    rng = np.random.default_rng(0)
+    draws = [rng.integers(0, len(y), len(y)) for _ in range(BOOT)]
+    bank = preds["Bank's ptp_break v2.1"]
+    h2h = [
+        f"| Model (trained on scored promises before {cut:%d %b}, tested on the {(~tr).sum():,} after) | AUC [95% CI] | Against the bank's, AUC points [95% CI] |",
+        "|---|---:|---:|",
+    ]
+    for name, p in preds.items():
+        auc = [roc_auc_score(y[i], p[i]) for i in draws]
+        cell = "—"
+        if p is not bank:
+            gap = [roc_auc_score(y[i], p[i]) - roc_auc_score(y[i], bank[i]) for i in draws]
+            d = roc_auc_score(y, p) - roc_auc_score(y, bank)
+            cell = f"{100 * d:+.1f} [{100 * np.percentile(gap, 2.5):+.1f}, {100 * np.percentile(gap, 97.5):+.1f}]"
         h2h.append(
-            f"| {name} | {roc_auc_score(r.kept[~tr], m.predict_proba(r.loc[~tr, feats].astype(float))[:, 1]):.3f} |"
+            f"| {name} | {roc_auc_score(y, p):.3f} [{np.percentile(auc, 2.5):.3f}, {np.percentile(auc, 97.5):.3f}] | {cell} |"
         )
     note = (
         f"\n\nOnly promises the bank scored **before their outcome** are compared: the bank's score is dated {lag:.0f} days "
@@ -336,7 +349,8 @@ make worse:
 {h2h_md:s}
 
 On its own our leak-free model is weaker than the bank's `ptp_break` score. Used together, it adds what the bank's model
-doesn't see (payday timing and the customer's own promise history) and beats it. Because the bank's score only arrives
+doesn't see (payday timing and the customer's own promise history) and beats it; the interval on that gain excludes zero
+(paired bootstrap, the same resampled promises for every model). Because the bank's score only arrives
 days after a promise is made, the combination is for **re-scoring promises already made** (who needs a reminder before
 the due date); the due date itself is proposed with Kept's own model.
 """)
