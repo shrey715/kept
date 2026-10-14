@@ -236,7 +236,8 @@ body {
   gap: 2px;
   padding: 4px;
   border-radius: 18px;
-  background: color-mix(in srgb, var(--k-chip) 72%, transparent);
+  background: var(--k-chip);
+  box-shadow: 0 8px 30px -12px rgba(0, 0, 0, 0.35);
 }
 .k-navpill .k-tab {
   background: none;

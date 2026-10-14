@@ -63,8 +63,7 @@ export default function Landing() {
   const story = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: story, offset: ["start start", "end end"] });
   const p = useSpring(scrollYProgress, { stiffness: 140, damping: 32, mass: 0.6 });
-  const { scrollYProgress: page, scrollY } = useScroll(); // whole page: the reading-progress line
-  const barOpacity = useTransform(scrollY, [20, 120], [0, 1]);
+  const { scrollYProgress: page } = useScroll(); // whole page: the reading-progress line
 
   const heroOpacity = useTransform(p, [0, 0.09], [1, 0]);
   const l1 = useTransform(p, [0, 0.1], [0, -140]);
@@ -97,14 +96,8 @@ export default function Landing() {
         />
         {/* ------------------------------------------------ top bar */}
         <Box position="fixed" top="0" left="0" right="0" style={{ zIndex: 30 }}>
-          {/* frosted bar fades in once the page moves, so nothing scrolls under bare buttons */}
-          <motion.div
-            aria-hidden
-            className="glass"
-            style={{ position: "absolute", inset: 0, opacity: barOpacity, background: `${bg}c7`, borderBottom: "1px solid var(--gray-a4)" }}
-          />
           <Grid columns="1fr auto 1fr" align="center" gap="4" px={{ initial: "4", md: "6" }} style={{ height: 64, position: "relative" }}>
-            <Flex align="center" gap="3">
+            <Flex align="center" gap="3" className="k-navpill glass" style={{ width: "fit-content", padding: "6px 16px 6px 6px", gap: 12 }}>
               <Wordmark />
               <Box display={{ initial: "none", md: "block" }}>
                 <Text size="1" style={{ color: "var(--gray-10)", letterSpacing: "0.02em" }}>Promises customers can keep</Text>
