@@ -50,3 +50,6 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 - **The uplift signal is small** (call Qini 0.0073). Payroll features added to training didn't beat the champion.
 - **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
+- **Sign-in is a demo persona picker.** The API enforces every role rule itself (case scope, aggregates only for
+  analysts, masking for everyone but compliance), but it takes the caller's role from the request. In production the
+  API sits behind the bank's single sign-on (OIDC) and reads the user and role from the signed token.
