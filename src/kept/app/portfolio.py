@@ -169,7 +169,8 @@ def _insights(p: Portfolio) -> list[Insight]:
                 id="bucket",
                 title=f"The largest share of expected recovery is in the {top.key} bucket",
                 body=f"${top.expected:,.0f} of ${p.expected:,.0f} ({top.expected / p.expected:.0%}) across "
-                f"{top.cases:,} cases. Expected recovery is the uplift over no contact multiplied by the balance.",
+                f"{top.cases:,} cases. Expected recovery is the uplift over no contact"
+                " multiplied by the balance.",
                 tone="good",
                 sql=SQL_SLICES.format(col="current_bucket"),
             )
@@ -179,7 +180,7 @@ def _insights(p: Portfolio) -> list[Insight]:
             Insight(
                 id="stops",
                 title=f"{p.hard_stops:,} cases are excluded from contact",
-                body="Cease requests, insolvency holds and deceased flags block contact before any model is run.",
+                body="Cease requests, insolvency holds and deceased flags block contact before any model runs.",
                 tone="info",
                 sql="select count(*) from nba.cards where hard_stop",
             )
