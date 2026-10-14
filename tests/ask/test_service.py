@@ -520,3 +520,34 @@ def test_check_open_drops_is_open_unless_the_question_asks_about_open_cases() ->
     i = Intent(kind=IntentKind.METRIC, metric_id="hardship_rate", filters={"is_open": True}, confidence=0.9)
     assert check_open("hardship rate of cases opened in 2026, by product", i)[0].filters == {}
     assert check_open("hardship rate of open cases by product", i) == (i, None)
+
+
+def test_relevance_check_catches_routes_with_nothing_in_common() -> None:
+    from kept.ask.graph import relevant
+
+    assert not relevant(
+        "How many collections cases are open today, by current bucket?",
+        "delinquency_rate",
+        "Delinquency rate",
+        ["delinquent share", "arrears rate"],
+    )
+    assert relevant(
+        "What share of active card accounts are 1 or more days past due today?",
+        "delinquency_rate",
+        "Delinquency rate",
+        ["delinquent share"],
+    )
+    assert relevant(
+        "How much was paid against promises in September?",
+        "collected_amount",
+        "Amount collected",
+        ["collections"],
+    )
+
+
+def test_a_can_we_question_is_a_policy_question() -> None:
+    from kept.ask.graph import _POLICY
+
+    assert _POLICY.search("How many call attempts can we make on a mid-stage account in a week?")
+    assert _POLICY.search("Are collection calls allowed on Sundays?")
+    assert not _POLICY.search("What share of outbound calls were outside permitted calling hours?")

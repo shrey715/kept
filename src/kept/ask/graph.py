@@ -52,6 +52,46 @@ def check_channel(
     return fixed, f"Intent check: added channel = {named[0]} (the question names it)"
 
 
+# what a question may ask about each metric beyond its name and synonyms (a domain glossary, not examples)
+GLOSSARY = {
+    "delinquency_rate": "past due delinquent arrears overdue",
+    "collected_amount": "paid payment payments collected recovered",
+    "roll_rate": "rolled roll worse bucket deteriorated",
+    "average_dpd": "past due days",
+    "promise_kept_rate": "promise promises kept",
+    "broken_promise_rate": "promise promises broken",
+    "cure_rate": "cured current",
+    "hardship_rate": "hardship",
+    "contact_attempts_per_case": "attempts contacts touches",
+    "cost_per_contact": "cost",
+    "cost_per_rpc": "cost right party",
+    "rpc_rate": "right party reached",
+    "ptp_rate": "promise promises",
+    "write_off_rate": "written off write offs charged",
+    "payroll_delay_share": "payroll pay late",
+}
+_STOP = {"rate", "share", "cases", "case", "what", "many", "much", "with", "from", "that", "this", "which"}
+_STOP |= {"there", "were", "have", "does", "than", "more", "over", "last", "month", "today", "each"}
+_POLICY = re.compile(
+    r"\b(can|may|must) (we|i|you|an agent|agents|collectors?|the bank)\b|\b(allowed|prohibited)\b", re.I
+)
+
+
+def _words(text: str) -> set[str]:
+    return {
+        w.rstrip("s")
+        for w in re.findall(r"[a-z]+", text.lower().replace("-", " "))
+        if len(w) >= 3 and w not in _STOP
+    }
+
+
+def relevant(question: str, metric_id: str, name: str, synonyms: Any) -> bool:
+    """The routed metric shares a meaningful word with the question (its name, synonyms or glossary). A route
+    with nothing in common ("open cases by bucket" -> delinquency rate) goes to a lookup instead."""
+    about = " ".join([name, *list(synonyms or ()), metric_id.replace("_", " "), GLOSSARY.get(metric_id, "")])
+    return bool(_words(question) & _words(about))
+
+
 _OPEN = re.compile(r"\b(open|still open|currently open|active|outstanding)\b", re.I)
 
 
@@ -202,6 +242,11 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "response": ask._unsure(r, "I couldn't work out what you're asking."),
                 "trace": ["Route: failed"],
             }
+        if intent.kind is not IntentKind.POLICY and _POLICY.search(r.question):  # "can we ...?" asks a rule
+            intent = intent.model_copy(update={"kind": IntentKind.POLICY, "metric_id": None})
+            policy_note = ["Intent check: the question asks what we may do, so policy"]
+        else:
+            policy_note = []
         s["seen"]["intent"] = intent.kind.value
         spans = resolve_dates(q.text, as_of)
         filled = (
@@ -220,7 +265,7 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "trace": [f"{label} (confidence {intent.confidence:.2f}: too low)"],
             }
         dates = [f"Date check: {spans[0][0]!r} -> {spans[0][1]} to {spans[0][2]}"] if filled else []
-        return out | {"trace": [f"{label} (confidence {intent.confidence:.2f})", *dates]}
+        return out | {"trace": [f"{label} (confidence {intent.confidence:.2f})", *policy_note, *dates]}
 
     def policy(s: AskState) -> AskState:
         resp = ask._policy(s["request"], s["question"], s["intent"], s["as_of"])
@@ -231,6 +276,12 @@ def build_graph(ask: CollectionsAsk) -> Any:
         query = ask._queries.get(s["intent"].metric_id or "")
         if query is None:  # the router named a metric we don't certify: a lookup can still answer
             return {"reroute": True, "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"]}
+        d = ask._metrics.get(s["intent"].metric_id or "")
+        if d is not None and not relevant(s["request"].question, d.metric_id, d.metric_name, d.synonyms):
+            return {
+                "reroute": True,
+                "trace": [f"Relevance check: the question names nothing of {d.metric_name}; trying a lookup"],
+            }
         intent, repaired = repair_intent(s["intent"], query)
         intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
         intent, open_note = check_open(s["request"].question, intent)
