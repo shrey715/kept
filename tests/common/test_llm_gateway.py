@@ -77,6 +77,18 @@ def test_a_local_model_decodes_to_the_schema_a_hosted_one_gets_json_mode(
     assert patched[1]["response_format"] == {"type": "json_object"}
 
 
+def test_llamacpp_models_go_to_the_local_server_with_the_schema(
+    patched: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("KEPT_LLAMACPP_API_BASE", "http://127.0.0.1:9999/v1")
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
+    gw = LiteLLMGateway(model="llamacpp/gemma4", audit_log=InMemoryAuditLog())
+    gw.complete(system="s", user=_text("u"), purpose=Purpose.TEXT_EXTRACT, actor_id="x", json_schema=schema)
+    kw = patched[0]
+    assert kw["model"] == "openai/gemma4" and kw["api_base"] == "http://127.0.0.1:9999/v1"
+    assert kw["response_format"]["json_schema"]["schema"] == schema
+
+
 def test_every_call_logged_including_failures(patched: list[dict[str, Any]]) -> None:
     log = InMemoryAuditLog()
     gw = LiteLLMGateway(model="test-model", audit_log=log)

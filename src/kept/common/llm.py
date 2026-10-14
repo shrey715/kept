@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 import uuid
@@ -34,6 +35,9 @@ class Purpose:
     ASK_CHART = "ask.chart"  # kept.app.charts: pick a chart for the result rows (#100)
     TEXT_EXTRACT = "text.extract"  # Track C: note/transcript extraction
     OPS_PREFLIGHT = "ops.preflight"  # kept preflight: one tiny call to prove a model answers before a demo
+
+
+LOCAL_PREFIXES = ("ollama", "llamacpp/")  # on this machine: free, no quota, schema-constrained decoding
 
 
 class LiteLLMGateway:
@@ -101,11 +105,17 @@ class LiteLLMGateway:
             "timeout": self.timeout_s,
             "drop_params": True,  # free models differ in what they accept
         }
+        if self.model.startswith("llamacpp/"):  # our llama-server: OpenAI-compatible, on this machine
+            kwargs |= {
+                "model": "openai/" + self.model.removeprefix("llamacpp/"),
+                "api_base": os.environ.get("KEPT_LLAMACPP_API_BASE", "http://127.0.0.1:8081/v1"),
+                "api_key": "local",
+            }
         if json_schema is not None:
             # a local model decodes to the schema itself; free hosted tiers accept only a subset of it
             kwargs["response_format"] = (
                 {"type": "json_schema", "json_schema": {"name": "reply", "schema": dict(json_schema)}}
-                if self.model.startswith("ollama")
+                if self.model.startswith(LOCAL_PREFIXES)
                 else {"type": "json_object"}
             )
 
