@@ -342,7 +342,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Steward Queue */
+        /**
+         * Steward Queue
+         * @description One page of the review queue (tens of thousands on real data); X-Total-Count is the whole count.
+         */
         get: operations["steward_queue_steward_queue_get"];
         put?: never;
         post?: never;
@@ -1975,7 +1978,10 @@ export interface operations {
     };
     steward_queue_steward_queue_get: {
         parameters: {
-            query?: never;
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1989,6 +1995,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StewardItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

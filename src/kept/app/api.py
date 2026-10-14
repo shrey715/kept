@@ -19,7 +19,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -213,7 +213,7 @@ def create_app(services: Services) -> FastAPI:
                                                   503 no store
     POST /ask                                     200 AskAnswer | Refusal | Clarification
     POST /chart                                   200 ChartChoice (rows in the body; LLM or rules pick)
-    GET  /steward/queue                           200 list[StewardItemOut]
+    GET  /steward/queue?offset=&limit=           200 list[StewardItemOut], X-Total-Count
     POST /steward/items/{item_id}                 200 {"status": ...}; 404 unknown item
     POST /extractions/{source_id}/confirm         200 TextExtraction; 403 not the assigned agent;
                                                   404 unknown source/case; 422 bad edit; 503 no store
@@ -519,9 +519,14 @@ def create_app(services: Services) -> FastAPI:
         )
 
     @app.get("/steward/queue", response_model=list[StewardItemOut])
-    def steward_queue() -> list[StewardItemOut]:
+    def steward_queue(
+        response: Response, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
+    ) -> list[StewardItemOut]:
+        """One page of the review queue (tens of thousands on real data); X-Total-Count is the whole count."""
         if services.steward is None:
             raise HTTPException(503, "steward queue not configured")
+        pending = services.steward.pending()
+        response.headers["X-Total-Count"] = str(len(pending))
         return [
             StewardItemOut(
                 item_id=i.item_id,
@@ -530,7 +535,7 @@ def create_app(services: Services) -> FastAPI:
                 score=i.decision.pair.score,
                 reasons=list(i.reasons),
             )
-            for i in services.steward.pending()
+            for i in pending[offset : offset + limit]
         ]
 
     @app.post("/steward/items/{item_id}")

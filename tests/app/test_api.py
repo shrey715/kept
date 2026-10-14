@@ -323,6 +323,14 @@ def test_steward_unsure_keeps_the_item_pending() -> None:
     assert r.json() == {"status": "pending"} and len(client.get("/steward/queue").json()) == 1
 
 
+def test_steward_queue_pages_and_reports_the_total() -> None:
+    queue, _ = _queue_with_one_pair()
+    client = _steward_client(queue, InMemoryAuditLog())
+    first, past = client.get("/steward/queue?limit=1"), client.get("/steward/queue?offset=1")
+    assert len(first.json()) == 1 and past.json() == []
+    assert first.headers["x-total-count"] == past.headers["x-total-count"] == "1"
+
+
 def test_steward_resolve_errors() -> None:
     queue, item_id = _queue_with_one_pair()
     client = _steward_client(queue, InMemoryAuditLog())

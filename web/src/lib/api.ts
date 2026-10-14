@@ -104,7 +104,12 @@ export const api = {
   payChoose: (token: string, installments: number, stated: StatedPay | null) =>
     call<PromiseSizing>(`/pay/${encodeURIComponent(token)}`, post({ installments, stated })),
   askSource: (citation: Citation, w: Who) => call<SourceText>("/ask/source", post({ citation, user_id: w.userId, role: w.role })),
-  stewardQueue: () => call<StewardItem[]>("/steward/queue"),
+  /** One page of the match review queue, and the whole queue's size (X-Total-Count). */
+  stewardQueue: async (offset: number, limit: number) => {
+    const r = await fetch(`/api/steward/queue?offset=${offset}&limit=${limit}`);
+    if (!r.ok) throw new ApiError(r.status, r.status >= 500 ? "Service error" : r.statusText);
+    return { items: (await r.json()) as StewardItem[], total: Number(r.headers.get("X-Total-Count") ?? 0) };
+  },
   stewardResolve: (itemId: string, verdict: string, stewardId: string) =>
     call<{ status: string }>(`/steward/items/${encodeURIComponent(itemId)}`, post({ verdict, steward_id: stewardId })),
 };
