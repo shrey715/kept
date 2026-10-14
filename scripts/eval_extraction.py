@@ -4,7 +4,7 @@
     uv run python scripts/eval_extraction.py --source transcripts --calls whisper   # or release
 
 Redacts each text with PresidioRedactor, extracts through LiteLLMGateway (KEPT_TEXT_LLM_MODEL,
-default the local Ollama model), and writes predictions to data/labels/runs/ for error analysis.
+default Qwen3.8-27B on llama.cpp), and writes predictions to data/labels/runs/ for error analysis.
 Tune on --split tune; check the gate once on --split holdout.
 """
 
@@ -86,7 +86,7 @@ def main() -> None:
     if args.calls == "whisper":  # no speaker labels: one mixed track
         src = {i: (c, audio[i], ts) for i, (c, _, ts) in src.items()}
     redactor = PresidioRedactor()
-    model = os.environ.get("KEPT_TEXT_LLM_MODEL", "ollama/gemma3:12b-it-qat")
+    model = os.environ.get("KEPT_TEXT_LLM_MODEL", "llamacpp/qwen3.8-27b")
     extractor = LLMExtractor(LiteLLMGateway(model=model, audit_log=DuckDBAuditLog(), timeout_s=120))
 
     t0 = time.time()

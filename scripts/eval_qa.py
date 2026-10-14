@@ -1,6 +1,6 @@
 """Score kept.text.qa against the release's QA labels (public 500 transcripts).
 
-    uv run python scripts/eval_qa.py [N] [--model ollama/gemma3:12b-it-qat]
+    uv run python scripts/eval_qa.py [N] [--model llamacpp/qwen3.8-27b]
 
 Reads the redacted transcripts from the Parquet export (no warehouse needed). Prints per-item accuracy, the
 coaching flag's precision and recall, and the score's mean absolute error. Item 6 needs the account balance,
@@ -25,7 +25,7 @@ from kept.text.redact import stored_redacted
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("n", type=int, nargs="?", default=100)
-    ap.add_argument("--model", default="ollama/gemma3:12b-it-qat")
+    ap.add_argument("--model", default="llamacpp/qwen3.8-27b")
     a = ap.parse_args()
     src = sorted(glob.glob("data/exports/redacted_notes/*.parquet"))[-1]
     con = duckdb.connect()

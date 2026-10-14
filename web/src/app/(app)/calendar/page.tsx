@@ -246,7 +246,8 @@ const fitting = (space: number, chip: number) => Math.max(1, Math.floor((space -
 
 function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; onDay: (d: Date) => void; height: number | null }) {
   // six week rows share the height: the cell minus its padding and day number holds this many 23px chips
-  const maxIn = height ? Math.min(4, fitting((height - 20 - 27 - 30) / 6 - 12 - 30, 23)) : 3;
+  // the "+N more" sits beside the day number, so the rest of the cell is all chips
+  const maxIn = height ? Math.min(4, Math.max(1, Math.floor(((height - 20 - 27 - 30) / 6 - 12 - 30) / 23))) : 3;
   return (
     <div className="k-cal k-dots" data-fit={height != null} style={height ? { height } : undefined}>
       <div className="k-cal-grid k-cal-head" aria-hidden>
@@ -260,18 +261,20 @@ function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date;
           const evs = byDay.get(key(d)) ?? [];
           return (
             <div key={i} role="gridcell" className="k-cal-cell" data-out={d.getMonth() !== month} data-today={key(d) === today}>
-              <button className="k-cal-num" onClick={() => onDay(d)} aria-label={`Week of ${d.toDateString()}`}>
-                {d.getDate()}
-              </button>
-              <div className="k-cal-evs">
-                {evs.slice(0, maxIn).map((e) => (
-                  <EventChip key={e.id} e={e} compact />
-                ))}
+              <div className="k-cal-cell-head">
+                <button className="k-cal-num" onClick={() => onDay(d)} aria-label={`Week of ${d.toDateString()}`}>
+                  {d.getDate()}
+                </button>
                 {evs.length > maxIn && (
                   <button className="k-cal-more" onClick={() => onDay(d)}>
                     +{evs.length - maxIn} more
                   </button>
                 )}
+              </div>
+              <div className="k-cal-evs">
+                {evs.slice(0, maxIn).map((e) => (
+                  <EventChip key={e.id} e={e} compact />
+                ))}
               </div>
             </div>
           );
@@ -351,7 +354,7 @@ function AgendaRow({ e }: { e: CalendarEvent }) {
       <span className={`k-ava t-${tintOf(e)}`} aria-hidden>
         {look.icon}
       </span>
-      <Box style={{ minWidth: 0, flex: 1 }}>
+      <Box className="k-agenda-main" style={{ minWidth: 0, flex: 1 }}>
         <Text as="div" size="2" weight="medium">
           {e.title}
         </Text>

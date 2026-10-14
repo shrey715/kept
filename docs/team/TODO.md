@@ -35,7 +35,9 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 - [x] Gemma 4 26B tried as challenger: too slow on 16 GB (24 s a note), not more accurate; stays out
 - [x] Gemma 3 12B on llama-server (the standard QAT Q4_0 GGUF; Ollama's own file isn't llama.cpp-compatible)
 - [x] Local models only (14 Oct): the Ask runs on local Gemma 3 too; no hosted API, no keys
-- [~] LangGraph Ask: the pipeline as graph nodes, a per-answer trace in the UI, a channel intent check; first run 21/21 · 34/42 (KS-002: the router dropped "calls", now checked) · drill pending; merges only at 21/21, ≥ 35/42, ≥ 26/30
+- [x] LangGraph Ask with deterministic checks, a convention linter, reviewed templates and a judge, on Qwen3.8-27B (llama.cpp): released 21/21, stress 38/42, unseen drill 27/30 (#175)
+- [x] Text extraction and briefs on Qwen3.8-27B too: passes the gate on notes and calls (`extraction_gate.md`); Gemma and Ollama removed
+- [ ] Optional: Qwen3.6-35B-A3B bake-off (download paused, resumable); Qwen3.8 already clears every bar
 
 ## Next: insight pages
 - [x] Case page: full TreeSHAP drivers (both signs), warehouse history (contacts, promises, month-end balance and payments), stat tiles (#170)
@@ -47,19 +49,21 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 
 ## Next: models (behind the champion/challenger gate)
 - [x] Uplift hyperparameter search, 40 candidates (`scripts/tune_uplift.py`, `docs/reports/tuning.md`): worse than the champion on held-out decisions, champion kept
-- [ ] Promised-date recall on notes (0.73): prompt or rule fix, re-gated
+- [x] Promised-date recall on notes: 0.73 to 0.83 with Qwen3.8-27B (same prompt, re-gated on the holdout)
 
 ## Deck
+- [x] HTML presentation (`docs/deck/present/index.html`) and the PDF rebuilt with the final numbers (`make deck`)
 - [x] LaTeX deck (`make deck`, 24 slides with appendix) and speaker notes; `docs/team/DECK_ISSUES.md` DK-01 to DK-17 drafted
 
 ## Phase 5 (unchanged, see NEXT_ROUND_PLAN.md §4a)
-- [ ] Final benchmark run to `data/exports/reports/`
+- [x] Final benchmark run to `data/exports/reports/` (local Qwen, 14 Oct)
 - [x] Secret scan of the working tree and full history: clean (`scripts/secret_scan.sh`, 115,795 added lines, 488 commits)
 - [~] Deck PDF in the repo (`docs/deck/kept.pdf`); the video link is the team's to add
 - [ ] Two dress rehearsals and the Q&A drill; track logs updated
 - [ ] Freeze Thu 18:00; evening refresh and preflight GO (§7a)
 
 ## Sources and polish
+- [x] Studio redesign of every page and a calendar with `.ics` export, fitted to the window (#176)
 - [x] Ask sources: table/row/freshness chips, formatted and highlighted SQL with copy, numbered policy quotes with Verify
 - [x] Phone access: dev server allows the LAN IP (KEPT_DEV_ORIGINS)
 

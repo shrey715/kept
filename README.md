@@ -54,7 +54,7 @@ Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has t
 2. **Collections Ask** (LiteLLM, sqlglot, LanceDB): rules refuse protected / bulk / write questions first; certified
    metrics and reviewed SQL templates before any free SQL; dates worked out in code; SQL guarded; every number in the
    answer must be in the result rows; policy, incident and call answers cite their source.
-3. **Text + features** (Presidio, local Gemma 3 12B, SetFit, Feast): redact first; extract hardship / promises /
+3. **Text + features** (Presidio, local Qwen3.8-27B, SetFit, Feast): redact first; extract hardship / promises /
    disputes with a verbatim quote per value; backfill history with SetFit; cash-flow hardship rule; point-in-time
    features, same values online, parity and drift checks.
 4. **Decisioning** (LightGBM, TreeSHAP, MLflow, FastAPI, Next.js): hard stops → permissions → hardship override (all
@@ -72,7 +72,7 @@ system** runs the nightly pipeline over the 1M-customer release, then serves eve
 |---|---|---|
 | Python + [uv](https://docs.astral.sh/uv/) | 3.12, uv ≥ 0.5 | everyone |
 | Node + [pnpm](https://pnpm.io/) | Node 22, pnpm ≥ 10 | the web app |
-| [Ollama](https://ollama.com/) with `gemma3:12b-it-qat` (`ollama pull gemma3:12b-it-qat`, ~9 GB) | current | text extraction (a GPU with ~11 GB VRAM) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) `llama-server` (CUDA build) with Qwen3.8-27B `UD-Q3_K_XL` GGUF (~13 GB, `~/models/`) | build of 10 Oct 2026 or later | every model call: the Ask, briefs, text extraction (a GPU with 16 GB VRAM) |
 | RAM | 16 GB for serving; **≥ 24 GB for the full nightly** (land peaks at ~7 GB, match at ~15 GB) | the machine that runs `kept nightly` |
 | Disk | ~25 GB free (release 7.3 GB, warehouse ~9 GB, exports) | the real system |
 
@@ -89,7 +89,7 @@ cp .env.example .env       # then fill it in (below)
 | Variable | Set it to |
 |---|---|
 | `KEPT_HOLDOUT_SALT` | **the team's one shared value.** It decides which cases are in the 5% hold-out; every machine must match, and it never changes after go-live |
-| `KEPT_TEXT_LLM_MODEL`, `KEPT_ASK_LLM_MODEL`, `OLLAMA_API_BASE` | leave as in `.env.example`: local Gemma 3 12B through Ollama for everything. No API keys |
+| `KEPT_TEXT_LLM_MODEL`, `KEPT_ASK_LLM_MODEL`, `KEPT_LLAMACPP_API_BASE` | leave as in `.env.example`: local Qwen3.8-27B on llama.cpp for everything. No API keys |
 | `MLFLOW_TRACKING_URI` | `sqlite:///mlflow.db` (MLflow 3 refuses the old `file:./mlruns`) |
 | `KEPT_KILL_SWITCH` | `false`; `true` falls every card back to the current strategy |
 
@@ -139,7 +139,7 @@ uv run kept extract --load-redacted           # redacted notes and transcripts -
 
 **Every night after that:** `uv run kept nightly`. It stops at the first failing step, so a blocked
 quality gate publishes no features or cards; resume with `--from <step>`, leave a step out with
-`--skip <step>` (e.g. `--skip extract` on a machine without Ollama). `kept features` defaults to the
+`--skip <step>` (e.g. `--skip extract` on a machine without the local model). `kept features` defaults to the
 latest 06:00 UTC run, so cards are never stale.
 
 | Step | Command | Owner | What it does |
@@ -149,7 +149,7 @@ latest 06:00 UTC run, so cards are never stale.
 | match | `kept match --train-sample-mod 5` | A | exact links + Splink (trained on a 1-in-5 sample, scores every key) -> crosswalk |
 | gold | `kept build --gold-only` | A | crosswalk + extractions -> `gold.c360_customer`, hardship via `hardship.combine` |
 | gate | `kept gate` | A | quality rules Q1-Q5; blocks the run on failure |
-| extract | `kept extract --new` | C | tonight's new notes -> redaction -> gemma3 -> `text.extractions` |
+| extract | `kept extract --new` | C | tonight's new notes -> redaction -> Qwen3.8-27B -> `text.extractions` |
 | features | `kept features` | D | dbt features (point in time) -> Parquet -> Feast online store |
 | parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
 | score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
@@ -173,10 +173,9 @@ batch step (`kept nightly`, `kept gate` ...): the API holds the warehouse while 
 
 ```bash
 git checkout main && git pull --ff-only && uv sync --all-extras --inexact
-ollama serve &                                                                    # if Ollama isn't already running
-curl -s localhost:11434/api/generate -d '{"model":"gemma3:12b-it-qat","keep_alive":-1}'   # keep gemma3 loaded: a live note takes ~5 s
-uv run kept serve                                                                 # terminal 1: API on :8000, real data
-cd web && pnpm install && pnpm dev                                                # terminal 2: app on http://localhost:3000
+make llm                                                                          # terminal 1: Qwen3.8-27B on llama.cpp, :8081 (~15 GB VRAM)
+make serve                                                                        # terminal 2: API on :8000, real data (embeddings on the CPU)
+cd web && pnpm install && pnpm dev                                                # terminal 3: app on http://localhost:3000
 curl -s localhost:8000/health                                                     # "demo": false means real data
 ```
 
@@ -185,7 +184,7 @@ Open <http://localhost:3000> (use `localhost`, not `127.0.0.1`), then **Guided d
 `/signin?as=hs-1&next=/approvals` (hardship specialist), `/signin?as=tl-1&next=/approvals` (team lead),
 `/signin?as=c-1&next=/audit` (compliance), `/signin?as=an-1&next=/ask` (analyst),
 `/signin?as=ds-1&next=/steward` (data steward). The Ask runs on the local model:
-Ollama must be up with `gemma3:12b-it-qat` pulled.
+`make llm` must be up (`curl localhost:8081/health`).
 
 **Serve it** (the API owns the warehouse while it runs: no batch jobs against it at the same time):
 
@@ -195,7 +194,7 @@ make web                   # or the production build above
 ```
 
 - `/queue` reads the nightly's cards (an agent sees their own cases); opening a case re-checks it live.
-- **Add a note** on a case runs live extraction (Presidio + gemma3, a few seconds) and re-checks the card:
+- **Add a note** on a case runs live extraction (Presidio + Qwen3.8-27B, a few seconds) and re-checks the card:
   a hardship note turns it Red. A possible cease request shows a red banner the assigned agent confirms.
 - The Ask answers with the local model; policy questions cite the section.
 - Without Presidio installed (`make setup-c`) adding a note answers 503; everything else works.
@@ -264,7 +263,7 @@ cd web && pnpm lint && npx tsc --noEmit
 - **Reloading the backfill never undoes a person (A, found with C):** the extraction loader only replaces a row
   with a newer one, and never drops an agent's confirmation.
 
-- **Text extraction runs on a local model (C):** `gemma3:12b` through Ollama on the team's GPU,
+- **Text extraction runs on a local model (C):** Qwen3.8-27B through llama.cpp on the team's GPU,
   not a hosted API: no rate limits, no cost, and note text never leaves the machine. Every value
   needs a verbatim quote from the note, or it is dropped.
 - **Cease from text needs an agent's confirmation (C):** cease failed the F1 gate on precision
@@ -292,8 +291,8 @@ cd web && pnpm lint && npx tsc --noEmit
 - **The demo runs on real data (C, in D's web app):** the guided demo uses a real case and agent when the server
   is not in demo mode, and the agent persona works a real agent's queue (179 open cases).
 
-- **The Ask on a local model (B):** Gemma 3 12B on this machine through LiteLLM, like text extraction. It began on
-  a free hosted tier; since 14 October everything is local: no API keys, no quota, and no question leaves the
+- **The Ask on a local model (B):** Qwen3.8-27B on this machine (llama.cpp, through LiteLLM), like text extraction. It
+  began on a free hosted tier; since 14 October everything is local: no API keys, no quota, and no question leaves the
   machine. Every question is still redacted (Presidio) before any LLM call, and each call is logged without the
   prompt text.
 - **Certified SQL for 14 of 15 metrics (B):** the metric definitions' formulas are pseudo-SQL, so each
@@ -326,12 +325,12 @@ cd web && pnpm lint && npx tsc --noEmit
   pipeline, Ask, text and hardship, NBA engine, web app), running and monitoring the heavy GPU jobs and the
   benchmark, tuning prompts and certified SQL from what the benchmark showed, and writing the reports and deck.
   Every change went through the tests and a person's review before merging.
-- **gemma3 12B (local, Ollama):** extracts the text features from redacted notes, and labelled 1,604 notes to
-  train SetFit. Tuned and gated on the release's public labels (30% held out).
+- **Qwen3.8-27B (local, llama.cpp):** extracts the text features from redacted notes and answers the Ask (Gemma 3 12B
+  labelled 1,604 notes to train SetFit earlier). Tuned and gated on the release's public labels (30% held out).
 - **SetFit (`BAAI/bge-small-en-v1.5`):** the fast classifier that backfills hardship for all history.
-- **Gemma 3 12B, local (the Ask too, since 14 Oct):** the Ask's scope check, question routing, SQL drafting for
-  lookups, and plain-English narration of results. Its output is checked by code: the SQL guard before anything
-  runs, and the grounding check on every number.
+- **Qwen3.8-27B in the Ask:** the scope check, question routing, SQL drafting for lookups, judging drafts that
+  disagree, and plain-English narration of results. Its output is checked by code: intent checks and a convention
+  linter, the SQL guard before anything runs, and the grounding check on every number (`docs/reports/ask_accuracy.md`).
 
 ## Layout
 
@@ -369,6 +368,6 @@ data/             local data only (git-ignored)
 
 ## Stack
 
-DuckDB, dbt, Splink, Soda (Layer 1) · LiteLLM, sqlglot, LanceDB (Layer 2) · Presidio, spaCy, Gemma 3 (Ollama), SetFit,
+DuckDB, dbt, Splink, Soda (Layer 1) · LiteLLM, sqlglot, LanceDB (Layer 2) · Presidio, spaCy, Qwen3.8-27B (llama.cpp), SetFit,
 Feast (Layer 3) · LightGBM, TreeSHAP, MLflow, FastAPI, Next.js (Layer 4) · pandoc + XeLaTeX for the reports.
 Python 3.12 with `uv`; each track's libraries are an optional extra in `pyproject.toml`.

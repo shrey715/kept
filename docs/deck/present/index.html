@@ -181,7 +181,7 @@ td b{font-weight:600}
     <div class="layer"><span class="tag">3 · Models</span><span class="t">Score, read, listen</span>
       <p class="muted small">Uplift per action, promise kept, text and voice signals with quotes.</p>
       <p class="why"><b>Why:</b> trees for tabular decisions (fast, exact explanations); a local LLM only where text needs reading.</p>
-      <div class="tech"><div>LightGBM T-learner<em>uplift vs waiting, TreeSHAP</em></div><div>Gemma 3 12B QAT<em>Ollama or llama.cpp, schema-constrained</em></div><div>Whisper large-v3-turbo<em>speech on the GPU</em></div></div></div>
+      <div class="tech"><div>LightGBM T-learner<em>uplift vs waiting, TreeSHAP</em></div><div>Qwen3.8-27B<em>llama.cpp, schema-constrained, 2×16k slots</em></div><div>Whisper large-v3-turbo<em>speech on the GPU</em></div></div></div>
     <div class="layer"><span class="tag">4 · Decide</span><span class="t">Rules, sizing, tiers, release</span>
       <p class="muted small">Hard stops, payday sizing, permissions, tiering; a person releases and the gate rechecks.</p>
       <p class="why"><b>Why:</b> rules a regulator can read, outside the model, run twice: before scoring and at release.</p>
@@ -204,7 +204,7 @@ td b{font-weight:600}
       <ol class="small" style="margin:10px 0 0;padding-left:18px;line-height:1.9">
         <li>Land 31 tables, dbt build silver and gold, data contract gate</li>
         <li>Identity: exact links, then Splink; doubtful pairs to a steward</li>
-        <li>Text: redact, extract with quotes (local Gemma 3)</li>
+        <li>Text: redact, extract with quotes (local Qwen3.8-27B)</li>
         <li>Features as of 06:00 UTC into Feast; drift (PSI) and fairness checks</li>
         <li>Score every open case: <b>96,000 cards in about 85 s</b></li>
       </ol></div>
@@ -263,23 +263,23 @@ td b{font-weight:600}
 <section class="slide" data-title="Why this LLM">
   <div class="glow"></div>
   <div class="eyebrow">LLM choice · reading notes, calls and questions</div>
-  <h2>Gemma 3 12B QAT on our own GPU: the largest model that fits, fast, and private.</h2>
+  <h2>Qwen3.8-27B on llama.cpp: the strongest model our GPU holds, picked on our own benchmarks.</h2>
   <div class="grid stagger" style="grid-template-columns:1.35fr 1fr;margin-top:3.5vh;align-items:start">
     <table>
       <tr><th>Option</th><th>Verdict</th><th>Evidence</th></tr>
-      <tr><td><b>Gemma 3 12B QAT</b><br><span class="muted small">local, 4-bit quantisation-aware</span></td><td><span class="pill ok">chosen</span></td><td class="small">Every extraction field F1 ≥ 0.80; hardship recall 1.00; about 3 s a note; fits 16 GB.</td></tr>
+      <tr><td><b>Qwen3.8-27B</b><br><span class="muted small">Aug 2026, Apache 2.0, 3-bit, llama.cpp</span></td><td><span class="pill ok">chosen</span></td><td class="small">Released 21/21, stress 38/42, unseen 27/30; passes the extraction gate on notes and calls; about 51 tokens a second in 15 GB.</td></tr>
+      <tr><td>Gemma 3 12B on Ollama</td><td><span class="pill no">replaced</span></td><td class="small">18/21, 30/42 and 22/30, and Ollama ran a 4,096-token window under a 9,000-token prompt.</td></tr>
       <tr><td>Gemma 4 26B</td><td><span class="pill no">rejected</span></td><td class="small">Needs experts on the CPU: 24 s a note, runaway replies, no better on held-out notes.</td></tr>
       <tr><td>Hosted API (free tier)</td><td><span class="pill no">dropped</span></td><td class="small">Customer words leave the bank; a quota ran out mid-benchmark and turned answers into refusals.</td></tr>
-      <tr><td>Fine-tuned classifier only</td><td><span class="pill no">not enough</span></td><td class="small">Fast for backfill (SetFit), but can't quote evidence or extract dates and amounts.</td></tr>
     </table>
     <div class="grid" style="gap:12px">
       <div class="card hot"><div class="mid">152 → 0</div><p class="small" style="margin-top:6px">malformed replies on 1,172 calls once decoding is constrained to the JSON schema</p></div>
-      <div class="card"><div class="mid">Ollama · llama.cpp</div><p class="small muted" style="margin-top:6px">one gateway (LiteLLM), two local servers: llama.cpp adds four parallel slots</p></div>
+      <div class="card"><div class="mid">4k → 16k</div><p class="small muted" style="margin-top:6px">tokens per request: Ollama silently cut the Ask's 9k-token prompt; llama.cpp sets the window explicitly</p></div>
       <div class="card"><div class="mid">0 keys</div><p class="small muted" style="margin-top:6px">no hosted API anywhere: notes, calls, briefs and the Ask all run here</p></div>
     </div>
   </div>
   <div class="foot"><span><b>Kept</b> · extraction_gate.md · src/kept/common/llm.py</span><span>8</span></div>
-  <aside>Why this model: it's the largest that fits our 16 GB GPU at speed, and QAT keeps 4-bit quality close to full precision. We tested the bigger Gemma 4 and rejected it on speed and accuracy. Schema-constrained decoding is what made a 12B model reliable: malformed replies went to zero.</aside>
+  <aside>Why this model: we measured, we did not assume. The 12B model kept missing conventions; tracing it showed Ollama silently ran a 4k window under a 9k prompt. We moved to llama.cpp with an explicit window, then picked the newest strong open model that fits 16 GB, Qwen3.8-27B at 3-bit, and re-ran every benchmark. Bigger Gemma 4 and hosted APIs were rejected on speed, privacy and a quota that broke a run. Schema-constrained decoding is what makes any local model reliable: malformed replies went to zero.</aside>
 </section>
 
 <!-- 9 · speech, retrieval, privacy -->
@@ -299,18 +299,18 @@ td b{font-weight:600}
 <section class="slide" data-title="Why a graph">
   <div class="glow"></div>
   <div class="eyebrow">Orchestration · why LangGraph</div>
-  <h2>A 12B model is kept on the rails by a graph of deterministic checks.</h2>
+  <h2>A local model is kept on the rails by a graph of deterministic checks.</h2>
   <svg viewBox="0 0 1100 300" style="width:100%;margin-top:3vh">
     <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="rgba(255,255,255,.5)"/></marker></defs>
     <g id="graph"></g>
   </svg>
   <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:1vh">
-    <div class="card"><div class="mid">18/21</div><p class="small muted">released questions with gold, on the local model</p></div>
-    <div class="card"><div class="mid">30/42</div><p class="small muted">our stress suite, aimed at the release's traps</p></div>
-    <div class="card"><div class="mid">21/30</div><p class="small muted">an unseen drill we never tuned on</p></div>
+    <div class="card"><div class="mid">21/21</div><p class="small muted">released questions with gold, on the local model</p></div>
+    <div class="card"><div class="mid">38/42</div><p class="small muted">our stress suite, aimed at the release's traps</p></div>
+    <div class="card"><div class="mid">27/30</div><p class="small muted">an unseen drill we never tuned on</p></div>
   </div>
   <div class="foot"><span><b>Kept</b> · src/kept/ask/graph.py · ask_accuracy.md</span><span>10</span></div>
-  <aside>Why a graph and not one big prompt: each step is testable and traced, and when the smaller model slips (drops "calls", reads "opened" as "open", names a column loosely) a deterministic check fixes it. Every answer shows the path it took.</aside>
+  <aside>Why a graph and not one big prompt: each step is testable and traced. When the model slips (drops "calls", writes CURRENT_DATE, computes its own dates, names a column loosely) a deterministic check fixes it or sends it back with the reason, like a linter. Drafts that disagree escalate to more drafts, then the model judges the competing results. Every answer shows the path it took.</aside>
 </section>
 
 <!-- 11 · decision record -->
@@ -325,6 +325,7 @@ td b{font-weight:600}
     <tr><td><b>Certified metrics first</b></td><td>model-written SQL for all</td><td class="small">reviewed SQL answers most questions; the model only drafts lookups, voted 3 ways</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td><b>Two people for Red</b></td><td>one approver, or the model</td><td class="small">hardship is never one person's or a model's call</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td>Payroll features in training</td><td>—</td><td class="small">didn't beat the champion beyond noise</td><td><span class="pill no">rejected</span></td></tr>
+    <tr><td><b>Qwen3.8-27B on llama.cpp</b></td><td>Gemma 3 12B on Ollama</td><td class="small">a 4k window under a 9k prompt; released 18 → 21/21 on the same checks</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td>Hosted LLM</td><td>local</td><td class="small">privacy, cost, and a quota that broke a benchmark run</td><td><span class="pill no">dropped</span></td></tr>
   </table>
   <div class="foot"><span><b>Kept</b> · evidence.md · tuning.md · identity_recall.md</span><span>11</span></div>
@@ -471,8 +472,8 @@ bars('drivers',(DATA.drivers||[]).map(d=>({l:d.label,v:d.value/1000})),v=>'$'+Ma
 // the Ask graph
 (function(){const g=document.getElementById('graph');const N=[
   ['rules',20,120,'Safety rules','protected, bulk, write'],['scope',170,120,'Scope','rules + classifier'],['route',320,120,'Route','local LLM → intent'],
-  ['checks',470,120,'Intent checks','channel · values · dates · topic',1],['policy',700,30,'Policy search','BM25 + bge-m3, cited'],['metric',700,120,'Certified metric','reviewed SQL, guarded'],
-  ['lookup',700,210,'Lookup','3 SQL drafts, voted'],['narrate',920,120,'Grounded narration','every number in the rows']];
+  ['checks',470,120,'Intent checks','channel · values · dates · cohort',1],['policy',700,30,'Policy search','BM25 + bge-m3, cited'],['metric',700,120,'Reviewed SQL','metric or template, per period'],
+  ['lookup',700,210,'Lookup','drafts linted, voted, judged'],['narrate',920,120,'Grounded narration','every number in the rows']];
   const W={checks:190,narrate:178};
   const pos={};N.forEach(([id,x,y,t,sub,hot])=>{pos[id]=[x,y];el('rect',{x,y:y-28,width:W[id]||150,height:56,rx:14,class:hot?'gcheck':'gnode'},g);
     const a=el('text',{x:x+12,y:y-5,class:'gtext'},g);a.textContent=t;const b=el('text',{x:x+12,y:y+13,class:'gsub'},g);b.textContent=sub});

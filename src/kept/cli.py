@@ -530,7 +530,7 @@ def map_(args: argparse.Namespace) -> int:
 
         audit = os.environ.get("KEPT_AUDIT_LOG_PATH", str(WAREHOUSE_PATH.parent / "audit.duckdb"))
         llm = LiteLLMGateway(
-            model=os.environ.get("KEPT_TEXT_LLM_MODEL", "ollama/gemma3:12b-it-qat"),
+            model=os.environ.get("KEPT_TEXT_LLM_MODEL", "llamacpp/qwen3.8-27b"),
             audit_log=DuckDBAuditLog(audit),
             timeout_s=120,
         )

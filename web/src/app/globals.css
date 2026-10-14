@@ -1275,6 +1275,15 @@ html {
   min-height: 0;
   overflow: hidden;
 }
+.k-cal-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.k-cal-cell-head .k-cal-more {
+  align-self: center;
+}
 .k-cal-cell[data-out="true"] {
   background: color-mix(in srgb, var(--k-frame) 45%, transparent);
 }
@@ -1438,6 +1447,15 @@ html {
   }
   .k-agenda-row {
     flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  /* a phone's agenda row: time and icon, the title on the rest of the line; tier and actions wrap below it */
+  .k-agenda-row > .tabular {
+    width: auto !important;
+    min-width: 52px;
+  }
+  .k-agenda-row > .k-agenda-main {
+    flex: 1 1 calc(100% - 110px) !important;
   }
 }
 

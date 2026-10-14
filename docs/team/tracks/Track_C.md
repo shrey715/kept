@@ -67,6 +67,8 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 - Rare labels: cease_request has 4 (notes) / 5 (transcripts) positives and third_party_present 9 / 8 in the public 500. The F1 gate on those is very noisy; discuss at G0.
 
 ## Log
+- 15 Oct 02:30 Text extraction moved to Qwen3.8-27B (gate passes on notes and calls); Gemma and Ollama removed; #175 and #176 merged; decks rebuilt.
+- 14 Oct 22:00 Ask on Qwen3.8-27B via llama.cpp: released 21/21, stress 38/42, drill 27/30; Ollama's 4k window found and fixed.
 - 02:45 Phase 6 rules written (`docs/NEXT_STEPS.md`, `CLAUDE.md`); track branches retired.
 - 02:30 G4 passed: full nightly with match on C's machine; #44 merged.
 - 00:40 G3 passed: kept score 96,000 cards; demo flip gives a hardship review.
