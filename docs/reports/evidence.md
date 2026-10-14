@@ -85,9 +85,9 @@ make worse:
 
 | Model (trained on scored promises before 31 Jul, tested on the 12,820 after) | AUC [95% CI] | Against the bank's, AUC points [95% CI] |
 |---|---:|---:|
-| Bank's ptp_break v2.1 | 0.702 [0.691, 0.713] | — |
+| Bank's ptp_break v2.1 | 0.702 [0.691, 0.714] | — |
 | Kept, leak-free (6 features) | 0.625 [0.614, 0.636] | -7.8 [-9.4, -6.1] |
-| Kept, leak-free + the bank's score | 0.728 [0.717, 0.739] | +2.5 [+1.8, +3.2] |
+| Kept, leak-free + the bank's score | 0.728 [0.717, 0.739] | +2.5 [+1.9, +3.3] |
 
 Only promises the bank scored **before their outcome** are compared: the bank's score is dated 9 days after the promise on average, and 22% of its scores are dated on or after the outcome, which could know it.
 
@@ -96,3 +96,26 @@ doesn't see (payday timing and the customer's own promise history) and beats it;
 (paired bootstrap, the same resampled promises for every model). Because the bank's score only arrives
 days after a promise is made, the combination is for **re-scoring promises already made** (who needs a reminder before
 the due date); the due date itself is proposed with Kept's own model.
+
+## 7. Where each model is stronger
+
+The same held-out promises as §6. Calibration gap: the average distance between predicted and observed kept rates
+across ten score bins, weighted by promises.
+
+| Model | Brier | Calibration gap, pts | AUC, due 0–7 days after payday (1,081, 16% kept) | AUC, 8+ days after (1,720, 29% kept) | AUC, payday unknown (10,019, 22% kept) |
+|---|---:|---:|---:|---:|---:|
+| Bank's ptp_break, read as 1 − score | 0.229 | 23.9 | 0.720 | 0.705 | 0.701 |
+| Bank's ptp_break, recalibrated on the training half | 0.157 | 1.4 | 0.718 | 0.704 | 0.699 |
+| Kept, leak-free (6 features) | 0.167 | 2.0 | 0.543 | 0.622 | 0.641 |
+| Kept, leak-free + the bank's score | 0.152 | 1.3 | 0.706 | 0.735 | 0.731 |
+
+Read as published, the bank's score overstates the kept rate by about 24 points, and Kept's states it within 2. But
+recalibrated on the same training half, the bank's score is as well calibrated, so calibration alone is not an edge
+Kept can claim. **Kept's own model is not better than the bank's on any measure here.** Its value is in two other
+places. It exists when the promise is made, about 9 days before the bank's score, which is when the due date is chosen.
+And it carries information the bank's score lacks: **the combination is best overall on all three measures** (Brier,
+calibration and AUC), and best on promises due 8+ days after payday and on those with no known payday. On the 1,081
+promises due within a week of payday, the bank's score alone ranks slightly better.
+
+Kept rates in this table are not comparable with §2: it holds only promises the bank scored before their outcome, which
+leaves out promises that were resolved quickly.
