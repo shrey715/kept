@@ -95,7 +95,19 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
           );
         })}
       </ol>
-      {error && <Callout.Root color="red"><Callout.Text>{error}</Callout.Text></Callout.Root>}
+      {error && (
+        <div className="k-card t-rose" style={{ textAlign: "center", padding: 28 }}>
+          <span className="k-chip round" style={{ width: 48, height: 48, margin: "0 auto 12px" }}>
+            <LockClosedIcon />
+          </span>
+          <Text as="div" size="4" weight="medium">
+            {error.charAt(0).toUpperCase() + error.slice(1)}
+          </Text>
+          <Text as="p" size="2" color="gray" mt="1">
+            Links work once the bank has sent them, and for a few days after. Call us and we&apos;ll send a new one.
+          </Text>
+        </div>
+      )}
       {done && (
         <Card size="3">
           <Flex direction="column" align="center" gap="3" style={{ textAlign: "center" }}>

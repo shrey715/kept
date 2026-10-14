@@ -137,6 +137,17 @@
   color: var(--t-ink);
 }
 
+/* the dotted canvas, for diagrams inside a card */
+.k-dots {
+  background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+.radix-themes .rt-Card.k-dots::before {
+  /* Radix paints a card's background on ::before */
+  background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+
 /* hatched fill for empty capacity (what's left of a meter, a band with nothing in it) */
 .k-hatch {
   background-image: repeating-linear-gradient(135deg, var(--k-hatch) 0 1.5px, transparent 1.5px 7px);
@@ -245,6 +256,10 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+}
+/* the frame's margin collapses through the app root, so the page itself wears the canvas (no white strip on top) */
+html {
+  background: var(--k-canvas);
 }
 .radix-themes.app-root {
   background: var(--k-canvas);

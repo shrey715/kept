@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRightIcon, LockClosedIcon } from "@radix-ui/react-icons";
-import { Avatar, Box, Flex, Text, Tooltip } from "@radix-ui/themes";
+import { Box, Flex, Text, Tooltip } from "@radix-ui/themes";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -10,6 +10,17 @@ import { Wordmark, initials } from "@/components/bits";
 import { Rise, Stagger } from "@/components/motion";
 import { PencilSketch } from "@/components/pencil-sketch";
 import { PERSONAS, useSession } from "@/lib/session";
+
+/** Each role keeps one tint: agents ice (data), specialists rose (Red), leads mint (release), compliance butter,
+    analysts lilac (the Ask), stewards ice. */
+const ROLE_TINT: Record<string, "rose" | "butter" | "mint" | "ice" | "lilac"> = {
+  agent: "ice",
+  hardship_specialist: "rose",
+  team_lead: "mint",
+  compliance: "butter",
+  analyst: "lilac",
+  data_steward: "ice",
+};
 
 export default function SignInPage() {
   return (
@@ -90,13 +101,15 @@ function SignIn() {
                   whileTap={{ scale: 0.99 }}
                   transition={{ type: "spring", stiffness: 420, damping: 28 }}
                 >
-                  <Avatar size="3" fallback={initials(p.name)} radius="full" color="ruby" variant="soft" />
+                  <span className={`k-ava t-${ROLE_TINT[p.role] ?? "ice"}`} aria-hidden style={{ width: 40, height: 40, fontSize: 13 }}>
+                    {initials(p.name)}
+                  </span>
                   <Box style={{ minWidth: 0, flex: 1, textAlign: "left" }}>
                     <Flex align="baseline" gap="2">
                       <Text size="2" weight="medium">
                         {p.name}
                       </Text>
-                      <Text size="1" style={{ color: "var(--k-red)" }} weight="medium">
+                      <Text size="1" className={`t-${ROLE_TINT[p.role] ?? "ice"} k-tint-ink`} weight="medium">
                         {p.title}
                       </Text>
                     </Flex>
