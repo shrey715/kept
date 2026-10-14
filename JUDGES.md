@@ -53,7 +53,9 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 - **The uplift signal is small.** Off-policy, Kept's choice of action gives +61 more customers paying within 14 days per
   1,000 decisions than the bank's strategy [55, 67] (evidence §4), but that rests on a model of how the bank chose. On the
   bank's randomisation alone (worked vs held out), targeting by uplift points the right way and its intervals include
-  zero (evidence §9). Payroll features added to training didn't beat the champion.
+  zero (evidence §9). An X-learner and a doubly robust learner, chosen on a validation window, win on some arms and
+  lose on others on the test, so the live model stays ([`uplift_learners.md`](docs/reports/uplift_learners.md)). Payroll
+  features added to training didn't beat the champion either.
 - **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
 - **Kept's shipped promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). A wider model on the bank's
