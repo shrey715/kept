@@ -161,20 +161,45 @@ def test_nearest_question_needs_shared_words(metrics) -> None:  # type: ignore[n
     assert nearest_question("draft metric please", {"d": metrics["draft_metric"]}) is None  # uncertified
 
 
+_FIVE_WAYS = [GOOD_SQL, *(f"SELECT count(*) + {k} AS n FROM silver.collections_cases" for k in range(1, 5))]
+
+
 def test_disagreeing_candidates_clarify_then_refuse(build) -> None:  # type: ignore[no-untyped-def]
+    # five drafts, five answers, and the judge picks none: ask, then refuse
     replies = {
         Purpose.ASK_ROUTE: [LOOKUP_INTENT],
-        Purpose.ASK_SQL: [
-            GOOD_SQL,
-            "SELECT count(*) AS n FROM silver.collections_cases",
-            "SELECT count(*) AS n FROM silver.promises_to_pay WHERE ptp_status = 'kept'",
-        ],
+        Purpose.ASK_SQL: [*_FIVE_WAYS, {"why": "none counts what was asked", "pick": 0}],
     }
     svc, _ = build(replies)
     assert isinstance(svc.ask(_req("how many?")), Clarification)
     svc, _ = build(replies)
     r = svc.ask(_req("how many?", round_=1))
     assert isinstance(r, Refusal) and r.reason is RefusalReason.LOW_CONFIDENCE
+
+
+def test_disagreeing_drafts_escalate_then_the_judge_picks(build) -> None:  # type: ignore[no-untyped-def]
+    svc, llm = build(
+        {
+            Purpose.ASK_ROUTE: [LOOKUP_INTENT],
+            Purpose.ASK_SQL: [*_FIVE_WAYS, {"why": "grouped by product as asked", "pick": 1}],
+            Purpose.ASK_NARRATE: ["Cases by product."],
+        }
+    )
+    r = svc.ask(_req("open cases by product"))
+    assert isinstance(r, AskAnswer) and r.sql.startswith("SELECT primary_product")
+    assert llm.purposes().count(Purpose.ASK_SQL) == 6  # 3 drafts, 2 more, then the judge
+    assert any("picked one" in t for t in r.trace)
+
+
+def test_pin_today_uses_the_snapshot_date() -> None:
+    from datetime import date
+
+    from kept.ask.lookup import pin_today
+
+    sql = "SELECT 1 FROM t WHERE d = CURRENT_DATE AND ts < now() AND days_from_today > 0"
+    assert pin_today(sql, date(2026, 9, 28)) == (
+        "SELECT 1 FROM t WHERE d = DATE '2026-09-28' AND ts < DATE '2026-09-28' AND days_from_today > 0"
+    )
 
 
 def test_llm_sql_touching_blocked_columns_is_never_executed(build, ask_db: duckdb.DuckDBPyConnection) -> None:  # type: ignore[no-untyped-def]

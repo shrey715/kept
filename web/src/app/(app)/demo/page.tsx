@@ -120,7 +120,7 @@ export default function DemoPage() {
   return (
     <Grid columns={{ initial: "1", md: "280px 1fr" }} gap="6">
       <Box>
-        <SectionTitle eyebrow="Guided demo" title="Jane's case, start to finish" icon={<PlayIcon />} />
+        <SectionTitle eyebrow="Guided demo" title="One case, start to finish" icon={<PlayIcon />} />
         <Flex direction={{ initial: "row", md: "column" }} gap="1" position="relative" className="k-steps">
           {STEPS.map((st, i) => (
             <button key={st.title} onClick={() => setStep(i)} style={{ all: "unset", cursor: "pointer", position: "relative" }}>

@@ -744,7 +744,7 @@ html {
 }
 
 /* GSAP SplitText line masks: room for descenders */
-.k-line-mask {
+[class*="line-mask"] {
   padding-bottom: 0.24em;
   margin-bottom: -0.24em;
 }

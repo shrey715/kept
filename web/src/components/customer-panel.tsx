@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { humanize, money, type Customer } from "@/lib/api";
 import { Meter, spring } from "./motion";
 
-const SYSTEM_COLOR = { crm: "ruby", card: "iris", loan: "cyan", deposit: "grass", collections: "amber", bureau: "gray" } as const;
+export const SYSTEM_COLOR = { crm: "ruby", card: "iris", loan: "cyan", deposit: "grass", collections: "amber", bureau: "gray" } as const;
 
 export function CustomerPanel({ c }: { c: Customer }) {
   const conf = c.match_confidence_min ?? null;

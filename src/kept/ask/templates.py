@@ -185,10 +185,20 @@ def date_hints(question: str, as_of: date | None) -> str:
         f'- "{p}": {s.isoformat()}' + (" (one day)" if s == e else f" to {e.isoformat()} (both inclusive)")
         for p, s, e in found
     ]
+    compare = ""
+    if len(found) >= 2 and _COMPARE.search(question):  # "..., compared with the 8 days before"
+        compare = (
+            "\nThe question compares these periods: return one row per period, with a first column naming the"
+            " period (its dates), then the measure. Count each period over its own dates only."
+        )
     return (
         "\nDates in the question, already worked out (use exactly these; never compute dates yourself):\n"
         + ("\n".join(lines))
+        + compare
     )
+
+
+_COMPARE = re.compile(r"\b(compared?|versus|vs\.?|against|than)\b|days before|the previous|the prior", re.I)
 
 
 # ---------------------------------------------------------------- worked examples for free SQL

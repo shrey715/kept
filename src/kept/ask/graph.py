@@ -22,7 +22,6 @@ from kept.ask.router import route
 from kept.ask.scope import check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import guard_sql
 from kept.ask.templates import date_hints, resolve_dates
-from kept.config import SQL_CANDIDATES
 from kept.contracts import AskRequest, AskResponse, IntentKind, RedactedText, RefusalReason
 from kept.contracts.ask import GuardResult, Intent
 
@@ -72,8 +71,25 @@ GLOSSARY = {
 }
 _STOP = {"rate", "share", "cases", "case", "what", "many", "much", "with", "from", "that", "this", "which"}
 _STOP |= {"there", "were", "have", "does", "than", "more", "over", "last", "month", "today", "each"}
+# function words share nothing about a metric ("the", "and" once matched charge-offs to a disputes question)
+_STOP |= {"the", "and", "how", "for", "are", "was", "all", "any", "per", "did", "has", "its", "our", "you"}
+_STOP |= {
+    "day",
+    "week",
+    "year",
+    "between",
+    "before",
+    "after",
+    "during",
+    "compared",
+    "number",
+    "total",
+    "about",
+}
 _POLICY = re.compile(
-    r"\b(can|may|must) (we|i|you|an agent|agents|collectors?|the bank)\b|\b(allowed|prohibited)\b", re.I
+    r"\b(can|may|must) (we|i|you|an agent|agents|collectors?|the bank)\b|\b(allowed|prohibited)\b"
+    r"|\b(permise?s?|autoris[ée]e?s?|interdite?s?|peut-on|pouvons-nous|doit-on)\b",  # the bank is bilingual
+    re.I,
 )
 
 
@@ -238,20 +254,25 @@ def build_graph(ask: CollectionsAsk) -> Any:
         r, q = s["request"], s["question"]
         fresh = ask._freshness()
         as_of = ask._as_of(fresh)
-        try:
-            intent = route(
-                q,
-                ask._llm,
-                known_metric_ids=ask._known,
-                actor_id=r.user_id,
-                as_of=as_of,
-                metric_hints=ask._hints,
-                date_hints=date_hints(q.text, as_of),
-            )
-        except Exception:
+        intent = None
+        for _ in range(2):  # a reply that fails validation, or a busy local server: one more try
+            try:
+                intent = route(
+                    q,
+                    ask._llm,
+                    known_metric_ids=ask._known,
+                    actor_id=r.user_id,
+                    as_of=as_of,
+                    metric_hints=ask._hints,
+                    date_hints=date_hints(q.text, as_of),
+                )
+                break
+            except Exception:
+                continue
+        if intent is None:
             return {
                 "response": ask._unsure(r, "I couldn't work out what you're asking."),
-                "trace": ["Route: failed"],
+                "trace": ["Route: failed twice"],
             }
         if intent.kind is not IntentKind.POLICY and _POLICY.search(r.question):  # "can we ...?" asks a rule
             intent = intent.model_copy(update={"kind": IntentKind.POLICY, "metric_id": None})
@@ -353,14 +374,10 @@ def build_graph(ask: CollectionsAsk) -> Any:
         if not isinstance(outcome, tuple):
             return {
                 "response": outcome,
-                "trace": [f"Lookup: {SQL_CANDIDATES} SQL drafts disagreed or were blocked"],
+                "trace": ["Lookup: the SQL drafts disagreed or were blocked"],
             }
-        guarded, ran = outcome
-        return {
-            "guarded": guarded,
-            "ran": ran,
-            "trace": [f"Lookup: {SQL_CANDIDATES} SQL drafts, guarded, majority result kept"],
-        }
+        guarded, ran, how = outcome
+        return {"guarded": guarded, "ran": ran, "trace": [f"Lookup: {how}; every draft guarded"]}
 
     def finish(s: AskState) -> AskState:
         ran = s.get("ran")

@@ -9,6 +9,7 @@ import {
   CounterClockwiseClockIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
+  MagnifyingGlassIcon,
   MixIcon,
   QuestionMarkCircledIcon,
   ReaderIcon,
@@ -31,7 +32,7 @@ const AnswerChart = dynamic(() => import("@/components/answer-chart").then((m) =
 // released benchmark questions the Ask gets right on the dev split, one per path (metric, policy, comparison, guardrail)
 const EXAMPLES: { q: string; path: string; icon: React.ReactNode }[] = [
   { q: "What is the average days past due of open cases by queue?", path: "Certified metric", icon: <BarChartIcon /> },
-  { q: "How many collections cases are open today, by current bucket?", path: "Certified metric", icon: <BarChartIcon /> },
+  { q: "How many collections cases are open today, by current bucket?", path: "Lookup, voted", icon: <MagnifyingGlassIcon /> },
   {
     q: "Among randomised cases, compare the promise-kept rate of the champion strategy with challenger_A and challenger_B.",
     path: "Comparison",

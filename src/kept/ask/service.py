@@ -16,7 +16,14 @@ import duckdb
 from kept.ask.graph import build_graph
 from kept.ask.graph import run as run_graph
 from kept.ask.grounding import extract_numbers, needs_clarification, ungrounded_numbers
-from kept.ask.lookup import draft_sql, generate_candidates, lookup_system, majority_result, normalize_result
+from kept.ask.lookup import (
+    draft_sql,
+    generate_candidates,
+    lookup_system,
+    majority_result,
+    normalize_result,
+    pin_today,
+)
 from kept.ask.metrics import CertifiedQuery, MetricDefinition
 from kept.ask.policy import PolicyIndex, local_embedder
 from kept.ask.privacy import suppress_small_groups
@@ -25,7 +32,7 @@ from kept.ask.sql_guard import execute_guarded, guard_sql
 from kept.ask.templates import date_hints, examples, resolve_dates
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
-from kept.config import ASK_SQL_TIMEOUT_S, SQL_CANDIDATES
+from kept.config import ASK_SQL_TIMEOUT_S, SQL_CANDIDATES, SQL_EXTRA
 from kept.contracts.ask import (
     AskAnswer,
     AskRequest,
@@ -101,6 +108,12 @@ def tag_citations(found: list[Citation], narrative: str) -> tuple[Citation, ...]
         for i, (c, m) in enumerate(marked, 1)
     )
 
+
+_JUDGE_OPTIONS = 3
+_JUDGE = """Several SQL queries were written for one collections question and gave different results.
+Pick the option that answers the question exactly as asked: the right table and rows (the filters the question
+states, and no others), the right period, grouped the way the question asks, and the measure it asks for.
+Think it through in "why" (one or two sentences), then give "pick": the option's number, or 0 if none fits."""
 
 _CONVENTIONS = """Conventions (from the data dictionary):
 - An open case has collections_cases.outcome IS NULL. A randomised case has assignment_method = 'random'.
@@ -342,36 +355,107 @@ class CollectionsAsk:
     # ------------------------------------------------------------------ pipeline
     def _lookup(
         self, request: AskRequest, question: RedactedText, intent: Intent, as_of: date | None
-    ) -> AskResponse | tuple[GuardResult, tuple[tuple[str, ...], Any]]:
+    ) -> AskResponse | tuple[GuardResult, tuple[tuple[str, ...], Any], str]:
+        """Draft SQL three ways and keep the majority result. When the drafts disagree, two more drafts get a
+        vote; when there's still no majority, the model reads the competing results and picks the one that
+        answers the question (a refusal costs the user as much as a wrong answer, and the pick is traced)."""
         policy = self._sql_policy()
-        drafts = generate_candidates(
-            intent,
-            self._schema_doc(policy, as_of) + date_hints(question.text, as_of) + examples(question.text),
-            self._llm,
-            n=SQL_CANDIDATES,
-            actor_id=request.user_id,
-            question=question,
-        )
-        guards = [guard_sql(d, policy) for d in drafts]
+        schema = self._schema_doc(policy, as_of)
+        spec = schema + date_hints(question.text, as_of) + examples(question.text)
+        guards, ran = self._drafts(request, question, intent, spec, schema, policy, as_of, SQL_CANDIDATES)
         if guards and not any(g.allowed for g in guards):
             return _refuse(RefusalReason.SQL_GUARD, guards[0].reason or "The query is not allowed.")
-        schema = self._schema_doc(policy, as_of)
-        results = [self._try(g) if g.allowed else (None, None) for g in guards]
-        ran = [r for r, _ in results]
-        for i, (r, error) in enumerate(results):
-            # allowed but would not run: let the model fix it once, with the error
-            if (
-                r is None
-                and error
-                and (fixed := self._repair(request, question, intent, schema, drafts[i], error, policy))
-            ):
-                guards[i], ran[i] = fixed
-        ran += [None] * (SQL_CANDIDATES - len(ran))  # drafts the LLM never produced vote for nothing
-        winner = majority_result([r[1] if r else None for r in ran])
+        votes = SQL_CANDIDATES
+        winner = majority_result([r[1] if r else None for r in ran] + [None] * (votes - len(ran)))
+        how = f"{votes} SQL drafts, majority result kept"
+        if winner is None:
+            more_g, more_r = self._drafts(request, question, intent, spec, schema, policy, as_of, SQL_EXTRA)
+            guards, ran, votes = guards + more_g, ran + more_r, votes + SQL_EXTRA
+            winner = majority_result([r[1] if r else None for r in ran] + [None] * (votes - len(ran)))
+            how = f"{votes} SQL drafts (the first {SQL_CANDIDATES} disagreed), majority result kept"
+            if winner is None:
+                winner = self._judge(request, question, guards, ran)
+                how = f"{votes} SQL drafts disagreed; the model compared the results and picked one"
         if needs_clarification(router_confidence=intent.confidence, candidates_agree=winner is not None):
             return self._unsure(request, "I got different answers when I tried that a few ways.", intent)
         key = normalize_result(winner or ())
-        return next((g, r) for g, r in zip(guards, ran, strict=False) if r and normalize_result(r[1]) == key)
+        g, r = next((g, r) for g, r in zip(guards, ran, strict=False) if r and normalize_result(r[1]) == key)
+        return g, r, how
+
+    def _drafts(
+        self,
+        request: AskRequest,
+        question: RedactedText,
+        intent: Intent,
+        spec: str,
+        schema: str,
+        policy: SqlPolicy,
+        as_of: date | None,
+        n: int,
+    ) -> tuple[list[GuardResult], list[tuple[tuple[str, ...], Any] | None]]:
+        """n drafts, guarded and run; a draft that fails to run gets one repair round with its error."""
+        drafts = generate_candidates(
+            intent, spec, self._llm, n=n, actor_id=request.user_id, question=question
+        )
+        drafts = [pin_today(d, as_of) for d in drafts]
+        guards = [guard_sql(d, policy) for d in drafts]
+        results = [self._try(g) if g.allowed else (None, None) for g in guards]
+        ran = [r for r, _ in results]
+        for i, (r, error) in enumerate(results):
+            if (
+                r is None
+                and error
+                and (
+                    fixed := self._repair(request, question, intent, schema, drafts[i], error, policy, as_of)
+                )
+            ):
+                guards[i], ran[i] = fixed
+        return guards, ran
+
+    def _judge(
+        self,
+        request: AskRequest,
+        question: RedactedText,
+        guards: list[GuardResult],
+        ran: list[tuple[tuple[str, ...], Any] | None],
+    ) -> Any:
+        """The drafts disagree: show the model each distinct result (its SQL and first rows, most-voted first)
+        and let it pick the one that answers the question. None when it picks none or the call fails."""
+        groups: dict[Any, list[int]] = {}
+        for i, r in enumerate(ran):
+            if r is not None:
+                groups.setdefault(normalize_result(r[1]), []).append(i)
+        options = sorted(groups.values(), key=len, reverse=True)
+        if any(ran[ix[0]][1] for ix in options):  # an empty result never beats one with rows
+            options = [ix for ix in options if ran[ix[0]][1]]  # type: ignore[index]
+        options = options[:_JUDGE_OPTIONS]
+        if len(options) < 2:
+            return ran[options[0][0]][1] if options else None  # type: ignore[index]
+        shown = []
+        for k, ix in enumerate(options, 1):
+            cols, rows = ran[ix[0]]  # type: ignore[misc]
+            table = "\n".join([",".join(cols), *(",".join(map(str, row)) for row in rows[:8])])
+            shown.append(
+                f"Option {k} ({len(ix)} of the drafts, {len(rows)} rows):\nSQL:\n{guards[ix[0]].sql}\n"
+                f"Result:\n{table}"
+            )
+        user = self._redactor.redact(f"Question: {question.text}\n\n" + "\n\n".join(shown))
+        try:
+            reply = self._llm.complete(
+                system=_JUDGE,
+                user=user,
+                purpose=Purpose.ASK_SQL,
+                actor_id=request.user_id,
+                json_schema={
+                    "type": "object",
+                    "properties": {"why": {"type": "string"}, "pick": {"type": "integer"}},
+                    "required": ["why", "pick"],
+                },
+            )
+            pick = int((reply.parsed or {}).get("pick", 0))
+        except Exception:
+            return None
+        return ran[options[pick - 1][0]][1] if 1 <= pick <= len(options) else None  # type: ignore[index]
 
     def _finish(
         self,
@@ -576,6 +660,7 @@ class CollectionsAsk:
         sql: str,
         error: str,
         policy: SqlPolicy,
+        as_of: date | None = None,
     ) -> tuple[GuardResult, tuple[tuple[str, ...], Any]] | None:
         """One repair round for a draft that failed to run: show the model its query and the error."""
         user = self._redactor.redact(
@@ -583,7 +668,7 @@ class CollectionsAsk:
             "Write a corrected query. Join tables on case_id when you need columns from another table."
         )
         fixed = draft_sql(self._llm, lookup_system(intent, schema), user, request.user_id)
-        guarded = guard_sql(fixed, policy) if fixed else None
+        guarded = guard_sql(pin_today(fixed, as_of), policy) if fixed else None
         if guarded is None or not guarded.allowed:
             return None
         result = self._run(guarded)

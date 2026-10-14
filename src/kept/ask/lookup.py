@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -30,6 +31,19 @@ Hints from the question parser (may be empty): {hints}"""
 def _sql_only(text: str) -> str:
     """Models like to fence their SQL and end it with a semicolon."""
     return re.sub(r"^\s*```(?:sql)?\s*|\s*```\s*$", "", text).strip().rstrip(";").strip()
+
+
+_TODAY = re.compile(
+    r"\b(?:current_date|current_timestamp|localtimestamp)\b(?:\s*\(\s*\))?"
+    r"|\b(?:today|now|get_current_timestamp)\s*\(\s*\)",
+    re.I,
+)
+
+
+def pin_today(sql: str, as_of: date | None) -> str:
+    """The warehouse is a snapshot: "today" is its as-of date, not the server's clock. A draft that compares
+    with CURRENT_DATE or now() would find nothing newer than the snapshot."""
+    return _TODAY.sub(f"DATE '{as_of.isoformat()}'", sql) if as_of else sql
 
 
 def lookup_system(intent: Intent, schema_doc: str) -> str:
