@@ -78,7 +78,7 @@ export function PencilSketch() {
         initial={still ? false : { opacity: 0 }}
         animate={{ opacity: 0.8 }}
         transition={{ delay: 5.6 * 0.55, duration: 0.6 }}
-        style={{ font: "italic 20px 'Segoe Script', 'Bradley Hand', 'URW Chancery L', cursive" }}
+        style={{ font: "300 24px var(--font-hand), 'Segoe Script', cursive" }}
       >
         payday
       </motion.text>
@@ -89,7 +89,7 @@ export function PencilSketch() {
         initial={still ? false : { opacity: 0 }}
         animate={{ opacity: 0.8 }}
         transition={{ delay: 6.4 * 0.55, duration: 0.6 }}
-        style={{ font: "italic 15px 'Segoe Script', 'Bradley Hand', 'URW Chancery L', cursive" }}
+        style={{ font: "300 17px var(--font-hand), 'Segoe Script', cursive" }}
       >
         $140 on Sat, Oct 3
       </motion.text>
