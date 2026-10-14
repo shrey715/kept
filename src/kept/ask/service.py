@@ -13,13 +13,14 @@ from typing import Any
 
 import duckdb
 
+from kept.ask.graph import build_graph
+from kept.ask.graph import run as run_graph
 from kept.ask.grounding import extract_numbers, needs_clarification, ungrounded_numbers
 from kept.ask.lookup import draft_sql, generate_candidates, lookup_system, majority_result, normalize_result
-from kept.ask.metrics import CertifiedQuery, MetricDefinition, compile_metric
+from kept.ask.metrics import CertifiedQuery, MetricDefinition
 from kept.ask.policy import PolicyIndex, local_embedder
 from kept.ask.privacy import suppress_small_groups
-from kept.ask.router import route
-from kept.ask.scope import Classifier, check_scope, refusal_for, rule_check
+from kept.ask.scope import Classifier, refusal_for
 from kept.ask.sql_guard import execute_guarded, guard_sql
 from kept.ask.templates import date_hints, examples, resolve_dates
 from kept.common.audit import new_event_id
@@ -311,6 +312,7 @@ class CollectionsAsk:
         self._hints = {m: _metric_hint(metrics[m], certified_queries[m]) for m in self._known}
         self._schema_cache: str | None = None
         self._allowed = frozenset(t.lower() for t in contract.ask_allowed_tables)
+        self._graph = build_graph(self)  # kept.ask.graph: the pipeline below as LangGraph nodes and edges
         self._blocked = frozenset(c.lower() for c in contract.ask_blocked_columns())
 
     # ------------------------------------------------------------------ public
@@ -330,7 +332,7 @@ class CollectionsAsk:
         question = self._redactor.redact(request.question)
         seen: dict[str, Any] = {}
         try:
-            response = self._answer(request, question, seen)
+            response = run_graph(self._graph, request, question, seen)
         except Exception as e:  # never raises: a bug here is a refusal, not a 500
             seen["error"] = type(e).__name__
             response = _refuse(RefusalReason.LOW_CONFIDENCE, "Something went wrong, so I didn't answer.")
@@ -338,56 +340,6 @@ class CollectionsAsk:
         return response
 
     # ------------------------------------------------------------------ pipeline
-    def _answer(self, request: AskRequest, question: RedactedText, seen: dict[str, Any]) -> AskResponse:
-        if (
-            rule := rule_check(request, self._contract)
-        ) is not None:  # protected, bulk, write, other people's cases
-            return refusal_for(rule, suggestion=nearest_question(request.question, self._metrics))
-        if call := _CALL_SUMMARY.search(request.question):
-            seen["intent"] = "call_summary"
-            return self._call_summary(request, call[1].upper())
-        decision = check_scope(request, self._contract, self._classifier)
-        if not decision.in_scope:
-            return refusal_for(decision, suggestion=nearest_question(request.question, self._metrics))
-        fresh = self._freshness()
-        as_of = self._as_of(fresh)
-        try:
-            intent = route(
-                question,
-                self._llm,
-                known_metric_ids=self._known,
-                actor_id=request.user_id,
-                as_of=as_of,
-                metric_hints=self._hints,
-                date_hints=date_hints(question.text, as_of),
-            )
-        except Exception:
-            return self._unsure(request, "I couldn't work out what you're asking.")
-        seen["intent"] = intent.kind.value
-        if needs_clarification(router_confidence=intent.confidence, candidates_agree=None):
-            return self._unsure(request, "I'm not sure what you mean.", intent)
-
-        if intent.kind is IntentKind.POLICY:
-            return self._policy(request, question, intent, as_of)
-        if intent.kind is IntentKind.METRIC:
-            try:
-                sql, params = compile_metric(intent, self._metrics, self._queries)
-            except ValueError as e:
-                return self._unsure(request, f"I can't compute that as asked ({e}).", intent)
-            guarded = guard_sql(sql, self._sql_policy())
-            if not guarded.allowed:
-                return _refuse(RefusalReason.SQL_GUARD, guarded.reason or "The query is not allowed.")
-            ran = self._run(guarded, params)
-        else:
-            outcome = self._lookup(request, question, intent, as_of)
-            if not isinstance(outcome, tuple):
-                return outcome
-            guarded, ran = outcome
-        if ran is None:
-            return _refuse(RefusalReason.DATA_UNAVAILABLE, "The query failed or took too long.")
-        seen |= {"sql": guarded.sql, "rows": len(ran[1])}
-        return self._finish(request, question, intent, guarded, *ran, fresh)
-
     def _lookup(
         self, request: AskRequest, question: RedactedText, intent: Intent, as_of: date | None
     ) -> AskResponse | tuple[GuardResult, tuple[tuple[str, ...], Any]]:

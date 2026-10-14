@@ -9,6 +9,7 @@ The API owns the file while it runs (K5: no batch jobs against the warehouse it 
 
 from __future__ import annotations
 
+import json
 import os
 import pickle
 from pathlib import Path
@@ -24,7 +25,7 @@ from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
 from kept.config import EXPORT_DIR, RAW_DIR, REPO_ROOT, WAREHOUSE_PATH
 from kept.contracts.enums import Action, HardshipSignal, HardshipStatus, HardStop, ReleaseTier, Role
-from kept.contracts.interfaces import AuditLog
+from kept.contracts.interfaces import AuditLog, LLMGateway
 from kept.contracts.nba import CaseContext, ProposalStatus
 from kept.data.c360_reader import DuckDBC360Reader
 from kept.data.identity.steward import load_steward_queue
@@ -126,6 +127,8 @@ def real_services(
         ),
         history=lambda case_id: case_history(conn, case_id),
         portfolio=lambda: overview(conn),
+        brief_llm=_brief_llm(audit_log),
+        governance=_governance,
         portfolio_cases=lambda **kw: case_page(conn, **kw),
         reads=ReadState(warehouse.parent / "app_state.duckdb"),  # not the warehouse: kept score writes that
     )
@@ -155,6 +158,25 @@ def _live_extraction(warehouse: Path, audit_log: AuditLog, typed: dict[str, str]
         typed[source.source_id] = text
 
     return add
+
+
+def _governance() -> dict[str, object]:
+    """The latest model card, fairness and drift reports, read fresh so a rerun shows without a restart."""
+    out: dict[str, object] = {}
+    for key, name in (("model_card", "model_card"), ("fairness", "fairness_data"), ("drift", "drift_data")):
+        path = EXPORT_DIR / "reports" / f"{name}.json"
+        out[key] = json.loads(path.read_text()) if path.exists() else None
+    return out
+
+
+def _brief_llm(audit_log: DuckDBAuditLog) -> LLMGateway:
+    """The local text model writes the cited briefs: a case's words never leave the machine."""
+    from kept.common.llm import LiteLLMGateway
+    from kept.text.live import DEFAULT_MODEL
+
+    return LiteLLMGateway(
+        model=os.environ.get("KEPT_TEXT_LLM_MODEL", DEFAULT_MODEL), audit_log=audit_log, timeout_s=90
+    )
 
 
 def _scored_queue(conn: duckdb.DuckDBPyConnection):  # type: ignore[no-untyped-def]

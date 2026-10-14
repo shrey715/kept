@@ -24,12 +24,23 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from kept import __version__
+from kept.app.briefs import (
+    CASE_SYSTEM,
+    PORTFOLIO_SYSTEM,
+    Brief,
+    case_fallback,
+    case_sources,
+    portfolio_fallback,
+    portfolio_sources,
+)
+from kept.app.briefs import write as write_brief
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
 from kept.app.portfolio import CasePage, Portfolio, Sort
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
+from kept.common.llm import Purpose
 from kept.config import DATA_DIR, REPO_ROOT
 from kept.contracts.ask import AskRequest, AskResponse, Citation, SourceText
 from kept.contracts.audit import AuditEvent, AuditKind
@@ -41,6 +52,7 @@ from kept.contracts.interfaces import (
     AuditLog,
     C360Reader,
     ExtractionStore,
+    LLMGateway,
     NBAEngine,
     ReleaseGate,
 )
@@ -85,6 +97,8 @@ class Services:
     history: Callable[[str], CaseHistory] | None = None  # real: contacts, promises, months from silver
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
+    governance: Callable[[], dict[str, Any]] | None = None  # real: model card, fairness, drift (report JSON)
+    brief_llm: LLMGateway | None = None  # real: the local model writes cited briefs; None: template briefs
     demo: bool = False
 
 
@@ -216,6 +230,10 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
     GET  /cases/{case_id}/history?user_id&role    200 CaseHistory (contacts, promises, month-ends); 503 demo
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
+    GET  /cases/{case_id}/brief?user_id&role      200 Brief: cited bullets from the local model, each number
+                                                  checked against what it cites; else a template brief
+    GET  /portfolio/brief?user_id&role            200 Brief over tonight's computed portfolio facts
+    GET  /portfolio/models?user_id&role           200 {model_card, fairness, drift}: the reports' JSON
     GET  /portfolio?user_id&role                  200 Portfolio (KPIs, slices, A/B with Wilson CIs, cohorts,
                                                   insights with their SQL); analysts and case-wide roles
     GET  /portfolio/cases?user_id&role[&offset&limit&sort&tier&action&bucket&q]
@@ -357,6 +375,71 @@ def create_app(services: Services) -> FastAPI:
                 who = first(p.proposal_id) if first else None
                 out.append(ApprovalItem(stage=stage, proposal=p, first_approver=who[0] if who else None))  # type: ignore[arg-type]
         return sorted(out, key=lambda a: a.proposal.expires_at)
+
+    briefs: dict[
+        tuple[str, ...], Brief
+    ] = {}  # ponytail: in-process cache, newest 256; a store if it must persist
+
+    def remember(key: tuple[str, ...], make: Callable[[], Brief]) -> Brief:
+        if key not in briefs:
+            if len(briefs) >= 256:
+                briefs.pop(next(iter(briefs)))
+            briefs[key] = make()
+        return briefs[key]
+
+    @app.get("/cases/{case_id}/brief", response_model=Brief)
+    def case_brief(case_id: str, user_id: str, role: Role) -> Brief:
+        guard_case(case_id, user_id, role)
+        card = card_for(case_id, services.clock())
+        notes = (
+            sorted(services.extractions.for_case(case_id), key=lambda x: x.extracted_at, reverse=True)[:8]
+            if services.extractions
+            else []
+        )
+        calls = services.calls.for_case(case_id)[:4] if services.calls else []
+        try:
+            history = services.history(case_id) if services.history else None
+        except KeyError:
+            history = None
+        sources = case_sources(card, notes, calls, history)
+        key = (case_id, card.headline, *(s.text for s in sources))
+        return remember(
+            key,
+            lambda: write_brief(
+                services.brief_llm,
+                system=CASE_SYSTEM,
+                sources=sources,
+                fallback=case_fallback(sources),
+                purpose=Purpose.CASE_BRIEF,
+                actor_id=user_id,
+            ),
+        )
+
+    @app.get("/portfolio/brief", response_model=Brief)
+    def portfolio_brief(user_id: str, role: Role) -> Brief:
+        p = get_portfolio(user_id, role)
+        sources = portfolio_sources(p)
+        return remember(
+            ("portfolio", str(p.as_of)),
+            lambda: write_brief(
+                services.brief_llm,
+                system=PORTFOLIO_SYSTEM,
+                sources=sources,
+                fallback=portfolio_fallback(sources),
+                purpose=Purpose.PORTFOLIO_BRIEF,
+                actor_id=user_id,
+            ),
+        )
+
+    @app.get("/portfolio/models")
+    def portfolio_models(user_id: str, role: Role) -> dict[str, Any]:
+        """The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+        the page shows exactly what the reports say."""
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        if services.governance is None:
+            raise HTTPException(503, "the model reports aren't on this machine")
+        return services.governance()
 
     @app.get("/portfolio", response_model=Portfolio)
     def get_portfolio(user_id: str, role: Role) -> Portfolio:

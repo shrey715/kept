@@ -5,8 +5,8 @@
 // date before payday is the promise that breaks. No sign-in and no name, account or case ID on the page.
 // When the bank doesn't know their payday or spare cash, the page asks (next payday, how often, what they can
 // put toward it each payday) and the server sizes the plans from those answers, never from a client amount.
-import { CheckCircledIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Card, Flex, Heading, Link, RadioCards, Select, Text, TextField } from "@radix-ui/themes";
+import { CheckCircledIcon, CheckIcon, LockClosedIcon } from "@radix-ui/react-icons";
+import { Box, Callout, Card, Flex, Link, RadioCards, Select, Text, TextField } from "@radix-ui/themes";
 import { use, useEffect, useState } from "react";
 import { MapleMark } from "@/components/bits";
 import { api, type PayOffer, type PromiseSizing, type StatedPay } from "@/lib/api";
@@ -74,17 +74,33 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
   }
 
   return (
-    <Box style={{ width: "100%", maxWidth: 440, margin: "0 auto", padding: "32px 16px", boxSizing: "border-box", overflowWrap: "anywhere" }}>
-      <Flex align="center" gap="2" mb="5">
-        <MapleMark />
+    <Box className="k-pay">
+      <Flex align="center" gap="2" mb="4">
+        <span className="k-chip" style={{ width: 36, height: 36 }}>
+          <MapleMark />
+        </span>
         <Text weight="bold">Maple Bank</Text>
+        <span className="k-badge" style={{ marginLeft: "auto", gap: 6, height: 28, borderRadius: 999, padding: "0 10px" }}>
+          <LockClosedIcon /> Secure link
+        </span>
       </Flex>
+      <ol className="k-pay-steps" aria-label="Steps">
+        {["Your pay", "Pick a plan", "Done"].map((label, i) => {
+          const at = done ? 2 : offer && !offer.ask ? 1 : 0;
+          return (
+            <li key={label} data-state={i < at ? "done" : i === at ? "now" : "next"}>
+              <span>{i < at ? <CheckIcon /> : i + 1}</span>
+              {label}
+            </li>
+          );
+        })}
+      </ol>
       {error && <Callout.Root color="red"><Callout.Text>{error}</Callout.Text></Callout.Root>}
       {done && (
         <Card size="3">
           <Flex direction="column" align="center" gap="3" style={{ textAlign: "center" }}>
             <CheckCircledIcon width={32} height={32} color="var(--grass-9)" />
-            <Heading size="5">You&apos;re all set</Heading>
+            <h1 className="k-display" style={{ fontSize: 30 }}>You&apos;re all set</h1>
             <Text>{describe(done)}</Text>
             <Text size="2" color="gray">The first payment is on {day(done.due_date)}. We&apos;ll remind you the day before each one.</Text>
           </Flex>
@@ -92,7 +108,7 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
       )}
       {offer?.ask && !done && (
         <>
-          <Heading size="6" mb="1">Let&apos;s build a plan around your pay</Heading>
+          <h1 className="k-display" style={{ fontSize: 30, marginBottom: 6 }}>Let&apos;s build a plan around your pay</h1>
           <Text as="p" size="2" color="gray" mb="4">
             Three quick questions, so every payment lands right after you&apos;re paid. We only use your answers to set up this plan.
           </Text>
@@ -116,13 +132,15 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
                 <TextField.Slot>$</TextField.Slot>
               </TextField.Root>
             </label>
-            <Button size="3" loading={busy} disabled={!payday || !(Number(perPayday) > 0)} onClick={() => void askPlans()}>Show my options</Button>
+            <button className="k-strong-btn k-pay-cta" disabled={busy || !payday || !(Number(perPayday) > 0)} onClick={() => void askPlans()}>
+              {busy ? <span className="k-spin" /> : "Show my options"}
+            </button>
           </Flex>
         </>
       )}
       {offer && !offer.ask && !done && (
         <>
-          <Heading size="6" mb="1">Pick a plan that works for you</Heading>
+          <h1 className="k-display" style={{ fontSize: 30, marginBottom: 6 }}>Pick a plan that works for you</h1>
           {offer.amount_due != null && (
             <Text as="p" size="2" color="gray" mb="4">
               {money(offer.amount_due)} is overdue. Every option below is timed for right after your payday and fits{" "}
@@ -143,7 +161,9 @@ export default function PayPage({ params }: { params: Promise<{ token: string }>
                   </RadioCards.Item>
                 ))}
               </RadioCards.Root>
-              <Button size="3" mt="4" style={{ width: "100%" }} loading={busy} disabled={!pick} onClick={() => void confirm()}>Confirm this plan</Button>
+              <button className="k-strong-btn k-pay-cta" style={{ marginTop: 16 }} disabled={busy || !pick} onClick={() => void confirm()}>
+                {busy ? <span className="k-spin" /> : "Confirm this plan"}
+              </button>
             </>
           )}
           <Text as="p" size="2" color="gray" mt="5">

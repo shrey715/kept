@@ -34,6 +34,8 @@ class Purpose:
     ASK_NARRATE = "ask.narrate"  # Track B: explain the result rows
     ASK_CHART = "ask.chart"  # kept.app.charts: pick a chart for the result rows (#100)
     TEXT_EXTRACT = "text.extract"  # Track C: note/transcript extraction
+    CASE_BRIEF = "app.case_brief"  # kept.app.briefs: the agent's cited case brief (local model)
+    PORTFOLIO_BRIEF = "app.portfolio_brief"  # kept.app.briefs: tonight's cited portfolio brief
     OPS_PREFLIGHT = "ops.preflight"  # kept preflight: one tiny call to prove a model answers before a demo
 
 

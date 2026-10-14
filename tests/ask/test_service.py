@@ -432,3 +432,17 @@ def test_metric_hint_names_the_product_family_values() -> None:
         "delinquency_rate", "Delinquency rate", "", "", "", "", "", "", "", (), (), "", "", True
     )
     assert "product_family = 'card'" in _metric_hint(d, CERTIFIED_QUERIES["delinquency_rate"])
+
+
+def test_every_answer_carries_the_path_the_graph_took(build) -> None:  # type: ignore[no-untyped-def]
+    svc, _ = build(
+        {
+            Purpose.ASK_ROUTE: [METRIC_INTENT],
+            Purpose.ASK_NARRATE: ["Promise kept rate by product is shown in the table."],
+        }
+    )
+    a = svc.ask(_req("promise kept rate by product"))
+    assert a.trace[0] == "Safety rules: passed" and any(t.startswith("Route: metric") for t in a.trace)
+    assert "SQL guard: allowed" in a.trace and a.trace[-1].startswith("Narration")
+    refused = svc.ask(_req("promise kept rate by gender"))
+    assert refused.kind == "refusal" and refused.trace[-1].startswith("Safety rules: refused")

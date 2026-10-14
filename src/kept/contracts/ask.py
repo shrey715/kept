@@ -113,6 +113,7 @@ class AskAnswer(_Frozen):
     rows: tuple[tuple[Any, ...], ...] = ()
     narrative: str  # numbers only from rows
     citations: tuple[Citation, ...] = ()
+    trace: tuple[str, ...] = ()  # the path the Ask took (kept.ask.graph), one line per step
 
 
 class Refusal(_Frozen):
@@ -120,12 +121,14 @@ class Refusal(_Frozen):
     reason: RefusalReason
     message: str  # "This needs gender_code, which is excluded from collections analytics."
     suggestion: str | None = None  # "Try: <nearest allowed question>"
+    trace: tuple[str, ...] = ()
 
 
 class Clarification(_Frozen):
     kind: Literal["clarification"] = "clarification"
     question: str
     intent: Intent | None = None
+    trace: tuple[str, ...] = ()
 
 
 AskResponse = Annotated[AskAnswer | Refusal | Clarification, Field(discriminator="kind")]
