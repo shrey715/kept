@@ -199,6 +199,11 @@
   border-radius: 0 14px 14px 0;
 }
 
+.k-ava svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* a small ring for a probability in a row */
 .k-donut {
   flex: none;
@@ -223,6 +228,17 @@
   background: var(--t-2, var(--k-chip));
   color: var(--t-ink, var(--gray-12));
   font: 600 12px/1 var(--default-font-family);
+}
+
+/* plain links in copy: ink, with a soft underline (no browser blue) */
+.radix-themes a:not([class]) {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--k-dash);
+  text-underline-offset: 3px;
+}
+.radix-themes a:not([class]):hover {
+  text-decoration-color: currentColor;
 }
 
 html,
@@ -591,6 +607,10 @@ body {
   color: #faf7f2;
   overflow: hidden;
 }
+/* a picked card among tinted ones: the ink ring the studio uses for the active pill */
+.k-card.k-picked {
+  box-shadow: inset 0 0 0 2px var(--k-strong);
+}
 .k-link {
   display: block;
   color: inherit;
@@ -733,6 +753,9 @@ body {
   inset: 0 auto 0 0;
   border-radius: 999px;
   background: var(--accent-9);
+}
+:is(.t-rose, .t-butter, .t-mint, .t-ice, .t-lilac) .meter > .fill:not(.muted) {
+  background: var(--t-ink);
 }
 .meter > .fill.muted {
   background: var(--gray-a7);

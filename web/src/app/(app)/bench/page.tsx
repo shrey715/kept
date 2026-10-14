@@ -144,7 +144,7 @@ export default function BenchPage() {
 
       <Rise>
         <Grid columns={{ initial: "1", md: "1.2fr 1fr" }} gap="4" mt="5">
-          <Card size="3">
+          <Card size="3" className="t-ice">
             <Text size="2" weight="bold">1 · Load questions</Text>
             <Flex direction="column" gap="2" mt="3">
               {suites.map((s) => (
@@ -166,7 +166,7 @@ export default function BenchPage() {
             </Flex>
           </Card>
 
-          <Card size="3">
+          <Card size="3" className="t-lilac">
             <Text size="2" weight="bold">2 · Run and export</Text>
             <Text as="p" size="1" color="gray" mt="1">{name ? `${name}: ${questions.length} questions, ${Object.keys(gold).length} with gold answers` : "Nothing loaded yet."}</Text>
             <Flex gap="2" mt="3" wrap="wrap">
