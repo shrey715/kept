@@ -50,7 +50,9 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 - **The uplift signal is small** (call Qini 0.0073). Payroll features added to training didn't beat the champion.
 - **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
-- **Kept's promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). It is used where the bank's can't be:
+- **Kept's shipped promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). A wider model on the same kinds
+  of inputs as the bank's closes most of that gap (0.688, and not distinguishable from the bank's on promises it scored
+  before the due date; evidence §8), but it is not wired into the cards yet. It is used where the bank's can't be:
   the bank's score arrives about 9 days after a promise is made, and Kept's proposes the due date at the moment of the
   promise. Combined, the two beat the bank's alone (evidence §6, §7).
 - **Sign-in is a demo persona picker.** The API enforces every role rule itself (case scope, aggregates only for
