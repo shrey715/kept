@@ -1108,6 +1108,49 @@ html {
   transition: opacity 120ms;
 }
 
+/* the case's driver radar: a lilac blob over a hairline web, a dark pill on the strongest family */
+.k-radar {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+  border-radius: 22px;
+  background: var(--t-bg);
+  padding: 8px;
+  box-sizing: border-box;
+}
+.k-radar svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.k-radar-axis {
+  font: 500 11px var(--default-font-family);
+  fill: var(--gray-11);
+  cursor: default;
+}
+.k-radar-axis[data-on="true"] {
+  fill: var(--gray-12);
+  font-weight: 700;
+}
+.k-pill-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--k-strong);
+  color: var(--k-on-strong);
+  font: 600 11.5px/1 var(--default-font-family);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5);
+  transition: left 200ms ease, top 200ms ease;
+}
+.k-pill-tip[data-below="true"] {
+  transform: translate(-50%, 12px);
+}
+
 /* ---------------------------------------------------------------- section headings */
 .k-eyebrow {
   font: 600 11px/1.2 var(--default-font-family);
