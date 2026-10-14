@@ -53,7 +53,7 @@ export function PageHeader({
   const ref = useSplitReveal<HTMLHeadingElement>([title]);
   return (
     <Flex justify="between" align="end" gap="4" wrap="wrap" mb="5">
-      <Box style={{ maxWidth: 760 }}>
+      <Box style={{ maxWidth: 940 }}>
         <Flex align="center" gap="3" mb="3">
           <span className="k-chip">{icon}</span>
           <Text size="2" weight="medium">
