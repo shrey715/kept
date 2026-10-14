@@ -729,7 +729,7 @@ def build_ask(
     policy_dir: str | None = None,
 ) -> CollectionsAsk:
     """The real Ask: certified metrics from silver.metric_definitions, the contract's table list,
-    the local model (KEPT_ASK_LLM_MODEL, default Gemma 3 12B on Ollama) through the gateway, Presidio
+    the local model (KEPT_ASK_LLM_MODEL, default Qwen3.8-27B on llama.cpp) through the gateway, Presidio
     redaction, and the policy index when one is built (KEPT_LANCEDB_DIR, default data/policy/lancedb)."""
     from pathlib import Path
 
@@ -741,7 +741,7 @@ def build_ask(
     from kept.contracts.data_contract import load_data_contract
 
     llm = llm or LiteLLMGateway(
-        model=os.environ.get("KEPT_ASK_LLM_MODEL", "ollama/gemma3:12b-it-qat"),  # local models only
+        model=os.environ.get("KEPT_ASK_LLM_MODEL", "llamacpp/qwen3.8-27b"),  # local models only
         audit_log=audit_log,
         max_retries=6,
         backoff_s=4.0,
