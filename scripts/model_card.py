@@ -139,8 +139,8 @@ def to_markdown(card: dict) -> str:  # type: ignore[type-arg]
         f"| Brier score | {p['brier']:.3f} |",
         f"| Kept rate in the test window | {p['kept_rate']:.1%} |",
         "",
-        "Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728 "
-        "(`docs/reports/evidence.md` §3). A first version scored 0.92 because one feature, `amount_ratio`, encoded the "
+        "Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728, a gain of 2.5 AUC points [1.8, 3.2] on the same promises "
+        "(`docs/reports/evidence.md` §6). A first version scored 0.92 because one feature, `amount_ratio`, encoded the "
         "outcome; it was removed.",
         "",
         "**Calibration (predicted against observed, by score bin)**",
