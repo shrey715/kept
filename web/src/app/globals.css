@@ -2655,3 +2655,65 @@ html {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* notifications: quiet rows; unread is a thin maple bar, a dot and a stronger title, never a filled block */
+.k-notif {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  transition: background-color 0.15s;
+}
+.k-notif + .k-notif {
+  margin-top: 2px;
+}
+.k-notif:hover,
+.k-notif:focus-visible {
+  background: var(--k-chip);
+  outline: none;
+}
+.k-notif[data-unread="true"]::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 99px;
+  background: var(--k-red);
+}
+.k-notif-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--k-frame);
+}
+.k-notif-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.k-notif-count {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--k-chip);
+  color: var(--gray-11);
+  font: 600 11px/1.3 var(--default-font-family);
+}
+.k-text-btn:focus:not(:focus-visible) {
+  outline: none;
+}

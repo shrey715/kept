@@ -143,6 +143,20 @@ export function NotificationCenter({ me }: { me: Persona }) {
   const unreadOf = (n: Notification) => !readUpto || ms(n.at) > ms(readUpto);
   const unread = items.filter(unreadOf).length;
   const list = tab === "unread" ? items.filter(unreadOf) : items;
+  // the same event repeated (one case's proposals cancelled six times) is one row with a count, newest first
+  const rows: { n: Notification; count: number; unread: boolean }[] = [];
+  const seen = new Map<string, number>();
+  for (const n of list) {
+    const k = `${n.title}|${n.body ?? ""}`;
+    const at = seen.get(k);
+    if (at == null) {
+      seen.set(k, rows.length);
+      rows.push({ n, count: 1, unread: unreadOf(n) });
+    } else {
+      rows[at].count += 1;
+      rows[at].unread ||= unreadOf(n);
+    }
+  }
 
   function markAll() {
     const upto = items[0]?.at ?? new Date().toISOString();
@@ -181,7 +195,7 @@ export function NotificationCenter({ me }: { me: Persona }) {
             </AnimatePresence>
           </button>
         </Popover.Trigger>
-        <Popover.Content align="end" sideOffset={10} className="k-pop" style={{ width: "min(380px, calc(100vw - 24px))", padding: 0 }}>
+        <Popover.Content align="end" sideOffset={10} className="k-pop" onOpenAutoFocus={(e) => e.preventDefault()} style={{ width: "min(380px, calc(100vw - 24px))", padding: 0 }}>
           <motion.div initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 420, damping: 32 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "16px 16px 10px" }}>
               <Text size="4" weight="medium" style={{ letterSpacing: "-0.02em" }}>
@@ -208,7 +222,7 @@ export function NotificationCenter({ me }: { me: Persona }) {
                 </div>
               )}
               <AnimatePresence initial={false}>
-                {list.map((n, i) => (
+                {rows.map(({ n, count, unread: fresh }, i) => (
                   <motion.button
                     key={n.id}
                     layout
@@ -216,16 +230,19 @@ export function NotificationCenter({ me }: { me: Persona }) {
                     animate={{ opacity: 1, x: 0, transition: { delay: Math.min(i, 8) * 0.03 } }}
                     exit={{ opacity: 0, x: -10 }}
                     onClick={() => go(n)}
-                    className="k-note"
-                    data-unread={unreadOf(n)}
+                    className="k-notif"
+                    data-unread={fresh}
                   >
-                    <span className="k-chip" style={{ width: 34, height: 34, borderRadius: 10, color: LOOK[n.severity].color }}>
+                    <span className="k-notif-ico" style={{ color: LOOK[n.severity].color }}>
                       {LOOK[n.severity].icon}
                     </span>
                     <span style={{ minWidth: 0, flex: 1 }}>
-                      <Text as="div" size="2" weight="medium" truncate>
-                        {n.title}
-                      </Text>
+                      <span className="k-notif-title">
+                        <Text as="span" size="2" weight={fresh ? "medium" : "regular"} truncate>
+                          {n.title}
+                        </Text>
+                        {count > 1 && <span className="k-notif-count">×{count}</span>}
+                      </span>
                       {n.body && (
                         <Text as="div" size="1" color="gray" truncate>
                           {n.body}
@@ -235,7 +252,7 @@ export function NotificationCenter({ me }: { me: Persona }) {
                         {ago(n.at)}
                       </Text>
                     </span>
-                    {unreadOf(n) && <span className="k-dot" aria-label="unread" />}
+                    {fresh && <span className="k-dot" aria-label="unread" />}
                   </motion.button>
                 ))}
               </AnimatePresence>
