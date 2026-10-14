@@ -1200,3 +1200,9 @@ html {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* the account menu floats as a card (above the tab bar on phones) */
+.k-account-menu.rt-DropdownMenuContent {
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px var(--k-line), 0 24px 50px -16px rgba(0, 0, 0, 0.45);
+}
