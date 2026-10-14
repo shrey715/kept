@@ -1,5 +1,6 @@
 "use client";
 
+import { SectionTitle } from "@/components/page-header";
 import { ArrowRightIcon, ArrowTopRightIcon, LayersIcon, MagnifyingGlassIcon, StarIcon, TargetIcon } from "@radix-ui/react-icons";
 import { Avatar, Badge, Box, Callout, Flex, Grid, Kbd, Skeleton, Table, Text, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
@@ -176,12 +177,7 @@ export default function QueuePage() {
           <Rise>
             <div className="k-card" style={{ padding: 22 }}>
               <Flex align="center" gap="3" wrap="wrap">
-                <span className="k-chip">
-                  <LayersIcon />
-                </span>
-                <Text size="6" style={{ letterSpacing: "-0.03em" }}>
-                  Cases by days past due
-                </Text>
+                <SectionTitle eyebrow="Portfolio" title="Cases by days past due" icon={<LayersIcon />} mb="0" />
                 <Flex gap="4" ml={{ initial: "0", sm: "4" }} align="center">
                   <Legend color="var(--k-strong)" label="Open cases" />
                   <Legend color="var(--k-red)" label="With an action" />
@@ -197,9 +193,7 @@ export default function QueuePage() {
           <Rise>
             <div className="k-card" style={{ padding: 0, overflow: "hidden" }}>
               <Flex align="center" gap="3" px="5" pt="4" pb="2">
-                <Text size="5" style={{ letterSpacing: "-0.02em" }}>
-                  Cases
-                </Text>
+                <SectionTitle eyebrow="Worklist" title="Cases" mb="0" />
                 <span className="k-badge">{shown.length}</span>
               </Flex>
               <Table.Root variant="ghost">

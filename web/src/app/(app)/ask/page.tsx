@@ -1,5 +1,6 @@
 "use client";
 
+import { PageHeader, SectionTitle } from "@/components/page-header";
 import {
   ArrowUpIcon,
   BarChartIcon,
@@ -18,7 +19,6 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { CitedText, Sources, useVerify } from "@/components/citations";
 import { Rise, Stagger, spring } from "@/components/motion";
-import { PageHeader } from "@/components/page-header";
 import { api, humanize, type AskResponse, type ChartChoice } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
@@ -299,9 +299,7 @@ export default function AskPage() {
         <Flex direction="column" gap="3">
           <Rise>
             <div className="k-card">
-              <Text as="div" size="3" weight="medium" mb="3">
-                How an answer is grounded
-              </Text>
+              <SectionTitle eyebrow="Grounding" title="How an answer is grounded" mb="3" />
               <Flex direction="column" gap="3">
                 {LADDER.map((s, i) => (
                   <Flex key={s.title} gap="3" align="start">

@@ -77,3 +77,29 @@ export function PageHeader({
     </Flex>
   );
 }
+
+/** A dashboard section's heading: a small maple label over a display-font title, an optional icon chip and aside. */
+export function SectionTitle({
+  eyebrow,
+  title,
+  icon,
+  aside,
+  mb = "4",
+}: {
+  eyebrow: string;
+  title: React.ReactNode;
+  icon?: React.ReactNode;
+  aside?: React.ReactNode;
+  mb?: "0" | "1" | "2" | "3" | "4" | "5";
+}) {
+  return (
+    <Flex align="center" gap="3" mb={mb} wrap="wrap">
+      {icon && <span className="k-chip">{icon}</span>}
+      <Box style={{ minWidth: 0 }}>
+        <div className="k-eyebrow">{eyebrow}</div>
+        <h2 className="k-h2">{title}</h2>
+      </Box>
+      {aside && <Box ml="auto">{aside}</Box>}
+    </Flex>
+  );
+}

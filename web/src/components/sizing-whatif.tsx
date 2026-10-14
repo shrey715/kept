@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge, Box, Button, Card, Flex, Heading, Slider, Text } from "@radix-ui/themes";
+import { SectionTitle } from "./page-header";
+import { Badge, Box, Button, Card, Flex, Slider, Text } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { money, type Proposal } from "@/lib/api";
@@ -18,7 +19,7 @@ export function SizingWhatIf({ proposal, balance, onPropose }: { proposal: Propo
   return (
     <Card size="3">
       <Flex justify="between" align="center" mb="3">
-        <Heading size="4">What if?</Heading>
+        <SectionTitle eyebrow="Promise sizing" title="What if?" mb="0" />
         <AnimatePresence mode="wait" initial={false}>
           <motion.span key={String(fits)} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={spring}>
             <Badge size="2" color={fits ? "grass" : "red"} variant="soft">{fits ? "fits spare cash" : "above spare cash"}</Badge>

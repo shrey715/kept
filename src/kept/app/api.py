@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from kept import __version__
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
+from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
@@ -80,6 +81,7 @@ class Services:
     chart: Callable[[ChartRequest], ChartChoice] | None = None  # real: the LLM picks; None: the rules pick
     calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
     reads: ReadState | None = None  # how far each person has read the bell
+    history: Callable[[str], CaseHistory] | None = None  # real: contacts, promises, months from silver
     demo: bool = False
 
 
@@ -209,6 +211,7 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/nba?user_id&role[&now]  200 NBACard; 403 if access.can_view_case is
                                                   False; 404 unknown case
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
+    GET  /cases/{case_id}/history?user_id&role    200 CaseHistory (contacts, promises, month-ends); 503 demo
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
     GET  /notifications?user_id&role[&limit]      200 NotificationFeed: audit events for this person, newest
                                                   first, plus what waits at their approval stage
@@ -303,6 +306,16 @@ def create_app(services: Services) -> FastAPI:
         if now is not None and now.tzinfo is None:
             raise HTTPException(422, "now must include a time zone")
         return card_for(case_id, now or services.clock())
+
+    @app.get("/cases/{case_id}/history", response_model=CaseHistory)
+    def get_history(case_id: str, user_id: str, role: Role) -> CaseHistory:
+        guard_case(case_id, user_id, role)
+        if services.history is None:
+            raise HTTPException(503, "case history needs the warehouse")
+        try:
+            return services.history(case_id)
+        except KeyError:
+            raise HTTPException(404, f"no case {case_id} in the warehouse") from None
 
     @app.get("/cases/{case_id}/customer", response_model=GoldenCustomer)
     def get_customer(case_id: str, user_id: str, role: Role) -> GoldenCustomer:

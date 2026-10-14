@@ -26,7 +26,7 @@ from kept.contracts.nba import (
     Proposal,
     StatedPay,
 )
-from kept.nba.explain import top_reasons
+from kept.nba.explain import drivers, top_reasons
 from kept.nba.promise_model import PromiseModel, serving_row
 from kept.nba.ranking import is_close_call, score_actions
 from kept.nba.release import cancel_pending, is_stale
@@ -244,11 +244,12 @@ class KeptEngine:
                 legacy_text=legacy,
             )
 
-        reasons = []  # stage 7
+        reasons, why = [], []  # stage 7
         explain = getattr(self._scorer, "contributions", None)
         if explain is not None:
             values = fv.model_dump()
-            reasons = top_reasons(explain(X, model_of[best.action]), values)
+            contrib = explain(X, model_of[best.action])
+            reasons, why = top_reasons(contrib, values), drivers(contrib, values)
         tier = assign_tier(
             action=best.action,
             hard_stopped=False,
@@ -265,6 +266,7 @@ class KeptEngine:
             proposal=proposal,
             probabilities=probs,
             reasons=tuple(reasons),
+            drivers=tuple(why),
             sizing_text=self._sizing_text(ctx, fv, proposal.sizing) if proposal.sizing else None,
             similar_cases_text=similar_cases(fv, best.action),
             legacy_text=legacy,

@@ -6,8 +6,9 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from kept.config import MAX_DRIVERS
 from kept.contracts.feature_registry import model_inputs
-from kept.contracts.nba import Reason
+from kept.contracts.nba import Driver, Reason
 
 # One fixed sentence per model feature. {value} is the case's value (formatted here),
 # {pts} the contribution in percentage points. The sentence states the fact; the points say
@@ -81,6 +82,52 @@ def top_reasons(
         )
         if len(out) == k:
             break
+    return out
+
+
+# short labels for the "why" chart; any model input without one shows its name
+DRIVER_LABELS: Mapping[str, str] = {
+    "max_dpd": "Days past due",
+    "times_30plus_dpd_12m": "Times 30+ DPD, 12m",
+    "days_in_bucket": "Days in bucket",
+    "broken_promises_90d": "Broken promises, 90d",
+    "kept_promise_ratio": "Promises kept",
+    "days_to_next_payroll": "Days to payday",
+    "pay_frequency": "Pay frequency",
+    "payroll_delay_days": "Pay delay, days",
+    "pay_change_vs_3m_avg": "Pay vs 3-month avg",
+    "cash_flow_trend": "Cash-flow trend",
+    "card_utilisation_trend": "Card utilisation trend",
+    "answer_rate": "Answer rate",
+    "answer_rate_after_18h": "Answer rate after 18:00",
+    "payment_link_usage": "Payment-link use",
+    "cohort_recovery_rate": "Similar cases recovered",
+    "cohort_kept_rate": "Similar cases' promises kept",
+    "promise_intent": "Said they'd pay",
+}
+
+
+def drivers(
+    contributions: Mapping[str, float], values: Mapping[str, object], *, k: int = MAX_DRIVERS
+) -> list[Driver]:
+    """The k model inputs that move the recommended action most, either way, largest first (ties by name)."""
+    allowed = set(model_inputs())
+    ranked = sorted(
+        (f for f, c in contributions.items() if f in allowed and round(c * 100, 1)),
+        key=lambda f: (-abs(contributions[f]), f),
+    )
+    out = []
+    for f in ranked[:k]:
+        v = values.get(f)
+        missing = v is None or (isinstance(v, float) and math.isnan(v))
+        out.append(
+            Driver(
+                feature=f,
+                label=DRIVER_LABELS.get(f, f.replace("_", " ").capitalize()),
+                value=None if missing else _fmt(f, v),
+                pts=round(contributions[f] * 100, 1),
+            )
+        )
     return out
 
 

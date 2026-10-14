@@ -3,8 +3,9 @@
 // The case's recorded calls, read on this machine: Whisper's transcript of the recording, then the same redaction
 // and extraction a typed note gets, with the words each signal relied on highlighted. Shown for reference: the card
 // already reads the same call from the bank's transcript, so these never change a decision.
+import { SectionTitle } from "./page-header";
 import { SpeakerLoudIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { Badge, Box, Card, Flex, Text } from "@radix-ui/themes";
 import { type CallOut, api, humanize } from "@/lib/api";
 import { FIELDS, Highlighted } from "./extraction-panel";
 
@@ -39,10 +40,7 @@ export function CallsPanel({ calls, who }: { calls: CallOut[]; who: Who }) {
   if (!calls.length) return null;
   return (
     <Card size="3">
-      <Flex align="center" gap="2" mb="1">
-        <SpeakerLoudIcon />
-        <Heading size="4">Calls</Heading>
-      </Flex>
+      <SectionTitle eyebrow="Voice · Whisper on this machine" title="Calls" icon={<SpeakerLoudIcon />} mb="2" />
       <Text as="p" size="2" color="gray" mb="4">
         Transcribed from the recording on this machine (nothing leaves it), then read like a note. For reference: the
         card reads the same call from the bank&apos;s transcript.
