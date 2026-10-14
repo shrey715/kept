@@ -106,6 +106,12 @@ def check_open(question: str, intent: Intent) -> tuple[Intent, str | None]:
     ), "Intent check: dropped is_open (the question doesn't ask about open cases)"
 
 
+def as_lookup(intent: Intent) -> Intent:
+    """A rerouted question goes to the lookup as a lookup, without the metric the router wrongly named (it
+    would pull every SQL draft toward it). Dates and filters stay as hints."""
+    return intent.model_copy(update={"kind": IntentKind.LOOKUP, "metric_id": None})
+
+
 def ground_filters(intent: Intent, values: Any) -> tuple[Intent, list[str]]:
     """Check each text filter value against the column's real values (`values(col)`: a list, or None when
     unknown). A near miss maps to what's stored ("instalment" -> "instalment_1_of_n"); a value matching
@@ -275,11 +281,16 @@ def build_graph(ask: CollectionsAsk) -> Any:
     def metric(s: AskState) -> AskState:
         query = ask._queries.get(s["intent"].metric_id or "")
         if query is None:  # the router named a metric we don't certify: a lookup can still answer
-            return {"reroute": True, "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"]}
+            return {
+                "reroute": True,
+                "intent": as_lookup(s["intent"]),
+                "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"],
+            }
         d = ask._metrics.get(s["intent"].metric_id or "")
         if d is not None and not relevant(s["request"].question, d.metric_id, d.metric_name, d.synonyms):
             return {
                 "reroute": True,
+                "intent": as_lookup(s["intent"]),
                 "trace": [f"Relevance check: the question names nothing of {d.metric_name}; trying a lookup"],
             }
         intent, repaired = repair_intent(s["intent"], query)
@@ -292,6 +303,7 @@ def build_graph(ask: CollectionsAsk) -> Any:
         except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
             return {
                 "reroute": True,
+                "intent": as_lookup(s["intent"]),
                 "trace": [*notes, f"Certified metric: can't compile ({e}); trying a lookup"],
             }
         guarded = guard_sql(sql, ask._sql_policy())
