@@ -19,7 +19,7 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useServerClock } from "@/lib/clock";
 import { PERSONAS, can, useSession } from "@/lib/session";
 import { useHydrated } from "@/lib/stored";
@@ -37,6 +37,20 @@ export const NAV = [
   { href: "/demo", label: "Guided demo", icon: PlayIcon, blurb: "Jane's case, start to finish, in five steps", show: () => true },
 ];
 
+// phones get the bottom tab bar (globals.css, max-width 767px): menus open above it, not beside it
+const PHONE = "(max-width: 767px)";
+function usePhone() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(PHONE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(PHONE).matches,
+    () => false,
+  );
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const { me, signIn, signOut } = useSession();
   const ready = useHydrated();
@@ -44,6 +58,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const { now, health } = useServerClock();
+  const phone = usePhone();
 
   useEffect(() => {
     if (ready && !me) router.replace("/signin");
@@ -95,7 +110,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Avatar size="3" fallback={initials(me.name)} radius="full" color="ruby" variant="solid" />
             </button>
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content side="right" align="end">
+          <DropdownMenu.Content
+            side={phone ? "top" : "right"}
+            align="end"
+            sideOffset={phone ? 14 : 8}
+            collisionPadding={12}
+            className="k-account-menu"
+          >
             <DropdownMenu.Label>
               {me.name} · {me.title}
             </DropdownMenu.Label>
