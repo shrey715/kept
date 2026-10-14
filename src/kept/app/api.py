@@ -368,10 +368,7 @@ def create_app(services: Services) -> FastAPI:
             guard_case(case_id, user_id, role)
         elif role not in CASE_WIDE_ROLES:
             raise HTTPException(403, "only specialists, team leads and compliance see the whole log")
-        events = services.audit_log.read(kind=kind)
-        if case_id is not None:
-            events = [e for e in events if e.subject_id == case_id or e.payload.get("case_id") == case_id]
-        return list(reversed(events))[:limit]
+        return list(services.audit_log.latest(kind=kind, case_id=case_id, limit=limit))
 
     @app.post("/proposals/{proposal_id}/decision", response_model=ReleaseResult)
     def decide(proposal_id: str, decision: ReleaseDecision) -> ReleaseResult:

@@ -157,6 +157,13 @@ class AuditLog(Protocol):
         """Events in append order."""
         ...
 
+    def latest(
+        self, *, kind: AuditKind | None = None, case_id: str | None = None, limit: int = 200
+    ) -> Sequence[AuditEvent]:
+        """Newest first, at most `limit`: events of `kind` (any if None) about `case_id` (its subject or
+        payload.case_id; any if None). What a screen shows, without reading the whole log."""
+        ...
+
 
 __all__ = [
     "Action",

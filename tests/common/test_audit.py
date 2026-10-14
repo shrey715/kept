@@ -71,7 +71,7 @@ def test_persists_across_reopen(tmp_path: Path) -> None:
 def test_no_update_or_delete_api() -> None:
     log = DuckDBAuditLog()
     public = {n for n in dir(log) if not n.startswith("_")}
-    assert public == {"append", "append_many", "read"}  # append-only: no update or delete
+    assert public == {"append", "append_many", "latest", "read"}  # append-only: no update or delete
 
 
 def test_event_ids_unique_and_sortable() -> None:
@@ -122,3 +122,34 @@ def test_parallel_appends_keep_one_unbroken_chain(tmp_path: Path) -> None:
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(one, range(64)))
     assert verify_chain(log) == (64, 0, None)
+
+
+def test_latest_is_newest_first_and_finds_a_case_by_subject_or_payload(tmp_path: Path) -> None:
+    log = DuckDBAuditLog(tmp_path / "audit.duckdb")
+    at = datetime(2026, 10, 14, tzinfo=UTC)
+    log.append(AuditEvent(event_id="a", at=at, kind=AuditKind.RECOMMENDATION, actor_id="s", subject_id="C-1"))
+    log.append(
+        AuditEvent(
+            event_id="b",
+            at=at,
+            kind=AuditKind.RELEASE,
+            actor_id="u",
+            subject_id="P-9",
+            payload={"case_id": "C-1"},
+        )
+    )
+    log.append(
+        AuditEvent(
+            event_id="c",
+            at=at,
+            kind=AuditKind.RELEASE,
+            actor_id="u",
+            subject_id="P-8",
+            payload={"case_id": "C-12"},
+        )
+    )
+    assert [e.event_id for e in log.latest(case_id="C-1")] == [
+        "b",
+        "a",
+    ]  # not C-12, though its JSON contains "C-1"
+    assert [e.event_id for e in log.latest(kind=AuditKind.RELEASE, limit=1)] == ["c"]

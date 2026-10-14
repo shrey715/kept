@@ -127,6 +127,32 @@ class DuckDBAuditLog:
             )
             return [AuditEvent.model_validate_json(b) for (b,) in rows.fetchall()]
 
+    def latest(
+        self, *, kind: AuditKind | None = None, case_id: str | None = None, limit: int = 200
+    ) -> Sequence[AuditEvent]:
+        """Newest first, filtered and limited in SQL (the log holds ~a million nightly recommendations)."""
+        sql, params = _latest_sql(kind, case_id, limit)
+        with self._conn() as c:
+            return [AuditEvent.model_validate_json(b) for (b,) in c.execute(sql, params).fetchall()]
+
+
+def _latest_sql(kind: AuditKind | None, case_id: str | None, limit: int) -> tuple[str, list[object]]:
+    where: list[str] = ["true"]
+    params: list[object] = []
+    if kind is not None:
+        where.append("kind = ?")
+        params.append(kind.value)
+    if case_id is not None:  # LIKE first: it skips the JSON parse on the ~million rows about other cases
+        where.append(
+            "(subject_id = ? or (body like '%' || ? || '%'"
+            " and json_extract_string(body, '$.payload.case_id') = ?))"
+        )
+        params += [case_id] * 3
+    return f"select body from audit_events where {' and '.join(where)} order by seq desc limit ?", [
+        *params,
+        limit,
+    ]
+
 
 def verify_chain(log: DuckDBAuditLog) -> tuple[int, int, str | None]:
     """Re-walk the chain in append order: (events checked, unhashed events from before the chain, the first
