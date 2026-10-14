@@ -155,26 +155,33 @@ leaves out promises that were resolved quickly.
 
 ## 8. A standalone model with the bank's kinds of inputs
 
-The bank's reason codes name what its score uses: balances and utilisation, bureau score changes, contact history,
-payroll delay, tenure. Kept has the same kinds of data. This model takes the inputs below, each dated before the promise:
-the promise's own details (channel, product, type), the last month-end balances and payments, the customer record,
-the latest bureau pull, contacts in the 30 days before, and the deposit account's cash flow in the 45 days before.
+The bank's reason codes name what its score uses: returned payments, utilisation, bureau score changes, contact history,
+payroll delay, tenure. Kept has the same kinds of data. This model takes the inputs below, each dated before the
+promise: the promise's own details (channel, product, type); the customer's repayment record (card statements over the
+last 12 cycles, loan instalments paid late, returned pre-authorised debits); month-end balances and their 6-month
+trend; the customer record; the latest bureau pull; contacts in the 30 days before; the deposit account's cash flow;
+and payroll (days since the last pay against the usual interval, gaps, pay against its average). The kept rate fell
+from about 63% to 35% in mid-2026, so recent promises are weighted more. The weighting and the tree settings were chosen
+on the 45 days before the cut; the test promises were scored once.
 
 | Model | AUC, all 12,820 | Against the bank's [95% CI] | AUC, the 9,090 the bank scored before the due date | Against the bank's [95% CI] |
 |---|---:|---:|---:|---:|
 | Bank's ptp_break v2.1 | 0.702 | — | 0.695 | — |
 | Kept, 6 features (as shipped) | 0.625 | -7.8 [-9.4, -6.1] | 0.601 | -9.4 [-11.0, -7.8] |
-| Kept, wide: LightGBM | 0.686 | -1.6 [-3.3, +0.0] | 0.681 | -1.4 [-3.0, +0.2] |
-| Kept, wide: LightGBM + random forest, averaged ranks | 0.688 | -1.5 [-2.9, -0.0] | 0.685 | -1.1 [-2.7, +0.6] |
+| Kept, wide: LightGBM | 0.696 | -0.6 [-2.2, +0.9] | 0.691 | -0.4 [-2.1, +1.2] |
+| Kept, wide: LightGBM + random forest, averaged ranks | 0.697 | -0.5 [-1.9, +1.0] | 0.694 | -0.1 [-1.7, +1.5] |
+| Kept's wide model and the bank's score, averaged ranks | 0.764 | +6.1 [+5.1, +6.9] | 0.757 | +6.2 [+5.3, +7.2] |
 
-43 inputs, trained on the 36,265 promises made in the 90 days before the cut.
+79 inputs, trained on the 164,363 promises made before the cut, recent ones weighted more (half-life 30 days).
 
-The wide model closes most of the gap: from 7.8 AUC points behind the bank's score to about 1.5. On the promises the
-bank scored before their due date, where neither model can see whether the due date was met, the two are not
-distinguishable (the interval includes zero). Kept's model scores at the moment the promise is made, about 9 days
-before the bank's. We tried and dropped: random forest, extra trees and logistic regression alone, one model per
-product or channel, the agent's past kept rate, call audio measures and the note text (none added beyond the noise);
-features dated after the promise score 0.79 but only by seeing contacts after a missed due date, so they are excluded.
+**Matched, not beaten.** On its own, the wide model ranks promises as well as the bank's score: the gap is a fraction
+of a point and its interval includes zero, both on all promises and on those the bank scored before the due date.
+That is up from 7.8 points behind for the shipped six-feature model. **Together, the two are far better than either:**
+an equal-weight average of the two rankings, with nothing fitted on the test, gains about 6 AUC points over the bank's
+score alone, so most of what Kept's model knows, the bank's doesn't. We tried and dropped: random forest, extra trees
+and logistic regression alone, a spline GLM stacked with the trees, one model per product or channel, the agent's past
+kept rate, call audio measures and the note text (none added beyond the noise). Features dated after the promise score
+0.79, but only by seeing contacts after a missed due date, so they are excluded.
 
 ## 9. Uplift where the bank randomised
 
