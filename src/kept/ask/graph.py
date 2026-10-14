@@ -122,6 +122,21 @@ def check_open(question: str, intent: Intent) -> tuple[Intent, str | None]:
     ), "Intent check: dropped is_open (the question doesn't ask about open cases)"
 
 
+_BUCKET = re.compile(r"(?<![\d-])(1-30|31-60|61-90|91-120|121-150|151-180|180\+)(?![\d])")
+
+
+def check_bucket(question: str, intent: Intent, allowed: frozenset[str]) -> tuple[Intent, str | None]:
+    """A delinquency bucket the question names ("1-30 days past due") is a filter when the metric has one and
+    the router left it out (and the answer isn't grouped by bucket, which would compare them all)."""
+    col = next((c for c in ("dpd_bucket", "current_bucket") if c in allowed), None)
+    m = _BUCKET.search(question)
+    if col is None or m is None or col in intent.filters or col in intent.group_by:
+        return intent, None
+    return intent.model_copy(update={"filters": {**intent.filters, col: m[1]}}), (
+        f"Intent check: the question names the {m[1]} bucket, so {col} = '{m[1]}'"
+    )
+
+
 def as_lookup(intent: Intent) -> Intent:
     """A rerouted question goes to the lookup as a lookup, without the metric the router wrongly named (it
     would pull every SQL draft toward it). Dates and filters stay as hints."""
@@ -287,8 +302,20 @@ def build_graph(ask: CollectionsAsk) -> Any:
             and intent.date_to is None
             and len(spans) == 1
         )
+        points = [sp for sp in spans if sp[1] == sp[2]]
+        cohort = (  # "at the end of March ... by the end of June": the cohort is the first point in time
+            intent.kind is IntentKind.METRIC
+            and intent.date_from is None
+            and intent.date_to is None
+            and len(spans) == 2
+            and len(points) == 2
+        )
         if filled:  # the question names one period and the router left the range empty: fill it
             intent = intent.model_copy(update={"date_from": spans[0][1], "date_to": spans[0][2]})
+        elif cohort:
+            first = min(points, key=lambda sp: sp[1])
+            intent = intent.model_copy(update={"date_from": first[1], "date_to": first[1]})
+            spans, filled = [first], True
         out: AskState = {"fresh": fresh, "as_of": as_of, "intent": intent}
         label = f"Route: {intent.kind.value}" + (f" {intent.metric_id}" if intent.metric_id else "")
         if needs_clarification(router_confidence=intent.confidence, candidates_agree=None):
@@ -322,6 +349,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
         intent, repaired = repair_intent(s["intent"], query)
         intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
         intent, open_note = check_open(s["request"].question, intent)
+        intent, bucket_note = check_bucket(s["request"].question, intent, query.allowed_filters)
+        open_note = "; ".join(n for n in (open_note, bucket_note) if n) or None
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
         notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
         try:

@@ -591,3 +591,17 @@ def test_lint_sql_flags_clear_convention_misses_only() -> None:
     assert by == ["The question asks for a breakdown (by product): GROUP BY that column."]
     ok = "SELECT current_bucket, count(*) AS n FROM silver.collections_cases WHERE outcome IS NULL GROUP BY 1"
     assert lint_sql("How many collections cases are open today, by current bucket?", ok) == []
+
+
+def test_check_bucket_adds_the_named_bucket_unless_grouped() -> None:
+    from kept.ask.graph import check_bucket
+    from kept.contracts.ask import Intent, IntentKind
+
+    q = "Of accounts 1-30 days past due at the end of March 2026, what share rolled by the end of June 2026?"
+    i = Intent(kind=IntentKind.METRIC, metric_id="roll_rate", confidence=0.9)
+    allowed = frozenset({"product_type", "dpd_bucket"})
+    fixed, note = check_bucket(q, i, allowed)
+    assert fixed.filters == {"dpd_bucket": "1-30"} and note
+    grouped = i.model_copy(update={"group_by": ("dpd_bucket",)})
+    assert check_bucket(q, grouped, allowed) == (grouped, None)
+    assert check_bucket("roll rate by product", i, allowed) == (i, None)
