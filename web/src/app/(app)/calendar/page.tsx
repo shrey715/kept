@@ -16,7 +16,7 @@ import {
 import { Box, Callout, Flex, Popover, Skeleton, Text } from "@radix-ui/themes";
 import { motion } from "motion/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TierBadge } from "@/components/bits";
 import { Rise, Stagger } from "@/components/motion";
 import { download } from "@/lib/csv";
@@ -118,6 +118,8 @@ export default function CalendarPage() {
     return m;
   }, [shown]);
   const today = key(new Date());
+  const fitRef = useRef<HTMLDivElement>(null);
+  const fit = useFitHeight(fitRef, [view, feed == null, error]);
   const toggle = <T,>(set: Set<T>, v: T) => {
     const n = new Set(set);
     if (n.has(v)) n.delete(v);
@@ -204,13 +206,13 @@ export default function CalendarPage() {
         </Callout.Root>
       )}
       <Rise>
-        <Box mt="4">
+        <Box mt="4" ref={fitRef}>
           {!feed && !error ? (
-            <Skeleton height="560px" />
+            <Skeleton height={`${fit ?? 560}px`} />
           ) : view === "month" ? (
-            <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} onDay={(d) => (setAnchor(d), setView("week"))} />
+            <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} onDay={(d) => (setAnchor(d), setView("week"))} height={fit} />
           ) : view === "week" ? (
-            <WeekView start={start} byDay={byDay} today={today} />
+            <WeekView start={start} byDay={byDay} today={today} onMore={(d) => (setAnchor(startOfDay(d)), setView("agenda"))} height={fit} />
           ) : (
             <Agenda start={start} end={end} byDay={byDay} today={today} />
           )}
@@ -221,11 +223,32 @@ export default function CalendarPage() {
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MAX_IN_CELL = 3;
+/** The height left on screen below `ref` on a desktop, so the month and week views fit the window instead of making
+ * the page scroll; null on narrow screens, where the views flow naturally. */
+function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[]): number | null {
+  const [h, setH] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el || window.innerWidth <= 900) return setH(null);
+      setH(Math.max(440, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 28)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return h;
+}
 
-function MonthGrid({ start, month, byDay, today, onDay }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; onDay: (d: Date) => void }) {
+/** How many event chips fit in `space` pixels, leaving room for a "+N more" line; at least one. */
+const fitting = (space: number, chip: number) => Math.max(1, Math.floor((space - 20) / chip));
+
+function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; onDay: (d: Date) => void; height: number | null }) {
+  // six week rows share the height: the cell minus its padding and day number holds this many 23px chips
+  const maxIn = height ? Math.min(4, fitting((height - 20 - 27 - 30) / 6 - 12 - 30, 23)) : 3;
   return (
-    <div className="k-cal k-dots">
+    <div className="k-cal k-dots" data-fit={height != null} style={height ? { height } : undefined}>
       <div className="k-cal-grid k-cal-head" aria-hidden>
         {WEEKDAYS.map((w) => (
           <span key={w}>{w}</span>
@@ -241,12 +264,12 @@ function MonthGrid({ start, month, byDay, today, onDay }: { start: Date; month: 
                 {d.getDate()}
               </button>
               <div className="k-cal-evs">
-                {evs.slice(0, MAX_IN_CELL).map((e) => (
+                {evs.slice(0, maxIn).map((e) => (
                   <EventChip key={e.id} e={e} compact />
                 ))}
-                {evs.length > MAX_IN_CELL && (
+                {evs.length > maxIn && (
                   <button className="k-cal-more" onClick={() => onDay(d)}>
-                    +{evs.length - MAX_IN_CELL} more
+                    +{evs.length - maxIn} more
                   </button>
                 )}
               </div>
@@ -258,9 +281,10 @@ function MonthGrid({ start, month, byDay, today, onDay }: { start: Date; month: 
   );
 }
 
-function WeekView({ start, byDay, today }: { start: Date; byDay: Map<string, CalendarEvent[]>; today: string }) {
+function WeekView({ start, byDay, today, onMore, height }: { start: Date; byDay: Map<string, CalendarEvent[]>; today: string; onMore: (d: Date) => void; height: number | null }) {
+  const maxIn = height ? fitting(height - 24 - 44, 34) : Infinity; // a day's column minus its padding and header
   return (
-    <div className="k-week">
+    <div className="k-week" data-fit={height != null} style={height ? { height } : undefined}>
       {Array.from({ length: 7 }, (_, i) => {
         const d = addDays(start, i);
         const evs = [...(byDay.get(key(d)) ?? [])].sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.start.localeCompare(b.start));
@@ -273,7 +297,12 @@ function WeekView({ start, byDay, today }: { start: Date; byDay: Map<string, Cal
               <span className="k-week-num">{d.getDate()}</span>
             </header>
             <div className="k-cal-evs">
-              {evs.length ? evs.map((e) => <EventChip key={e.id} e={e} />) : <Text size="1" color="gray">Nothing due</Text>}
+              {evs.length ? evs.slice(0, maxIn).map((e) => <EventChip key={e.id} e={e} />) : <Text size="1" color="gray">Nothing due</Text>}
+              {evs.length > maxIn && (
+                <button className="k-cal-more" onClick={() => onMore(d)}>
+                  +{evs.length - maxIn} more
+                </button>
+              )}
             </div>
           </section>
         );

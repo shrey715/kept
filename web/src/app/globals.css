@@ -1257,6 +1257,24 @@ html {
   gap: 4px;
   min-width: 0;
 }
+/* fitted to the window on a desktop: the rows share the height and a full day says "+N more" instead of growing */
+.k-cal[data-fit="true"] {
+  display: flex;
+  flex-direction: column;
+}
+.k-cal[data-fit="true"] > .k-cal-grid[role="grid"] {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+.k-cal[data-fit="true"] .k-cal-cell {
+  min-height: 0;
+  overflow: hidden;
+}
+.k-week[data-fit="true"] .k-week-day {
+  min-height: 0;
+  overflow: hidden;
+}
 .k-cal-cell[data-out="true"] {
   background: color-mix(in srgb, var(--k-frame) 45%, transparent);
 }
