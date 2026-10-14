@@ -322,12 +322,7 @@ export default function AskPage() {
           {history.length > 0 && (
             <Rise>
               <div className="k-card">
-                <Flex align="center" gap="2" mb="2">
-                  <CounterClockwiseClockIcon />
-                  <Text size="2" weight="medium">
-                    This session
-                  </Text>
-                </Flex>
+                <SectionTitle eyebrow="History" title="This session" icon={<CounterClockwiseClockIcon />} mb="2" />
                 <Flex direction="column" gap="1">
                   {history.map((h) => (
                     <button key={h} className="k-link" onClick={() => void ask(h)} style={{ border: 0, background: "none", textAlign: "left", padding: "8px 10px", borderRadius: 12, cursor: "pointer", font: "inherit", color: "inherit" }}>

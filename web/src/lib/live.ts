@@ -49,5 +49,6 @@ export const keys = {
   card: (caseId: string, userId: string) => `card:${caseId}:${userId}`,
   customer: (caseId: string, userId: string) => `customer:${caseId}:${userId}`,
   approvals: (userId: string) => `approvals:${userId}`,
+  portfolio: (userId: string) => `portfolio:${userId}`,
   history: (caseId: string, userId: string) => `history:${caseId}:${userId}`,
 };

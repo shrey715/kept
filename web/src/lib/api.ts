@@ -6,6 +6,8 @@ type S = components["schemas"];
 export type NBACard = S["NBACard"];
 export type Notification = S["Notification"];
 export type CaseHistory = S["CaseHistory"];
+export type Portfolio = S["Portfolio"];
+export type PortfolioPage = S["CasePage"];
 export type Driver = S["Driver"];
 export type NotificationFeed = S["NotificationFeed"];
 export type Proposal = S["Proposal"];
@@ -71,6 +73,8 @@ const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 export const api = {
   health: () => call<Health>("/health"),
   queue: (w: Who) => call<QueueItem[]>(`/queue?${q(w)}`),
+  portfolio: (w: Who) => call<Portfolio>(`/portfolio?${q(w)}`),
+  portfolioCases: (w: Who, f: Record<string, string>) => call<PortfolioPage>(`/portfolio/cases?${q(w, f)}`),
   history: (caseId: string, w: Who) => call<CaseHistory>(`/cases/${encodeURIComponent(caseId)}/history?${q(w)}`),
   notifications: (w: Who) => call<NotificationFeed>(`/notifications?${q(w)}`),
   markRead: (userId: string, upto: string) => call<{ status: string }>("/notifications/read", post({ user_id: userId, upto })),
