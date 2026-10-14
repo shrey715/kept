@@ -62,11 +62,10 @@ export default function PortfolioPage() {
         <PageHeader
           icon={<DashboardIcon />}
           eyebrow="Portfolio"
-          title="Tonight's book, at a glance."
+          title="Portfolio overview"
           sub={
             <>
-              Every number comes from tonight&apos;s cards (nba.cards) and the bank&apos;s own randomised test, and every
-              insight shows the query behind it.
+              Open cases, balances and recommended actions from the latest nightly run, with the query behind each figure.
               {p?.as_of && <> Features as of {new Date(p.as_of).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}</>}
             </>
           }
@@ -84,7 +83,7 @@ export default function PortfolioPage() {
           { label: "Balance at risk", v: p?.balance, f: (n: number) => money(n), icon: <TargetIcon />, tint: "butter" },
           { label: "Expected recovery", v: p?.expected, f: (n: number) => money(n), icon: <StarIcon />, hi: true },
           { label: "With an action", v: p ? share(p.actionable, p.cases) * 100 : undefined, f: (n: number) => `${Math.round(n)}%`, icon: <LightningBoltIcon />, tint: "mint" },
-          { label: "Need a specialist", v: p?.red, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <ExclamationTriangleIcon />, tint: "rose" },
+          { label: "Specialist review", v: p?.red, f: (n: number) => Math.round(n).toLocaleString("en-CA"), icon: <ExclamationTriangleIcon />, tint: "rose" },
         ].map((k) => (
           <Rise key={k.label}>
             <div className={`k-card${k.hi ? " hi" : ""}${k.tint ? ` t-${k.tint}` : ""}`} style={{ height: "100%" }}>
@@ -106,12 +105,12 @@ export default function PortfolioPage() {
 
       {p && (
         <Box mt="5">
-          <BriefCard load={loadBrief} eyebrow="Tonight's brief · every number checked against the facts" title="What to know before the day starts" />
+          <BriefCard load={loadBrief} eyebrow="Summary" title="Key points for today" />
         </Box>
       )}
       {p && p.insights.length > 0 && (
         <Box mt="5">
-          <SectionTitle eyebrow="Grounded insights" title="What tonight's numbers say" />
+          <SectionTitle eyebrow="Insights" title="Portfolio insights" />
           <Grid columns={{ initial: "1", md: "2" }} gap="3">
             {p.insights.map((i) => (
               <Rise key={i.id}>
@@ -126,7 +125,7 @@ export default function PortfolioPage() {
         <Grid columns={{ initial: "1", lg: "2" }} gap="3" mt="5">
           <Rise>
             <div className="k-card" style={{ padding: 22, height: "100%" }}>
-              <SectionTitle eyebrow="Where the money is" title="By days-past-due bucket" />
+              <SectionTitle eyebrow="Balances" title="Balance by days past due" />
               <Grid columns="2" gap="4">
                 <Bars title="Balance at risk" rows={order(p.by_bucket).map((s) => ({ key: s.key, v: s.balance, n: s.cases }))} fmt={(v) => money(v)} color="var(--k-strong)" />
                 <Bars title="Expected recovery" rows={order(p.by_bucket).map((s) => ({ key: s.key, v: s.expected, n: s.cases }))} fmt={(v) => money(v)} color="var(--k-red)" />
@@ -138,7 +137,7 @@ export default function PortfolioPage() {
           </Rise>
           <Rise>
             <div className="k-card" style={{ padding: 22, height: "100%" }}>
-              <SectionTitle eyebrow="Tonight's recommendations" title="Cases by action" />
+              <SectionTitle eyebrow="Recommendations" title="Cases by recommended action" />
               <Bars
                 title="Open cases"
                 rows={p.by_action.map((s) => ({ key: s.key === "none" ? "No action" : (ACTION_LABEL[s.key as Action] ?? s.key), v: s.cases, n: s.cases }))}
@@ -150,7 +149,7 @@ export default function PortfolioPage() {
           </Rise>
           <Rise>
             <div className="k-card" style={{ padding: 22, height: "100%" }}>
-              <SectionTitle eyebrow="The bank's randomised test" title="Promise-kept rate by strategy" />
+              <SectionTitle eyebrow="Strategy test" title="Promise-kept rate by strategy" />
               <Forest cells={p.ab_test} />
             </div>
           </Rise>
@@ -391,7 +390,7 @@ function ModelsSection() {
   if (!g) return null;
   return (
     <Box mt="6">
-      <SectionTitle eyebrow="Models and governance" title="How far to trust the numbers above" />
+      <SectionTitle eyebrow="Models and governance" title="Model performance and monitoring" />
       <ModelPanels g={g} />
     </Box>
   );
@@ -437,7 +436,7 @@ function CaseExplorer() {
   return (
     <Box mt="5">
       <TablePanel
-        title="Every case tonight"
+        title="All cases"
         aside={page && <span className="k-badge">{page.total.toLocaleString("en-CA")}</span>}
         sum={
           page && page.rows.length > 0 ? (

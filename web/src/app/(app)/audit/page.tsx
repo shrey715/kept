@@ -44,8 +44,8 @@ export default function AuditPage() {
         <PageHeader
           icon={<ReaderIcon />}
           eyebrow="Audit trail"
-          title="Every recommendation, decision and model call, on the record."
-          sub="Append-only and hash-chained: change one record and the chain breaks (kept audit-verify)."
+          title="Activity log"
+          sub="Every recommendation, decision and model call, in an append-only, hash-chained log."
           actions={
             <Select.Root size="3" value={kind} onValueChange={(v) => setKind(v as AuditKind | "all")}>
               <Select.Trigger />

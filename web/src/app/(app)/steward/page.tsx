@@ -66,10 +66,10 @@ export default function StewardPage() {
         <PageHeader
           icon={<MixerHorizontalIcon />}
           eyebrow="Match review"
-          title="Two records, one person? You decide."
+          title="Identity match review"
           sub={
             <>
-              Uncertain matches wait here before two records become one golden ID.
+              Uncertain record matches awaiting confirmation before they are merged into one customer.
               {total > 0 && <> {total.toLocaleString("en-CA")} to review, oldest first.</>}
             </>
           }

@@ -32,7 +32,7 @@ type View = "month" | "week" | "agenda";
 /** Each kind of event, its label and icon, and the tint it wears (promises by how they ended). */
 const KINDS: { kind: Kind; label: string; icon: React.ReactNode; tint: Tint }[] = [
   { kind: "promise_due", label: "Promises due", icon: <CheckCircledIcon />, tint: "ice" },
-  { kind: "contact", label: "Send windows", icon: <PaperPlaneIcon />, tint: "lilac" },
+  { kind: "contact", label: "Contact windows", icon: <PaperPlaneIcon />, tint: "lilac" },
   { kind: "approval_deadline", label: "Approval deadlines", icon: <TimerIcon />, tint: "butter" },
   { kind: "payday", label: "Paydays", icon: <CardStackIcon />, tint: "mint" },
   { kind: "hardship_review", label: "Hardship reviews", icon: <HeartIcon />, tint: "rose" },
@@ -74,9 +74,9 @@ function shift(view: View, anchor: Date, dir: number): Date {
 }
 
 const SCOPE: Record<CalendarFeed["scope"], string> = {
-  own: "Your own cases: promises falling due, the send windows proposed for them, approval deadlines, paydays and hardship reviews.",
-  queue: "The 500 cases in your queue, best first: promises, send windows, approval deadlines, paydays and hardship reviews.",
-  aggregate: "Counts per day across the book; your role sees aggregates only, and days with fewer than 10 of a kind are left out.",
+  own: "Promise due dates, contact windows, approval deadlines, paydays and hardship reviews for your cases.",
+  queue: "Promise due dates, contact windows, approval deadlines, paydays and hardship reviews for the 500 cases in your queue.",
+  aggregate: "Daily counts across the portfolio. Counts below 10 are not shown.",
 };
 
 export default function CalendarPage() {
@@ -159,7 +159,7 @@ export default function CalendarPage() {
         <PageHeader
           icon={<CalendarIcon />}
           eyebrow="Calendar"
-          title="Everything coming up, on one calendar."
+          title="Upcoming events"
           sub={feed ? SCOPE[feed.scope] : "Promises due, send windows, approval deadlines, paydays and hardship reviews."}
           actions={
             <button className="k-strong-btn" onClick={exportAll} disabled={!shown.length} title="Download the events on screen as an .ics file">
@@ -436,13 +436,13 @@ function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; 
             ))
           ) : (
             <Text as="p" size="2" color="gray" style={{ padding: "18px 2px" }}>
-              Nothing due this day.
+              No events on this day.
             </Text>
           )}
         </div>
         {sorted.length > rows && (
           <button className="k-tab" onClick={onAgenda} style={{ alignSelf: "flex-start" }}>
-            +{sorted.length - rows} more in the agenda <ChevronRightIcon />
+            View all {sorted.length} in the agenda <ChevronRightIcon />
           </button>
         )}
           </motion.div>
@@ -480,8 +480,8 @@ function SubscribeCard({ feedPath }: { feedPath: string }) {
   const webcal = url.replace(/^https?:/, "webcal:");
   return (
     <div className="k-sub-card">
-      <div className="k-sub-title">Keep it in your calendar</div>
-      <p>Subscribe once: Google, Outlook or Apple Calendar refresh this feed every hour.</p>
+      <div className="k-sub-title">Calendar subscription</div>
+      <p>Add this feed to Google Calendar, Outlook or Apple Calendar. It refreshes every hour.</p>
       <Flex gap="2" wrap="wrap">
         <a className="k-sub-btn" href={webcal}>
           <CalendarIcon /> Subscribe
