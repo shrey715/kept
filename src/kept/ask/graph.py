@@ -304,12 +304,15 @@ def build_graph(ask: CollectionsAsk) -> Any:
             and len(spans) == 1
         )
         points = [sp for sp in spans if sp[1] == sp[2]]
-        cohort = (  # "at the end of March ... by the end of June": the cohort is the first point in time
+        point_days = {sp[1] for sp in points}
+        # "at the end of March ... by the end of June": the cohort is the first point in time, even when the
+        # router wrote the two points as a range
+        cohort = (
             intent.kind is IntentKind.METRIC
-            and intent.date_from is None
-            and intent.date_to is None
             and len(spans) == 2
             and len(points) == 2
+            and {intent.date_from, intent.date_to} <= point_days | {None}
+            and (intent.date_from, intent.date_to) != (min(point_days), min(point_days))
         )
         q_date = getattr(ask._queries.get(intent.metric_id or ""), "date_column", None) or ""
         today = (  # a snapshot table holds every snapshot: "today" or "the last snapshot" is the as-of date
