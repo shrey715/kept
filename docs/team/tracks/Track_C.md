@@ -4,10 +4,17 @@ Person: Akshat Srivastava · Tasks: `docs/TEAM_PLAN.md` §5
 
 ## Now
 - Phase: 6 (G4 passed). Track C is finished; `track-c` is retired (kept for history). New work branches off `main` (`docs/NEXT_STEPS.md`).
-- Working on: deck PDF and final architecture diagram; Akshat's machine is the demo machine
-- Waiting on: Satvik's video script for the dry runs
+- Working on: next round (16 Oct): Phase 5, rehearse and freeze (Thu 18:00); Akshat's machine is the demo machine
+- Waiting on: the team for dress rehearsals and the video link
 
 ## Done
+- **Next round, 12–14 Oct (Akshat's machine, all workstreams):** voice extraction complete (1,172/1,172 calls; the local
+  model now decodes to a typed JSON schema, #165); workspace redesign, notifications, page transitions, every page restyled,
+  phone layout (#166–#174); steward paging (36,279 pairs); audit page 7.9 s → 0.04 s; case page with TreeSHAP drivers and
+  warehouse history; Portfolio page (A/B forest plot, cohorts, insights with their SQL, case explorer); then on
+  `feat/local-only` (#175): the Ask as a LangGraph graph with a per-answer trace and seven deterministic checks, local models
+  only (no API keys), cited case and portfolio briefs, model card, fairness and drift panels, uplift tuning (40 candidates,
+  champion kept), llama.cpp support, secret scan (clean), LaTeX deck (`make deck`) and speaker notes.
 - **G4 passed (4 Oct, C's machine):** full `kept nightly` with match (D's #44, `--train-sample-mod 5`): land 108 s, silver 96 s, match 63 s (golden IDs 1,052,300, 0 merged / 0 split vs crosswalk v1), gold 13 s, gate PASS, extract 7 s, features 29 s, parity PASS (0 of 56,000), score 81 s (96,000 cards: red 38,115, green 31,539, amber 3,288, no action 23,058). No OOM under a 22 GB cap. Fairness report (B, #43) on these cards. Benchmark dev 83% / refusal recall 100%. CI green.
 - **G3 passed (4 Oct, C's machine):** D's #38 `kept score`: 96,000 cards = every open case (80 s): red 38,115 (40%), green 31,539, no action 23,058, amber 3,288. Demo flip on real `kept serve`: CS-2026-820205 "Send an app reminder" (push, Green) → "Call to start a hardship review" (hardship_review, Red) after the note. Parity PASS. Tests green.
 - **G3 integration (3 Oct, C's machine):** merged #34 (851c8b6, D: real serve, live notes, cease confirm, 30/90 rule, Qini vs legacy) → #26 (7bb1cee, A: steward routes) → #32 (66071ec, A: quality report, frozen contract); #33 (B, draft) left. Rebuild: gold 1,052,300 (40/40), gate PASS, features 96,000 (as_of 3 Oct), `kept train` model vs legacy Qini: call 0.0073 vs 0.0017 (noise 0.0003), any contact 0.0008 vs −0.0009. **"New note flips hardship" works on real `kept serve`:** CS-2026-820205 went from push/Green to "Possible hardship: only protective actions; a hardship specialist reviews first" after "lost shifts at the plant since Aug, can only pay 50 on the 15th" (15.4 s first call, quote kept as evidence; test note removed). `kept parity` PASS (0 of 56,000 cells, 0.0000%). Tests: 1,149 passed, 0 failed.

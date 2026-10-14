@@ -8,8 +8,8 @@ survive a judge asking "how do you know?".
 Status: `[ ]` open · `[~]` drafted on the deck · `[x]` reviewed in a dress rehearsal. One owner per issue.
 
 **The deck is now LaTeX** (`docs/deck/kept.tex`, Beamer, XeLaTeX): `make deck` reads every number from the reports into
-`numbers.tex` and builds `docs/deck/kept.pdf` (21 slides). DK-01 to DK-14 are drafted there; what's left: speaker notes (DK-16),
-the rest of the Q&A appendix (DK-17), the video link (DK-18), and a dress-rehearsal review of every slide.
+`numbers.tex` and builds `docs/deck/kept.pdf` (21 slides). DK-01 to DK-17 are drafted there (speaker notes: `docs/deck/SPEAKER_NOTES.md`; appendix: roles, benchmarks,
+tuning, drift and fairness). Left: the video link (DK-18: the team's URL), and a dress-rehearsal review of every slide.
 
 ## System design
 
@@ -108,7 +108,7 @@ the rest of the Q&A appendix (DK-17), the video link (DK-18), and a dress-rehear
 ## Presentation craft
 
 - [x] **DK-15 · Every number slide names its source in the footer** (file and section), as `impact` and `safe` do now.
-- [ ] **DK-16 · Speaker notes: a 20-second answer per slide to "how do you know?"**
+- [~] **DK-16 · Speaker notes: a 20-second answer per slide to "how do you know?"**
 - [~] **DK-17 · Appendix for Q&A: the full architecture diagram, the A/B forest plot, the drift and fairness panels,
   the tuning table, and the role matrix**, so detailed questions get a slide, not a description.
 - [~] **DK-18 · Export the final deck as PDF into the repo** (`docs/deck/`) with the video link as real text (Phase 5).

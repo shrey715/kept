@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kept · Team Sharpe Shooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Kalam:wght@400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#141110;--ink2:#1f1b18;--ink3:#2b2622;--sand:#f3eee6;--paper:#efe9df;--card:#ece7df;
+  --maple:#e5293f;--maple2:#c8102e;--rose:#f6cbd1;--muted:#a69d92;--line:rgba(255,255,255,.09);
+  --blue:#3987e5;--green:#2bb673;--amber:#e3a127;
+  --display:"Inter Tight","Inter",system-ui,sans-serif;--text:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--ink);color:var(--sand);font-family:var(--text);overflow:hidden}
+.deck{position:fixed;inset:0}
+.slide{position:absolute;inset:0;padding:5.2vh 5.5vw 8vh;display:flex;flex-direction:column;justify-content:center;opacity:0;pointer-events:none;
+  transform:translateY(18px) scale(.995);transition:opacity .55s cubic-bezier(.2,.8,.2,1),transform .7s cubic-bezier(.2,.8,.2,1)}
+.slide.on{opacity:1;pointer-events:auto;transform:none}
+.slide.light{background:var(--sand);color:var(--ink)}
+.slide.light .muted{color:#6b645c}
+.glow{position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(900px 500px at 85% -10%,rgba(229,41,63,.18),transparent 60%),
+  radial-gradient(700px 400px at -10% 110%,rgba(255,207,135,.07),transparent 60%)}
+.eyebrow{font:600 12px/1 var(--text);letter-spacing:.18em;text-transform:uppercase;color:var(--maple);margin-bottom:14px}
+h1,h2{font-family:var(--display);font-weight:400;letter-spacing:-.045em;margin:0;line-height:1.02}
+h1{font-size:clamp(56px,8.5vw,138px)}
+h2{font-size:clamp(30px,3.6vw,58px);max-width:24ch}
+h3{font:600 clamp(16px,1.25vw,21px)/1.25 var(--text);margin:0 0 6px;letter-spacing:-.01em}
+p{margin:0}
+.lede{font-size:clamp(16px,1.35vw,21px);line-height:1.5;color:var(--muted);max-width:62ch;margin-top:16px}
+.light .lede{color:#5f574f}
+.muted{color:var(--muted)}
+.grid{display:grid;gap:14px}
+.card{background:var(--ink2);border:1px solid var(--line);border-radius:22px;padding:20px 22px}
+.light .card{background:var(--card);border-color:transparent}
+.card.hot{background:var(--maple2);border-color:transparent;color:#fff}
+.card.hot .muted{color:rgba(255,255,255,.75)}
+.big{font:300 clamp(40px,4.6vw,76px)/1 var(--display);letter-spacing:-.05em}
+.mid{font:400 clamp(26px,2.4vw,40px)/1.05 var(--display);letter-spacing:-.04em}
+.small{font-size:clamp(13px,1vw,16px);line-height:1.5}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;background:var(--ink3);font:500 12px/1 var(--text);color:var(--sand);white-space:nowrap}
+.light .chip{background:#fff;color:var(--ink)}
+.chip.red{background:var(--maple2);color:#fff}
+.mono{font-family:var(--mono)}
+.foot{position:absolute;left:5.5vw;right:5.5vw;bottom:2.6vh;display:flex;justify-content:space-between;font:500 11px/1 var(--text);color:var(--muted)}
+.foot b{color:var(--maple)}
+.progress{position:fixed;left:0;top:0;height:3px;background:linear-gradient(90deg,var(--maple2),var(--maple),#ffcf87);transition:width .5s cubic-bezier(.2,.8,.2,1);z-index:10}
+.notes{position:fixed;left:0;right:0;bottom:0;max-height:34vh;overflow:auto;background:rgba(10,9,8,.96);color:#e9e3da;padding:16px 5.5vw;font:15px/1.55 var(--text);transform:translateY(100%);transition:transform .3s;z-index:20;border-top:1px solid var(--line)}
+.notes.on{transform:none}
+.notes b{color:var(--maple)}
+.overview{position:fixed;inset:0;background:var(--ink);z-index:30;display:none;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:30px;overflow:auto}
+.overview.on{display:grid}
+.overview button{all:unset;cursor:pointer;background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:14px;color:var(--sand);font:500 13px/1.35 var(--text)}
+.overview button span{display:block;color:var(--maple);font-size:11px;margin-bottom:6px;letter-spacing:.1em}
+.hint{position:fixed;right:18px;bottom:14px;font:500 11px/1 var(--text);color:var(--muted);z-index:5;opacity:.7}
+/* reveal: children of .stagger rise in after the slide lands */
+.stagger>*{opacity:0;transform:translateY(14px);transition:opacity .6s,transform .7s cubic-bezier(.2,.8,.2,1)}
+.on .stagger>*{opacity:1;transform:none}
+.on .stagger>*:nth-child(2){transition-delay:.08s}.on .stagger>*:nth-child(3){transition-delay:.16s}
+.on .stagger>*:nth-child(4){transition-delay:.24s}.on .stagger>*:nth-child(5){transition-delay:.32s}
+.on .stagger>*:nth-child(6){transition-delay:.4s}.on .stagger>*:nth-child(7){transition-delay:.48s}
+.on .stagger>*:nth-child(8){transition-delay:.56s}
+/* drawn lines */
+.draw path,.draw line,.draw polyline{stroke-dasharray:1200;stroke-dashoffset:1200;transition:stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1) .25s}
+.on .draw path,.on .draw line,.on .draw polyline{stroke-dashoffset:0}
+/* architecture */
+.arch{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:22px;position:relative}
+.layer{border-radius:20px;padding:18px;background:var(--ink2);border:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.layer .tag{font:600 11px/1 var(--text);letter-spacing:.14em;text-transform:uppercase;color:var(--maple)}
+.layer .t{font:500 clamp(18px,1.4vw,24px)/1.15 var(--display);letter-spacing:-.02em}
+.tech{display:flex;flex-direction:column;gap:6px;margin-top:auto}
+.tech div{background:var(--ink3);border-radius:12px;padding:9px 11px;font:500 clamp(12.5px,.95vw,15px)/1.3 var(--text)}
+.tech div em{display:block;font-style:normal;color:var(--muted);font-size:.85em;margin-top:2px}
+.why{font-size:clamp(12.5px,.95vw,15px);line-height:1.45;border-left:2px solid var(--maple);padding-left:10px;color:var(--sand)}
+.why b{color:var(--maple);font-weight:600}
+.flowline{position:absolute;left:1%;right:1%;top:-14px;height:2px;background:linear-gradient(90deg,transparent,var(--maple),transparent);opacity:.6}
+/* decisions table */
+table{border-collapse:collapse;width:100%;font-size:clamp(14px,1.05vw,17px)}
+th{text-align:left;font:600 11px/1 var(--text);letter-spacing:.12em;text-transform:uppercase;color:var(--maple);padding:10px 12px;border-bottom:1px solid var(--line)}
+td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.4}
+.light th{border-color:#d9d1c6}.light td{border-color:#e2dbd0}
+td b{font-weight:600}
+.pill{display:inline-block;white-space:nowrap;padding:3px 9px;border-radius:999px;font:600 11px/1.3 var(--text)}
+.pill.ok{background:rgba(43,182,115,.16);color:#43d08a}.pill.no{background:rgba(229,41,63,.16);color:#ff6b7c}
+.light .pill.ok{background:#d9f1e4;color:#11744a}.light .pill.no{background:#fbd9de;color:#a10e25}
+/* graph diagram */
+.gnode{fill:var(--ink3);stroke:rgba(255,255,255,.14)}
+.gtext{fill:var(--sand);font:500 13px var(--text)}
+.gsub{fill:var(--muted);font:400 10.5px var(--text)}
+.gedge{stroke:rgba(255,255,255,.35);stroke-width:1.6;fill:none;marker-end:url(#arr)}
+.gcheck{fill:rgba(229,41,63,.14);stroke:var(--maple)}
+@media (max-width:820px){.arch{grid-template-columns:1fr}h2{max-width:none}.slide{justify-content:flex-start;overflow-y:auto;padding-bottom:40px}.slide .grid{grid-template-columns:1fr!important}.slide>div[style*="grid-template-columns:1.1fr"]{grid-template-columns:1fr!important;height:auto!important}.foot{position:static;margin-top:24px}}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="deck" id="deck">
+
+<!-- 1 · title -->
+<section class="slide" data-title="Kept">
+  <div class="glow"></div>
+  <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:4vw;align-items:center;height:100%">
+    <div class="stagger">
+      <div class="eyebrow">Team Sharpe Shooters · CIBC Collections Hackathon</div>
+      <h1>Promises<br>customers<br><span style="color:var(--maple)">can keep.</span></h1>
+      <p class="lede">One guarded next best action for collections: dated after payday, sized to spare cash, explained, and released by a person. Built on local models only.</p>
+    </div>
+    <svg class="draw" viewBox="0 0 420 360" style="width:100%;max-height:62vh">
+      <g fill="none" stroke="#e9e3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".85">
+        <path d="M40 60 C120 56 300 58 380 62 C384 150 382 260 378 330 C290 334 130 332 42 328 C38 240 38 150 40 60Z"/>
+        <path d="M42 104 C150 101 290 102 380 105"/>
+        <path d="M100 44 C98 56 100 68 106 74 M210 42 C208 56 210 68 216 74 M320 44 C318 56 320 68 326 74"/>
+        <path d="M44 160 C150 158 290 161 378 160 M44 216 C150 214 290 217 378 216 M44 272 C150 270 290 273 378 272"/>
+        <path d="M110 106 C111 200 109 270 110 328 M180 106 C181 200 179 270 180 328 M250 106 C251 200 249 270 250 328 M320 106 C321 200 319 270 320 328"/>
+      </g>
+      <text x="211" y="92" text-anchor="middle" fill="#e9e3da" font-family="Inter Tight" font-size="22" letter-spacing="4">OCT</text>
+      <g fill="none" stroke="#e5293f" stroke-width="3" stroke-linecap="round">
+        <path d="M215 166 C190 162 176 186 190 204 C206 222 246 214 250 192 C254 170 232 158 208 164"/>
+        <path d="M262 186 C276 180 290 180 298 190 M288 180 L298 190 L286 196"/>
+        <path d="M268 200 L280 214 L304 188"/>
+      </g>
+      <text x="214" y="196" text-anchor="middle" fill="#e9e3da" font-family="Inter Tight" font-size="22">2</text>
+      <text x="215" y="252" text-anchor="middle" fill="#a69d92" font-family="Kalam, cursive" font-size="19">payday</text>
+    </svg>
+  </div>
+  <div class="foot"><span><b>Kept</b> · Team Sharpe Shooters</span><span>← → · N notes · O overview · F full screen</span></div>
+  <aside>Open on Jane: her last promise fell due before payday, and broke. Kept is how we stop that, and every model behind it runs on this machine.</aside>
+</section>
+
+<!-- 2 · problem -->
+<section class="slide light" data-title="The problem">
+  <div class="eyebrow">The problem</div>
+  <h2>Collections asks for money on the bank's calendar, not the customer's.</h2>
+  <div class="grid stagger" style="grid-template-columns:repeat(4,1fr);margin-top:4.5vh">
+    <div class="card"><div class="big">96,000</div><p class="muted small" style="margin-top:8px">open cases tonight</p></div>
+    <div class="card"><div class="big">$68.7M</div><p class="muted small" style="margin-top:8px">balance at risk</p></div>
+    <div class="card"><div class="big">5 → 1</div><p class="muted small" style="margin-top:8px">systems, keys and views of one person</p></div>
+    <div class="card hot"><div class="big">+6.1 pts</div><p class="muted small" style="margin-top:8px">promised money paid when due just after payday (95% CI 2.8–10.6)</p></div>
+  </div>
+  <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
+    <div class="card"><h3>Promises dated by the calendar</h3><p class="muted small">A promise that falls due before payday breaks. The bank's own data says timing moves payment.</p></div>
+    <div class="card"><h3>More contact doesn't help</h3><p class="muted small">Champion, two challengers and a hold-out keep promises at the same rate: every 95% interval overlaps.</p></div>
+    <div class="card"><h3>Hardship gets missed</h3><p class="muted small">It lives in free-text notes and calls, so vulnerable customers get the same push as everyone.</p></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · evidence.md §1–2 · tonight's nba.cards</span><span>2</span></div>
+  <aside>Three facts frame every choice that follows: timing beats intensity, the data is split five ways, and hardship hides in text. The architecture is built to act on exactly those.</aside>
+</section>
+
+<!-- 3 · principles -->
+<section class="slide" data-title="How we decide">
+  <div class="glow"></div>
+  <div class="eyebrow">How we decide</div>
+  <h2>Four rules picked every technology before we wrote the solution.</h2>
+  <div class="grid stagger" style="grid-template-columns:repeat(4,1fr);margin-top:5vh">
+    <div class="card"><div class="mid" style="color:var(--maple)">01</div><h3 style="margin-top:14px">Evidence before features</h3><p class="muted small">A change ships only if it beats what's live by more than the noise, on data it never saw.</p></div>
+    <div class="card"><div class="mid" style="color:var(--maple)">02</div><h3 style="margin-top:14px">Nothing leaves the machine</h3><p class="muted small">Every model runs locally: customer words never cross a network, no keys, no quota, no per-call cost.</p></div>
+    <div class="card"><div class="mid" style="color:var(--maple)">03</div><h3 style="margin-top:14px">Models propose, people release</h3><p class="muted small">No model sends anything. Rules run before scoring and again at release; Red needs two people.</p></div>
+    <div class="card"><div class="mid" style="color:var(--maple)">04</div><h3 style="margin-top:14px">Every number reproducible</h3><p class="muted small">Each claim names its report and the command that rebuilds it, down to this deck's numbers.</p></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · JUDGES.md</span><span>3</span></div>
+  <aside>These four rules are the decision process. Every later slide shows a choice and which rule decided it, and the alternatives they ruled out.</aside>
+</section>
+
+<!-- 4 · backend architecture -->
+<section class="slide" data-title="Backend architecture">
+  <div class="eyebrow">Backend architecture</div>
+  <h2>Five planes, one machine, one guarded decision.</h2>
+  <div class="arch stagger">
+    <div class="flowline"></div>
+    <div class="layer"><span class="tag">1 · Data</span><span class="t">Land, clean, resolve identity</span>
+      <p class="muted small">31 source tables to bronze, silver and gold; five customer keys to one golden ID.</p>
+      <p class="why"><b>Why:</b> one columnar file runs the whole book on a laptop; no cluster to stand up. Maps to a bank lakehouse later.</p>
+      <div class="tech"><div>DuckDB<em>columnar warehouse, one file</em></div><div>dbt<em>silver and gold models, tests</em></div><div>Splink<em>probabilistic identity matching</em></div></div></div>
+    <div class="layer"><span class="tag">2 · Features</span><span class="t">Point-in-time, never leaking</span>
+      <p class="muted small">Every feature as it was on the decision date; served online for the live card.</p>
+      <p class="why"><b>Why:</b> point-in-time joins are where leakage hides; one store serves training and the live card the same values.</p>
+      <div class="tech"><div>dbt feature models<em>as-of joins, payroll timing</em></div><div>Feast<em>online feature store</em></div><div>Presidio<em>redaction before any model</em></div></div></div>
+    <div class="layer"><span class="tag">3 · Models</span><span class="t">Score, read, listen</span>
+      <p class="muted small">Uplift per action, promise kept, text and voice signals with quotes.</p>
+      <p class="why"><b>Why:</b> trees for tabular decisions (fast, exact explanations); a local LLM only where text needs reading.</p>
+      <div class="tech"><div>LightGBM T-learner<em>uplift vs waiting, TreeSHAP</em></div><div>Gemma 3 12B QAT<em>Ollama or llama.cpp, schema-constrained</em></div><div>Whisper large-v3-turbo<em>speech on the GPU</em></div></div></div>
+    <div class="layer"><span class="tag">4 · Decide</span><span class="t">Rules, sizing, tiers, release</span>
+      <p class="muted small">Hard stops, payday sizing, permissions, tiering; a person releases and the gate rechecks.</p>
+      <p class="why"><b>Why:</b> rules a regulator can read, outside the model, run twice: before scoring and at release.</p>
+      <div class="tech"><div>Engine and release gate<em>Python, rechecks on fresh data</em></div><div>LangGraph<em>the Ask's checked pipeline</em></div><div>Audit chain<em>SHA-256, append-only</em></div></div></div>
+    <div class="layer"><span class="tag">5 · Serve</span><span class="t">One API, one workspace</span>
+      <p class="muted small">Role-checked API; a workspace per role; nightly run in about 85 s for 96,000 cards.</p>
+      <p class="why"><b>Why:</b> typed contracts shared by Python and TypeScript; one role check in one place.</p>
+      <div class="tech"><div>FastAPI<em>typed contracts, role checks</em></div><div>Next.js<em>queue, case, portfolio, Ask</em></div><div>MLflow<em>model runs and the gate</em></div></div></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · src/kept (data, nba, ask, text, app) · web/</span><span>4</span></div>
+  <aside>Walk left to right: data lands and resolves to one person; features are computed as of the decision date so nothing leaks; three model families score, read and listen; the decision plane applies rules and needs a person; one API serves every role.</aside>
+</section>
+
+<!-- 5 · request path -->
+<section class="slide light" data-title="Nightly and live">
+  <div class="eyebrow">Backend architecture · the two paths</div>
+  <h2>A nightly batch prepares; a live request decides.</h2>
+  <div class="grid stagger" style="grid-template-columns:1fr 1fr;margin-top:4vh">
+    <div class="card"><h3>Nightly · <span class="mono">kept nightly</span></h3>
+      <ol class="small" style="margin:10px 0 0;padding-left:18px;line-height:1.9">
+        <li>Land 31 tables, dbt build silver and gold, data contract gate</li>
+        <li>Identity: exact links, then Splink; doubtful pairs to a steward</li>
+        <li>Text: redact, extract with quotes (local Gemma 3)</li>
+        <li>Features as of 06:00 UTC into Feast; drift (PSI) and fairness checks</li>
+        <li>Score every open case: <b>96,000 cards in about 85 s</b></li>
+      </ol></div>
+    <div class="card"><h3>Live · one case, one person</h3>
+      <ol class="small" style="margin:10px 0 0;padding-left:18px;line-height:1.9">
+        <li>Agent opens a case: the card is re-scored on fresh features</li>
+        <li>A new note is redacted and read in seconds; hardship can flip the card</li>
+        <li>The reviewer approves: the gate re-runs every rule (consent, hours, caps)</li>
+        <li>Red needs a specialist and a second person; approvals expire in 4 h</li>
+        <li>Every step is appended to the hash chain</li>
+      </ol></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · src/kept/cli.py · src/kept/nba/release.py</span><span>5</span></div>
+  <aside>Two paths, two jobs. The batch makes everything ready and checked; the live path never trusts the batch blindly, it rechecks at the moment of release.</aside>
+</section>
+
+<!-- 6 · uplift model choice -->
+<section class="slide" data-title="Why uplift">
+  <div class="glow"></div>
+  <div class="eyebrow">Model choice · who to contact</div>
+  <h2>Uplift per action, not a propensity score: contact whoever a contact changes.</h2>
+  <div class="grid stagger" style="grid-template-columns:1.25fr 1fr;margin-top:3.5vh;align-items:start">
+    <table>
+      <tr><th>Option</th><th>Verdict</th><th>Why</th></tr>
+      <tr><td><b>LightGBM T-learner</b><br><span class="muted small">one model per action vs waiting</span></td><td><span class="pill ok">chosen</span></td><td class="small">Fast on 700k decisions, handles missing payroll data, exact TreeSHAP for the "why" on every card.</td></tr>
+      <tr><td>Propensity to pay</td><td><span class="pill no">rejected</span></td><td class="small">Ranks people who'd pay anyway; spends contacts where they change nothing.</td></tr>
+      <tr><td>Causal forest / deep uplift</td><td><span class="pill no">rejected</span></td><td class="small">Slower and harder to explain, with no evidence of more signal in this data.</td></tr>
+      <tr><td>Tuned LightGBM (40 candidates)</td><td><span class="pill no">lost</span></td><td class="small">Best on validation, worse than the champion on held-out decisions (Qini 0.0029 vs 0.0073).</td></tr>
+    </table>
+    <div class="card"><h3>Who does a contact actually help?</h3><p class="muted small">Qini on 141,350 held-out decisions: the model's order (red) against random (dashed).</p>
+      <svg id="qini" viewBox="0 0 320 200" style="width:100%;max-height:38vh;margin-top:10px"></svg>
+      <p class="small muted" style="margin-top:6px">Any contact: 0.0008 ± 0.0005. Small, and the gate knows it: a worse model can't go live.</p></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · model_card.json · docs/reports/tuning.md</span><span>6</span></div>
+  <aside>The rationale: propensity models are the industry default but they target the wrong people. Uplift asks what the contact changes. We tried to beat our own champion with a 40-model search and couldn't: the champion stays, which is the gate working.</aside>
+</section>
+
+<!-- 7 · promise model -->
+<section class="slide light" data-title="Promise model">
+  <div class="eyebrow">Model choice · will this promise be kept?</div>
+  <h2>A small, honest model that knows how sure it is.</h2>
+  <div class="grid stagger" style="grid-template-columns:1fr 1fr 1fr;margin-top:3.5vh;align-items:start">
+    <div class="card"><h3>Leakage found and removed</h3><p class="small">The first model scored AUC 0.92. One feature, amount_ratio, encoded the outcome. Dropped: <b>honest AUC 0.63</b>.</p></div>
+    <div class="card"><h3>Calibrated, not just ranked</h3><p class="small">LightGBM on six point-in-time features, then isotonic calibration on the last 60 days, so "60%" means about 60%.</p></div>
+    <div class="card hot"><h3>Better together</h3><p class="small">Ours plus the bank's own score: <b>0.728</b> vs the bank's <b>0.702</b>. Ours adds payday timing and promise history.</p></div>
+  </div>
+  <div class="grid stagger" style="grid-template-columns:1fr 1fr;margin-top:14px">
+    <div class="card"><h3>Reliability on 50,653 unseen promises</h3><svg id="rel" viewBox="0 0 300 200" style="width:100%;max-height:30vh"></svg><p class="small muted">AUC 0.610 · Brier 0.221 · dashed = perfect calibration</p></div>
+    <div class="card"><h3>What drives it (share of |TreeSHAP|)</h3><div id="imp" style="margin-top:12px"></div></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · evidence.md §3, §6 · model_card.json</span><span>7</span></div>
+  <aside>Decision process in miniature: we nearly shipped a 0.92 model, audited it, found the leak, and shipped the honest 0.63 instead. Combined with the bank's own score it beats the bank's model alone.</aside>
+</section>
+
+<!-- 8 · LLM choice -->
+<section class="slide" data-title="Why this LLM">
+  <div class="glow"></div>
+  <div class="eyebrow">LLM choice · reading notes, calls and questions</div>
+  <h2>Gemma 3 12B QAT on our own GPU: the largest model that fits, fast, and private.</h2>
+  <div class="grid stagger" style="grid-template-columns:1.35fr 1fr;margin-top:3.5vh;align-items:start">
+    <table>
+      <tr><th>Option</th><th>Verdict</th><th>Evidence</th></tr>
+      <tr><td><b>Gemma 3 12B QAT</b><br><span class="muted small">local, 4-bit quantisation-aware</span></td><td><span class="pill ok">chosen</span></td><td class="small">Every extraction field F1 ≥ 0.80; hardship recall 1.00; about 3 s a note; fits 16 GB.</td></tr>
+      <tr><td>Gemma 4 26B</td><td><span class="pill no">rejected</span></td><td class="small">Needs experts on the CPU: 24 s a note, runaway replies, no better on held-out notes.</td></tr>
+      <tr><td>Hosted API (free tier)</td><td><span class="pill no">dropped</span></td><td class="small">Customer words leave the bank; a quota ran out mid-benchmark and turned answers into refusals.</td></tr>
+      <tr><td>Fine-tuned classifier only</td><td><span class="pill no">not enough</span></td><td class="small">Fast for backfill (SetFit), but can't quote evidence or extract dates and amounts.</td></tr>
+    </table>
+    <div class="grid" style="gap:12px">
+      <div class="card hot"><div class="mid">152 → 0</div><p class="small" style="margin-top:6px">malformed replies on 1,172 calls once decoding is constrained to the JSON schema</p></div>
+      <div class="card"><div class="mid">Ollama · llama.cpp</div><p class="small muted" style="margin-top:6px">one gateway (LiteLLM), two local servers: llama.cpp adds four parallel slots</p></div>
+      <div class="card"><div class="mid">0 keys</div><p class="small muted" style="margin-top:6px">no hosted API anywhere: notes, calls, briefs and the Ask all run here</p></div>
+    </div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · extraction_gate.md · src/kept/common/llm.py</span><span>8</span></div>
+  <aside>Why this model: it's the largest that fits our 16 GB GPU at speed, and QAT keeps 4-bit quality close to full precision. We tested the bigger Gemma 4 and rejected it on speed and accuracy. Schema-constrained decoding is what made a 12B model reliable: malformed replies went to zero.</aside>
+</section>
+
+<!-- 9 · speech, retrieval, privacy -->
+<section class="slide light" data-title="Voice, search, privacy">
+  <div class="eyebrow">Model choice · voice, search, privacy</div>
+  <h2>Each supporting model was picked against a measured baseline.</h2>
+  <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:4vh">
+    <div class="card"><span class="chip">Whisper large-v3-turbo</span><div class="big" style="margin-top:16px">9.4%</div><p class="small muted">word errors vs the bank's speech-to-text at 12.4%; even across accent regions (9.1–10.1%). Turbo: large-v3 quality at a fraction of the decode time.</p></div>
+    <div class="card"><span class="chip">BM25 + bge-m3, fused (RRF)</span><div class="big" style="margin-top:16px">cited</div><p class="small muted">keywords catch section numbers and exact terms; multilingual embeddings catch meaning (and French). Reciprocal rank fusion needs no tuned weights.</p></div>
+    <div class="card"><span class="chip">Presidio, before every model</span><div class="big" style="margin-top:16px">0 leaks</div><p class="small muted">names, cards, SINs, phones, postal codes redacted from 785,594 notes and transcripts; every value keeps its exact quote.</p></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · voice_wer.md · src/kept/ask/policy.py · src/kept/text/redact.py</span><span>9</span></div>
+  <aside>Same process each time: name the baseline (the bank's ASR, keyword search alone, raw text), measure ours against it, keep what wins.</aside>
+</section>
+
+<!-- 10 · orchestration -->
+<section class="slide" data-title="Why a graph">
+  <div class="glow"></div>
+  <div class="eyebrow">Orchestration · why LangGraph</div>
+  <h2>A 12B model is kept on the rails by a graph of deterministic checks.</h2>
+  <svg viewBox="0 0 1100 300" style="width:100%;margin-top:3vh">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="rgba(255,255,255,.5)"/></marker></defs>
+    <g id="graph"></g>
+  </svg>
+  <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:1vh">
+    <div class="card"><div class="mid">18/21</div><p class="small muted">released questions with gold, on the local model</p></div>
+    <div class="card"><div class="mid">30/42</div><p class="small muted">our stress suite, aimed at the release's traps</p></div>
+    <div class="card"><div class="mid">21/30</div><p class="small muted">an unseen drill we never tuned on</p></div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · src/kept/ask/graph.py · ask_accuracy.md</span><span>10</span></div>
+  <aside>Why a graph and not one big prompt: each step is testable and traced, and when the smaller model slips (drops "calls", reads "opened" as "open", names a column loosely) a deterministic check fixes it. Every answer shows the path it took.</aside>
+</section>
+
+<!-- 11 · decision record -->
+<section class="slide light" data-title="Decision record">
+  <div class="eyebrow">The decision process</div>
+  <h2>Hypothesis, offline evidence, a gate, then ship or reject.</h2>
+  <table style="margin-top:3vh">
+    <tr><th>Decision</th><th>Alternative</th><th>Evidence that decided it</th><th>Outcome</th></tr>
+    <tr><td><b>Date promises after payday</b></td><td>more contacts, more channels</td><td class="small">bank's A/B: strategies overlap; payday timing +6.1 pts</td><td><span class="pill ok">core idea</span></td></tr>
+    <tr><td><b>DuckDB + dbt + Feast</b></td><td>Spark, Postgres</td><td class="small">one machine, columnar speed, point-in-time joins we can test</td><td><span class="pill ok">shipped</span></td></tr>
+    <tr><td><b>Splink matching</b></td><td>exact keys only</td><td class="small">99% of 200 injected duplicates found, 0 wrong merges</td><td><span class="pill ok">shipped</span></td></tr>
+    <tr><td><b>Certified metrics first</b></td><td>model-written SQL for all</td><td class="small">reviewed SQL answers most questions; the model only drafts lookups, voted 3 ways</td><td><span class="pill ok">shipped</span></td></tr>
+    <tr><td><b>Two people for Red</b></td><td>one approver, or the model</td><td class="small">hardship is never one person's or a model's call</td><td><span class="pill ok">shipped</span></td></tr>
+    <tr><td>Payroll features in training</td><td>—</td><td class="small">didn't beat the champion beyond noise</td><td><span class="pill no">rejected</span></td></tr>
+    <tr><td>Hosted LLM</td><td>local</td><td class="small">privacy, cost, and a quota that broke a benchmark run</td><td><span class="pill no">dropped</span></td></tr>
+  </table>
+  <div class="foot"><span><b>Kept</b> · evidence.md · tuning.md · identity_recall.md</span><span>11</span></div>
+  <aside>The record shows rejections as plainly as wins. That's the point: each choice was earned against an alternative, with numbers.</aside>
+</section>
+
+<!-- 12 · safety -->
+<section class="slide" data-title="Safe by construction">
+  <div class="glow"></div>
+  <div class="eyebrow">Governance architecture</div>
+  <h2>Checked every night, not promised once.</h2>
+  <div class="grid stagger" style="grid-template-columns:repeat(4,1fr);margin-top:4.5vh">
+    <div class="card"><div class="big">0<span class="muted" style="font-size:.45em"> / 96,000</span></div><p class="small muted" style="margin-top:8px">cards change when every protected attribute is scrambled and the book rescored</p></div>
+    <div class="card"><div class="big">0.87–1</div><p class="small muted" style="margin-top:8px">contact ratio across 11 protected attributes (four-fifths rule)</p></div>
+    <div class="card"><div class="big">SHA-256</div><p class="small muted" style="margin-top:8px">hash-chained audit: one edited record breaks the chain; concurrent writes can't fork it</p></div>
+    <div class="card hot"><div class="big">2 people</div><p class="small" style="margin-top:8px">release Red; every release re-runs consent, hours, caps and hard stops on fresh data</p></div>
+  </div>
+  <p class="lede" style="margin-top:3vh">Roles: agents see their cases, analysts see aggregates only (groups under 10 suppressed), names are masked for everyone but compliance. Drift on a model input pauses promotion until a retrain is checked.</p>
+  <div class="foot"><span><b>Kept</b> · fairness_report.pdf · src/kept/common/audit.py</span><span>12</span></div>
+  <aside>Safety is architecture, not a slide: hard stops before the model, the gate after it, two people for hardship, and an audit chain that proves nothing was edited.</aside>
+</section>
+
+<!-- 13 · the solution: Jane -->
+<section class="slide light" data-title="The solution">
+  <div class="eyebrow">The solution, for one customer</div>
+  <h2>Jane's card: a promise she can keep.</h2>
+  <div class="grid stagger" style="grid-template-columns:1.1fr 1fr;margin-top:3.5vh;align-items:start">
+    <div class="card" style="background:#fbf7ef;box-shadow:0 30px 60px -30px rgba(0,0,0,.35)">
+      <div class="mono small muted">CASE CS-2026-118204 · G-910001</div>
+      <div class="mid" style="margin:8px 0">Call, Tue 18:00–20:00</div>
+      <p class="small">$140 a month × 3 · due the day after payday · inside about $160 of spare cash</p>
+      <div style="margin-top:14px;display:grid;gap:8px" class="small">
+        <div>✓ Pay lands in 3 days <span class="muted">+9.0 pts</span></div>
+        <div>✓ Pay down 27% on the 3-month average <span class="muted">+6.0</span></div>
+        <div>✓ Answers 80% of calls after 18:00 <span class="muted">+4.0</span></div>
+      </div>
+      <div style="margin-top:14px"><span class="chip red">Red · hardship</span> <span class="chip">specialist + second person</span></div>
+    </div>
+    <div class="grid" style="gap:12px">
+      <div class="card"><h3>Before you act · cited brief</h3><p class="small muted">The local model writes three bullets; each cites the card's facts or the customer's quoted words, and any number not in its sources is dropped before anyone sees it.</p></div>
+      <div class="card"><h3>Every factor, both ways</h3><p class="small muted">Twelve TreeSHAP drivers per card, toward and away from the action: no model-written reasons.</p></div>
+      <div class="card"><h3>The customer's own page</h3><p class="small muted">Where the bank doesn't know payday (about 3 customers in 4), the pay link asks, then offers plans timed to it.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · the guided demo</span><span>13</span></div>
+  <aside>Only now the solution: everything on Jane's card traces back to a choice on the earlier slides. Hand over to the live demo here.</aside>
+</section>
+
+<!-- 14 · evidence -->
+<section class="slide" data-title="Measured impact">
+  <div class="glow"></div>
+  <div class="eyebrow">Measured impact</div>
+  <h2>The bank's own randomised test: strategy doesn't move promises; timing does.</h2>
+  <div class="grid stagger" style="grid-template-columns:1.2fr 1fr;margin-top:3.5vh;align-items:start">
+    <div class="card"><h3>Promise-kept rate by strategy, 95% Wilson interval</h3><svg id="forest" viewBox="0 0 520 210" style="width:100%;margin-top:6px"></svg></div>
+    <div class="grid" style="gap:12px">
+      <div class="card hot"><div class="big">+6.1 pts</div><p class="small" style="margin-top:6px">promised money paid when due 0–2 days after payday (95% CI 2.8–10.6)</p></div>
+      <div class="card"><div class="mid">38.6–42.0%</div><p class="small muted" style="margin-top:6px">paid in 14 days under Kept's policy vs 32.4–32.5% for the bank's (off-policy; two estimators agree)</p></div>
+    </div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · evidence.md §1, §2, §4</span><span>14</span></div>
+  <aside>The randomised evidence came first and chose the idea: no strategy beats another, so we moved timing, and timing measurably moves payment.</aside>
+</section>
+
+<!-- 15 · business value -->
+<section class="slide light" data-title="Business value">
+  <div class="eyebrow">Business value</div>
+  <h2>$1.55M a year in the base case, and where it comes from.</h2>
+  <div class="grid stagger" style="grid-template-columns:1.3fr 1fr;margin-top:3.5vh;align-items:start">
+    <div class="card"><h3>Base case by driver ($k a year)</h3><div id="drivers" style="margin-top:12px"></div></div>
+    <div class="grid" style="gap:12px">
+      <div class="card hot"><div class="big">2.4×</div><p class="small" style="margin-top:6px">year-one ROI, base case; payback in about 2.6 months</p></div>
+      <div class="card"><div class="mid">$0.44M · $4.27M</div><p class="small muted" style="margin-top:6px">low and high cases. The low case doesn't pay back in year one, and we say so.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span><b>Kept</b> · business_case.pdf · business_data.json</span><span>15</span></div>
+  <aside>Each driver has its assumption and source in the business case: payday dating on the promises made each year, a cheaper contact mix, call summaries agents don't type, QA on flagged calls only.</aside>
+</section>
+
+<!-- 16 · pilot + close -->
+<section class="slide" data-title="Pilot and close">
+  <div class="glow"></div>
+  <div class="eyebrow">Next</div>
+  <h2>A pilot that proves it, with a rule that ends it either way.</h2>
+  <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:4vh">
+    <div class="card"><h3>Hold-out</h3><p class="small muted">20% on the bank's strategy first, then a permanent 5%.</p></div>
+    <div class="card"><h3>A randomised due-date cell</h3><p class="small muted">Turns the payday estimate into a trial. Primary metric: promised money paid; guards: complaints, caps, hours, fairness.</p></div>
+    <div class="card hot"><h3>Decision rule</h3><p class="small">Stop for harm if any guard worsens beyond its 95% interval; scale if promised money paid beats the hold-out two months running.</p></div>
+  </div>
+  <p class="mid" style="margin-top:7vh;max-width:30ch">Jane's promise lands the day after payday, inside what she can spare, and her hardship was heard the first time she said it.</p>
+  <div class="foot"><span><b>Kept</b> · github.com/shrey715/kept</span><span>16</span></div>
+  <aside>Close on Jane, then stop. Questions go to the appendix slides in the PDF deck (roles, benchmarks, tuning, drift and fairness).</aside>
+</section>
+
+</div>
+
+<div class="notes" id="notes"></div>
+<div class="overview" id="overview"></div>
+
+<script>
+const DATA = {"qini": [{"frac": 0.0, "gain": 0.0}, {"frac": 0.024994694021931375, "gain": 82.37707641196016}, {"frac": 0.04999646268128759, "gain": 119.10829554547877}, {"frac": 0.07499823134064379, "gain": 183.7380825801879}, {"frac": 0.1, "gain": 265.5770896207846}, {"frac": 0.12499469402193138, "gain": 360.825944344514}, {"frac": 0.14999646268128758, "gain": 437.0514134275618}, {"frac": 0.1749982313406438, "gain": 410.84688003684096}, {"frac": 0.2, "gain": 514.7622442859997}, {"frac": 0.22499469402193137, "gain": 592.5226489121387}, {"frac": 0.24999646268128758, "gain": 643.0234789600645}, {"frac": 0.2749982313406438, "gain": 801.5509499136442}, {"frac": 0.3, "gain": 902.8240515140969}, {"frac": 0.3249946940219314, "gain": 1004.5071357185689}, {"frac": 0.3499964626812876, "gain": 1097.3129433611884}, {"frac": 0.3749982313406438, "gain": 1206.893986791797}, {"frac": 0.4, "gain": 1299.3686954255181}, {"frac": 0.42499469402193135, "gain": 1373.7269033032662}, {"frac": 0.44999646268128757, "gain": 1391.5828411834873}, {"frac": 0.4749982313406438, "gain": 1439.2541776361368}, {"frac": 0.5, "gain": 1546.6475312392677}, {"frac": 0.5249946940219313, "gain": 1584.8500265775692}, {"frac": 0.5499964626812875, "gain": 1665.522292219006}, {"frac": 0.5749982313406438, "gain": 1730.423976402837}, {"frac": 0.6, "gain": 1826.5089892936503}, {"frac": 0.6249946940219314, "gain": 1929.0186631569868}, {"frac": 0.6499964626812876, "gain": 1981.1512707823713}, {"frac": 0.6749982313406437, "gain": 2025.5907241984369}, {"frac": 0.7, "gain": 2100.5312140280876}, {"frac": 0.7249946940219314, "gain": 2179.5687192346977}, {"frac": 0.7499964626812876, "gain": 2250.565570822244}, {"frac": 0.7749982313406438, "gain": 2280.346928077164}, {"frac": 0.8, "gain": 2342.7530345154955}, {"frac": 0.8249946940219314, "gain": 2363.2967460252075}, {"frac": 0.8499964626812876, "gain": 2413.6232649728645}, {"frac": 0.8749982313406438, "gain": 2493.305669181118}, {"frac": 0.9, "gain": 2536.5100887202825}, {"frac": 0.9249946940219314, "gain": 2553.996651244768}, {"frac": 0.9499964626812876, "gain": 2561.8408250660195}, {"frac": 0.9749982313406438, "gain": 2550.973241823889}, {"frac": 1.0, "gain": 2679.551440887033}], "qini_random": 2679.551440887033, "reliability": [{"predicted": 0.14398497678221886, "observed": 0.09157509157509157, "n": 273}, {"predicted": 0.2655730022436078, "observed": 0.24786595004742334, "n": 9489}, {"predicted": 0.3592528374917084, "observed": 0.32316438118382224, "n": 23044}, {"predicted": 0.4530521190650057, "observed": 0.3931142698910836, "n": 10834}, {"predicted": 0.5552220992593044, "observed": 0.5027233115468409, "n": 3672}, {"predicted": 0.6380485490252967, "observed": 0.5774483027701912, "n": 2563}, {"predicted": 0.742355082010222, "observed": 0.6736842105263158, "n": 760}], "importance": [{"feature": "days_to_due", "label": "Days from promise to due date", "share": 0.44742703793239164}, {"feature": "dpd", "label": "Days past due when promised", "share": 0.42535382808883637}, {"feature": "prior_broken_90d", "label": "Broken promises, prior 90 days", "share": 0.036299791883482646}, {"feature": "days_after_pay", "label": "Days from last payday to due date", "share": 0.0322577477438005}, {"feature": "prior_kept_ratio", "label": "Share of past promises kept", "share": 0.030641187373196446}, {"feature": "days_before_next_pay", "label": "Days from due date to next payday", "share": 0.02802040697829234}], "drivers": [{"label": "Promises dated to payday", "value": 619866}, {"label": "Cheaper contact mix", "value": 506479}, {"label": "Agent wrap-up time (call summaries)", "value": 377661}, {"label": "QA reviewer time", "value": 45319}], "ab": [{"name": "challenger A", "r": 66.4321608040201, "lo": 65.80374402500763, "hi": 67.05481104921928}, {"name": "challenger B", "r": 66.69367179764156, "lo": 66.07109308054757, "hi": 67.31047867901351}, {"name": "champion", "r": 66.35696385589904, "lo": 66.06488652411754, "hi": 66.64779640977748}, {"name": "no contact holdout", "r": 66.67873958710612, "lo": 64.89839804794795, "hi": 68.41273268735348}]};
+const slides=[...document.querySelectorAll('.slide')];
+let i=Math.max(0,Math.min(slides.length-1,(parseInt(location.hash.slice(1))||1)-1));
+const notes=document.getElementById('notes'),ov=document.getElementById('overview'),bar=document.getElementById('progress');
+function show(n){i=Math.max(0,Math.min(slides.length-1,n));slides.forEach((s,k)=>s.classList.toggle('on',k===i));
+  bar.style.width=((i+1)/slides.length*100)+'%';history.replaceState(null,'','#'+(i+1));
+  const a=slides[i].querySelector('aside');notes.innerHTML='<b>'+(i+1)+' · '+slides[i].dataset.title+'</b> — '+(a?a.innerHTML:'');}
+document.querySelectorAll('aside').forEach(a=>a.style.display='none');
+slides.forEach((s,k)=>{const b=document.createElement('button');b.innerHTML='<span>'+(k+1)+'</span>'+s.dataset.title;b.onclick=()=>{ov.classList.remove('on');show(k)};ov.appendChild(b)});
+addEventListener('keydown',e=>{if(['ArrowRight','PageDown',' ','Enter'].includes(e.key)){e.preventDefault();show(i+1)}
+  else if(['ArrowLeft','PageUp','Backspace'].includes(e.key)){e.preventDefault();show(i-1)}
+  else if(e.key==='Home')show(0);else if(e.key==='End')show(slides.length-1);
+  else if(e.key==='n'||e.key==='N')notes.classList.toggle('on');
+  else if(e.key==='o'||e.key==='O')ov.classList.toggle('on');
+  else if(e.key==='f'||e.key==='F'){document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()}});
+let tx=null;addEventListener('touchstart',e=>tx=e.touches[0].clientX);addEventListener('touchend',e=>{if(tx==null)return;const d=e.changedTouches[0].clientX-tx;if(Math.abs(d)>50)show(i+(d<0?1:-1));tx=null});
+addEventListener('click',e=>{if(e.target.closest('button,a,.notes,.overview'))return;show(i+(e.clientX>innerWidth/2?1:-1))});
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e}
+// Qini curve
+(function(){const s=document.getElementById('qini'),c=DATA.qini||[];if(!c.length)return;const g=c.map(d=>d.gain),lo=Math.min(0,...g),hi=Math.max(DATA.qini_random||0,...g,1);
+  const x=v=>14+v*296,y=v=>186-(v-lo)/(hi-lo)*170;
+  el('line',{x1:x(0),y1:y(0),x2:x(1),y2:y(0),stroke:'rgba(255,255,255,.15)'},s);
+  el('line',{x1:x(0),y1:y(0),x2:x(1),y2:y(DATA.qini_random||0),stroke:'#a69d92','stroke-dasharray':'5 5'},s);
+  const g2=el('g',{class:'draw'},s);el('polyline',{points:c.map(d=>x(d.frac)+','+y(d.gain)).join(' '),fill:'none',stroke:'#e5293f','stroke-width':2.5},g2)})();
+// reliability
+(function(){const s=document.getElementById('rel'),r=DATA.reliability||[];const x=v=>30+v*260,y=v=>182-v*170;
+  [0,.25,.5,.75,1].forEach(t=>{el('line',{x1:x(0),x2:x(1),y1:y(t),y2:y(t),stroke:'#ddd5c9'},s);const tt=el('text',{x:4,y:y(t)+3,'font-size':9,fill:'#8a8178'},s);tt.textContent=Math.round(t*100)+'%'});
+  el('line',{x1:x(0),y1:y(0),x2:x(1),y2:y(1),stroke:'#8a8178','stroke-dasharray':'4 4'},s);
+  const g=el('g',{class:'draw'},s);el('polyline',{points:r.map(d=>x(d.predicted)+','+y(d.observed)).join(' '),fill:'none',stroke:'#c8102e','stroke-width':2.5},g);
+  const mx=Math.max(...r.map(d=>d.n),1);r.forEach(d=>el('circle',{cx:x(d.predicted),cy:y(d.observed),r:3+5*Math.sqrt(d.n/mx),fill:'#c8102e'},s))})();
+// bars
+function bars(id,rows,fmt,color,top){const h=document.getElementById(id);if(!h)return;const mx=top||Math.max(...rows.map(r=>r.v),1);
+  h.innerHTML=rows.map(r=>'<div style="margin:0 0 14px"><div style="display:flex;justify-content:space-between;font-size:clamp(13px,1vw,16px)"><span>'+r.l+'</span><b>'+fmt(r.v)+'</b></div><div style="height:9px;border-radius:5px;background:rgba(0,0,0,.08);margin-top:4px;overflow:hidden"><div class="fill" style="height:100%;width:0;border-radius:5px;background:'+color+';transition:width 1.1s cubic-bezier(.2,.8,.2,1)" data-w="'+(r.v/mx*100)+'"></div></div></div>').join('')}
+bars('imp',(DATA.importance||[]).map(d=>({l:d.label,v:d.share*100})),v=>Math.round(v)+'%','#1c1917',50);
+bars('drivers',(DATA.drivers||[]).map(d=>({l:d.label,v:d.value/1000})),v=>'$'+Math.round(v)+'k','#c8102e');
+// forest plot
+(function(){const s=document.getElementById('forest'),c=DATA.ab||[];if(!c.length)return;const lo=Math.min(...c.map(d=>d.lo))-.5,hi=Math.max(...c.map(d=>d.hi))+.5;
+  const x=v=>150+(v-lo)/(hi-lo)*350;const champ=c.find(d=>d.name==='champion');
+  for(let t=Math.ceil(lo);t<=hi;t++){el('line',{x1:x(t),x2:x(t),y1:10,y2:180,stroke:'rgba(255,255,255,.08)'},s);const tt=el('text',{x:x(t),y:198,'text-anchor':'middle','font-size':10,fill:'#a69d92'},s);tt.textContent=t+'%'}
+  if(champ)el('line',{x1:x(champ.r),x2:x(champ.r),y1:10,y2:180,stroke:'#e9e3da','stroke-dasharray':'4 4',opacity:.6},s);
+  c.forEach((d,k)=>{const yy=30+k*42;const tt=el('text',{x:140,y:yy+4,'text-anchor':'end','font-size':12,fill:'#e9e3da'},s);tt.textContent=d.name;
+    el('line',{x1:x(d.lo),x2:x(d.hi),y1:yy,y2:yy,stroke:'#a69d92','stroke-width':3,'stroke-linecap':'round'},s);el('circle',{cx:x(d.r),cy:yy,r:6,fill:d.name==='champion'?'#e9e3da':'#e5293f'},s)})})();
+// the Ask graph
+(function(){const g=document.getElementById('graph');const N=[
+  ['rules',20,120,'Safety rules','protected, bulk, write'],['scope',170,120,'Scope','rules + classifier'],['route',320,120,'Route','local LLM → intent'],
+  ['checks',470,120,'Intent checks','channel · values · dates · topic',1],['policy',700,30,'Policy search','BM25 + bge-m3, cited'],['metric',700,120,'Certified metric','reviewed SQL, guarded'],
+  ['lookup',700,210,'Lookup','3 SQL drafts, voted'],['narrate',920,120,'Grounded narration','every number in the rows']];
+  const W={checks:190,narrate:178};
+  const pos={};N.forEach(([id,x,y,t,sub,hot])=>{pos[id]=[x,y];el('rect',{x,y:y-28,width:W[id]||150,height:56,rx:14,class:hot?'gcheck':'gnode'},g);
+    const a=el('text',{x:x+12,y:y-5,class:'gtext'},g);a.textContent=t;const b=el('text',{x:x+12,y:y+13,class:'gsub'},g);b.textContent=sub});
+  const E=[['rules','scope'],['scope','route'],['route','checks'],['checks','policy'],['checks','metric'],['checks','lookup'],['metric','lookup'],['policy','narrate'],['metric','narrate'],['lookup','narrate']];
+  E.forEach(([a,b])=>{const [x1,y1]=pos[a],[x2,y2]=pos[b];const w1=W[a]||150;
+    const p=a==='metric'&&b==='lookup'?`M${x1+75} ${y1+28} L${x2+75} ${y2-30}`:`M${x1+w1} ${y1} C${x1+w1+40} ${y1} ${x2-40} ${y2} ${x2-4} ${y2}`;el('path',{d:p,class:'gedge'},g)})})();
+function animateFills(){slides[i].querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%')}
+const _show=show;show=function(n){_show(n);setTimeout(animateFills,300)};
+show(i);
+</script>
+</body>
+</html>

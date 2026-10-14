@@ -33,8 +33,8 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 ## Next: local model and orchestration
 - [x] Gateway supports `llamacpp/` models (local llama-server, schema-constrained) (#169)
 - [x] Gemma 4 26B tried as challenger: too slow on 16 GB (24 s a note), not more accurate; stays out
-- [ ] Gemma 3 12B on llama-server (needs the model file copied, see Waiting on Akshat)
-- [ ] Ask falls back to the local model when the free hosted tier rate-limits (fully offline demo)
+- [x] Gemma 3 12B on llama-server (the standard QAT Q4_0 GGUF; Ollama's own file isn't llama.cpp-compatible)
+- [x] Local models only (14 Oct): the Ask runs on local Gemma 3 too; no hosted API, no keys
 - [~] LangGraph Ask: the pipeline as graph nodes, a per-answer trace in the UI, a channel intent check; first run 21/21 · 34/42 (KS-002: the router dropped "calls", now checked) · drill pending; merges only at 21/21, ≥ 35/42, ≥ 26/30
 
 ## Next: insight pages
@@ -50,12 +50,12 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 - [ ] Promised-date recall on notes (0.73): prompt or rule fix, re-gated
 
 ## Deck
-- [ ] Work through `docs/team/DECK_ISSUES.md` (18 issues: system design, architecture, decision reasoning, business value)
+- [x] LaTeX deck (`make deck`, 24 slides with appendix) and speaker notes; `docs/team/DECK_ISSUES.md` DK-01 to DK-17 drafted
 
 ## Phase 5 (unchanged, see NEXT_ROUND_PLAN.md §4a)
 - [ ] Final benchmark run to `data/exports/reports/`
 - [x] Secret scan of the working tree and full history: clean (`scripts/secret_scan.sh`, 115,795 added lines, 488 commits)
-- [ ] Deck PDF and video link in the repo
+- [~] Deck PDF in the repo (`docs/deck/kept.pdf`); the video link is the team's to add
 - [ ] Two dress rehearsals and the Q&A drill; track logs updated
 - [ ] Freeze Thu 18:00; evening refresh and preflight GO (§7a)
 
@@ -64,6 +64,6 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 - [x] Phone access: dev server allows the LAN IP (KEPT_DEV_ORIGINS)
 
 ## Waiting on Akshat
-- [ ] Copy the model file for llama.cpp (one `sudo cp`, see the chat)
+- [x] Copy the model file for llama.cpp (it turned out unusable; a standard GGUF was downloaded instead and the copy deleted)
 - [ ] Check the pay page in a browser
 - [ ] Review deck v2
