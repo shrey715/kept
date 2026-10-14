@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (report text)
 """The model card behind the Portfolio page's Models section, from the live models and their held-out rows.
 
     uv run python scripts/model_card.py [--warehouse data/warehouse/scratch_copy.duckdb]
@@ -118,6 +119,77 @@ def uplift_card(conn: duckdb.DuckDBPyConnection, *, sample: int = 4000, seed: in
     }
 
 
+def to_markdown(card: dict) -> str:  # type: ignore[type-arg]
+    """The committed model card (docs/reports/model_card.md): the same numbers as the JSON the Portfolio page reads."""
+    p, u = card["promise"], card["uplift"]
+    lines = [
+        "# Model card: the promise model and the uplift model",
+        "",
+        f"Written by `scripts/model_card.py` on {card['written'][:10]} from held-out data the models never saw "
+        "(the JSON behind the Portfolio page's models panel is `data/exports/reports/model_card.json`).",
+        "",
+        "## Promise model: will this promise be kept?",
+        "",
+        "LightGBM on six point-in-time features, isotonic-calibrated; trained on promises due before "
+        f"{p['cutoff']}, tested on the {p['rows_test']:,} due after.",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| AUC | {p['auc']:.3f} |",
+        f"| Brier score | {p['brier']:.3f} |",
+        f"| Kept rate in the test window | {p['kept_rate']:.1%} |",
+        "",
+        "Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728 "
+        "(`docs/reports/evidence.md` §3). A first version scored 0.92 because one feature, `amount_ratio`, encoded the "
+        "outcome; it was removed.",
+        "",
+        "**Calibration (predicted against observed, by score bin)**",
+        "",
+        "| Predicted | Observed | Promises |",
+        "|---:|---:|---:|",
+        *[f"| {r['predicted']:.1%} | {r['observed']:.1%} | {r['n']:,} |" for r in p["reliability"]],
+        "",
+        "**What drives it (share of mean |TreeSHAP|)**",
+        "",
+        "| Feature | Share |",
+        "|---|---:|",
+        *[f"| {r['label']} | {r['share']:.1%} |" for r in p["importance"]],
+        "",
+        "## Uplift model: which action changes the outcome?",
+        "",
+        "A LightGBM T-learner: one model per action against waiting, on paid-within-14-days; trained on decisions "
+        f"before {u['cutoff']}, tested on the {u['rows_test']:,} after.",
+        "",
+        "| Measure | Value |",
+        "|---|---:|",
+        f"| Qini, any contact against waiting | {u['qini_any_contact']:.4f} |",
+        f"| Spread of Qini over 30 random rankings | {u['qini_noise']:.4f} |",
+        "",
+        "The signal is small and the gate treats it that way: a challenger replaces the champion only if it beats it "
+        "by more than the noise on held-out decisions (`docs/reports/tuning.md`: a 40-candidate search did not).",
+        "",
+        "**Strongest inputs per action (mean |TreeSHAP|, percentage points)**",
+        "",
+        "| Action | Inputs |",
+        "|---|---|",
+        *[
+            f"| {a.replace('_', ' ')} | "
+            + ", ".join(f"{r['label']} ({r['pts']:.1f})" for r in rows[:5])
+            + " |"
+            for a, rows in u["importance"].items()
+        ],
+        "",
+        "## Limits",
+        "",
+        "- Actions were not randomised except across the bank's strategy cells, so uplift is estimated, not measured; "
+        "the pilot's randomised due-date cell is how it gets measured.",
+        "- Protected attributes are not model inputs; the fairness and invariance checks are in "
+        "`docs/reports/fairness_report.pdf`.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"))
@@ -129,6 +201,7 @@ def main() -> None:
         "uplift": uplift_card(conn),
     }
     OUT.write_text(json.dumps(card, indent=1))
+    (REPO / "docs" / "reports" / "model_card.md").write_text(to_markdown(card))
     p, u = card["promise"], card["uplift"]
     print(
         f"promise AUC {p.get('auc', 0):.3f} Brier {p.get('brier', 0):.3f}"
