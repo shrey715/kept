@@ -285,7 +285,7 @@ function Convergence({ c }: { c: Customer }) {
       {c.source_keys.map((k, i) => {
         const a = (i / n) * Math.PI * 2 - Math.PI / 2;
         return (
-          <motion.div key={k.key} initial={{ opacity: 0, x: Math.cos(a) * 240, y: Math.sin(a) * 200 }} animate={{ opacity: 1, x: Math.cos(a) * 130, y: Math.sin(a) * 110 }} transition={{ ...spring, delay: i * 0.12 }}
+          <motion.div key={`${k.system}-${k.key}`} initial={{ opacity: 0, x: Math.cos(a) * 240, y: Math.sin(a) * 200 }} animate={{ opacity: 1, x: Math.cos(a) * 130, y: Math.sin(a) * 110 }} transition={{ ...spring, delay: i * 0.12 }}
             style={{ position: "absolute", left: "50%", top: "50%", translate: "-50% -50%" }}>
             <Badge size="2" variant="surface" style={{ whiteSpace: "nowrap" }}>{k.system} · {k.key}</Badge>
           </motion.div>
