@@ -3369,3 +3369,23 @@ html {
   color: var(--gray-9);
   text-decoration: none;
 }
+
+/* a card that opens something when clicked anywhere */
+.k-row-link {
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.k-row-link:hover {
+  background-color: var(--gray-a3);
+  transform: translateY(-1px);
+}
+.k-row-link:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-row-link,
+  .k-row-link:hover {
+    transform: none;
+  }
+}
