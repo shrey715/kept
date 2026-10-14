@@ -4,8 +4,9 @@
 // see which rung of the ladder answered it, score it against gold when there is gold, and export the answers
 // CSV in the organisers' template. One question at a time, through POST /bench/question, which asks it exactly
 // as `kept benchmark` does (team-lead view, no clarification round), so the export matches the CLI's file.
-import { CheckIcon, Cross2Icon, DownloadIcon, PauseIcon, PlayIcon, ReloadIcon, UploadIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Code, Flex, Grid, Heading, Spinner, Table, Text, Tooltip } from "@radix-ui/themes";
+import { PageHeader } from "@/components/page-header";
+import { BarChartIcon, CheckIcon, Cross2Icon, DownloadIcon, PauseIcon, PlayIcon, ReloadIcon, UploadIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Callout, Card, Code, Flex, Grid, Spinner, Table, Text, Tooltip } from "@radix-ui/themes";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CitedText, Sources, useVerify } from "@/components/citations";
@@ -126,12 +127,17 @@ export default function BenchPage() {
   return (
     <Stagger>
       <Rise>
-        <Text size="1" weight="bold" color="ruby">BENCHMARK BENCH</Text>
-        <Heading size="8">Questions in, answers CSV out</Heading>
-        <Text as="p" color="gray" size="3" mt="1" style={{ maxWidth: 820 }}>
-          Load the organisers&apos; questions (or upload any CSV in their format), watch each question go down the Ask&apos;s ladder, and export the answers in their
-          template. Each question is asked exactly as <Code>kept benchmark</Code> asks it, so this file and the CLI&apos;s match.
-        </Text>
+        <PageHeader
+          icon={<BarChartIcon />}
+          eyebrow="Benchmark bench"
+          title="Questions in, answers CSV out."
+          sub={
+            <>
+              Load the organisers&apos; questions (or any CSV in their format), watch each one go down the Ask&apos;s ladder, and export the
+              answers in their template. Each is asked exactly as <Code>kept benchmark</Code> asks it.
+            </>
+          }
+        />
       </Rise>
 
       {problem && <Callout.Root color="red" mt="4"><Callout.Text>{problem}</Callout.Text></Callout.Root>}

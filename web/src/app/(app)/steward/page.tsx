@@ -1,6 +1,8 @@
 "use client";
 
-import { Button, Callout, Card, Code, Flex, Heading, Skeleton, Spinner, Text } from "@radix-ui/themes";
+import { PageHeader } from "@/components/page-header";
+import { MixerHorizontalIcon } from "@radix-ui/react-icons";
+import { Button, Callout, Card, Code, Flex, Skeleton, Spinner, Text } from "@radix-ui/themes";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Rise, Stagger, spring } from "@/components/motion";
@@ -60,11 +62,17 @@ export default function StewardPage() {
   return (
     <Stagger>
       <Rise>
-        <Heading size="8">Match review</Heading>
-        <Text color="gray" size="2">
-          Uncertain matches wait here before two records become one golden ID.
-          {total > 0 && <> {total.toLocaleString("en-CA")} to review, oldest first.</>}
-        </Text>
+        <PageHeader
+          icon={<MixerHorizontalIcon />}
+          eyebrow="Match review"
+          title="Two records, one person? You decide."
+          sub={
+            <>
+              Uncertain matches wait here before two records become one golden ID.
+              {total > 0 && <> {total.toLocaleString("en-CA")} to review, oldest first.</>}
+            </>
+          }
+        />
       </Rise>
       {error && (
         <Rise>

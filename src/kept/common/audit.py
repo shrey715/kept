@@ -56,6 +56,7 @@ class DuckDBAuditLog:
     def __init__(self, path: Path | str = ":memory:") -> None:
         self._path = str(path)
         self._mem = duckdb.connect() if self._path == ":memory:" else None
+        self._write = threading.Lock()  # API requests run on threads: one append at a time keeps one chain
         with self._conn() as c:
             c.execute(_DDL)
 
@@ -79,7 +80,7 @@ class DuckDBAuditLog:
         All or none: a duplicate event_id raises ValueError and nothing is written."""
         rows = [[e.event_id, _micros(e.at), e.kind.value, e.subject_id, e.model_dump_json()] for e in events]
         try:
-            with self._conn() as c:
+            with self._write, self._conn() as c:
                 c.execute("begin")
                 try:
                     last = c.execute(

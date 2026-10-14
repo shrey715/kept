@@ -10,6 +10,7 @@ import { MapleMark, TierBadge, initials, tierColor } from "@/components/bits";
 import { CountUp, Rise, Stagger } from "@/components/motion";
 import { NAV } from "@/components/shell";
 import { ACTION_LABEL, api, humanize, money, type QueueItem } from "@/lib/api";
+import { keys, load, peek, prefetch } from "@/lib/live";
 import { useSession } from "@/lib/session";
 
 type Filter = "all" | "red" | "amber" | "green" | "none";
@@ -25,7 +26,7 @@ const matches = (i: QueueItem, f: Filter) => f === "all" || (f === "none" ? !i.t
 export default function QueuePage() {
   const { me } = useSession();
   const router = useRouter();
-  const [items, setItems] = useState<QueueItem[] | null>(null);
+  const [items, setItems] = useState<QueueItem[] | null>(() => (me ? (peek<QueueItem[]>(keys.queue(me.userId)) ?? null) : null));
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -34,7 +35,10 @@ export default function QueuePage() {
   useEffect(() => {
     if (!me) return;
     let live = true;
-    api.queue(me).then((q) => live && setItems(q), (e: Error) => live && setError(e.message));
+    load(keys.queue(me.userId), () => api.queue(me), { fresh: 0 }).then(
+      (q) => live && setItems(q),
+      (e: Error) => live && setError(e.message),
+    );
     return () => {
       live = false;
     };
@@ -66,6 +70,13 @@ export default function QueuePage() {
   const pick = (f: Filter) => {
     setFilter(f);
     setCursor(0);
+  };
+  // hovering a row warms its case page: the route, the card and the customer
+  const warm = (caseId: string) => {
+    if (!me) return;
+    router.prefetch(`/cases/${caseId}`);
+    prefetch(keys.card(caseId, me.userId), () => api.card(caseId, me));
+    prefetch(keys.customer(caseId, me.userId), () => api.customer(caseId, me));
   };
   const links = NAV.filter((n) => n.href !== "/queue" && n.href !== "/demo" && me && n.show(me.role));
 
@@ -225,7 +236,10 @@ export default function QueuePage() {
                         className="rt-TableRow row-link"
                         data-active={n === cursor}
                         onClick={() => router.push(`/cases/${i.case_id}`)}
-                        onMouseEnter={() => setCursor(n)}
+                        onMouseEnter={() => {
+                          setCursor(n);
+                          warm(i.case_id);
+                        }}
                       >
                         <Table.Cell pl="5">
                           <Flex align="center" gap="3">

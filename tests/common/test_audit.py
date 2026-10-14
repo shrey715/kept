@@ -108,3 +108,17 @@ def test_rows_from_before_the_chain_are_counted_not_failed(tmp_path: Path) -> No
         c.execute("update audit_events set hash = null")
     log.append(ev(1))
     assert verify_chain(log) == (1, 1, None)
+
+
+def test_parallel_appends_keep_one_unbroken_chain(tmp_path: Path) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    log = DuckDBAuditLog(tmp_path / "audit.duckdb")
+    at = datetime(2026, 10, 14, tzinfo=UTC)
+
+    def one(i: int) -> None:
+        log.append(AuditEvent(event_id=new_event_id(), at=at, kind=AuditKind.RELEASE, actor_id=f"u{i}"))
+
+    with ThreadPoolExecutor(8) as pool:
+        list(pool.map(one, range(64)))
+    assert verify_chain(log) == (64, 0, None)

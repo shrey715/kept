@@ -1,6 +1,8 @@
 "use client";
 
-import { Callout, Card, Flex, Heading, Select, Skeleton, Text } from "@radix-ui/themes";
+import { PageHeader } from "@/components/page-header";
+import { ReaderIcon } from "@radix-ui/react-icons";
+import { Callout, Card, Select, Skeleton } from "@radix-ui/themes";
 import { useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { Rise, Stagger } from "@/components/motion";
@@ -39,20 +41,24 @@ export default function AuditPage() {
   return (
     <Stagger>
       <Rise>
-        <Flex justify="between" align="end" wrap="wrap" gap="3">
-          <div>
-            <Heading size="8">Audit trail</Heading>
-            <Text color="gray" size="2">Append-only: every recommendation, decision, override and model call.</Text>
-          </div>
-          <Select.Root value={kind} onValueChange={(v) => setKind(v as AuditKind | "all")}>
-            <Select.Trigger />
-            <Select.Content>
-              {KINDS.map(([k, label]) => (
-                <Select.Item key={k} value={k}>{label}</Select.Item>
-              ))}
-            </Select.Content>
-          </Select.Root>
-        </Flex>
+        <PageHeader
+          icon={<ReaderIcon />}
+          eyebrow="Audit trail"
+          title="Every recommendation, decision and model call, on the record."
+          sub="Append-only and hash-chained: change one record and the chain breaks (kept audit-verify)."
+          actions={
+            <Select.Root size="3" value={kind} onValueChange={(v) => setKind(v as AuditKind | "all")}>
+              <Select.Trigger />
+              <Select.Content>
+                {KINDS.map(([k, label]) => (
+                  <Select.Item key={k} value={k}>
+                    {label}
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select.Root>
+          }
+        />
       </Rise>
       {error && (
         <Callout.Root color="red" mt="4">

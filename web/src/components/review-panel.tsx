@@ -1,5 +1,6 @@
 "use client";
 
+import { invalidate } from "@/lib/live";
 import { Box, Button, Callout, Flex, SegmentedControl, Select, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -79,6 +80,9 @@ export function ReviewPanel({
         }),
       );
       setResult(r);
+      invalidate("queue:"); // the queue and approvals show the new status next time they load
+      invalidate("approvals:");
+      invalidate(`card:${p.case_id}:`);
       if (r.reason.startsWith("Approved by")) setP({ ...p, status: "approved" });
       else if (r.released) setP({ ...p, status: "released" });
       else if (m === "reject") setP({ ...p, status: "rejected" });

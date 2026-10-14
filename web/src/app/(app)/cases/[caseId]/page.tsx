@@ -2,25 +2,31 @@
 
 import { ArrowLeftIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons";
 import { Box, Button, Callout, Card, Flex, Grid, Heading, IconButton, Skeleton, Tabs, Text, TextArea, Tooltip } from "@radix-ui/themes";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
-import { AuditTimeline } from "@/components/audit-timeline";
-import { CallsPanel } from "@/components/calls-panel";
 import { CustomerPanel } from "@/components/customer-panel";
-import { ExtractionPanel } from "@/components/extraction-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
 import { ApiError, api, type AuditEvent, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
+import { invalidate, keys, load, peek, set } from "@/lib/live";
 import { useSession } from "@/lib/session";
+
+// below the fold or behind a tab: their code loads when they first render
+const AuditTimeline = dynamic(() => import("@/components/audit-timeline").then((m) => m.AuditTimeline), { loading: () => <Skeleton height="160px" /> });
+const CallsPanel = dynamic(() => import("@/components/calls-panel").then((m) => m.CallsPanel), { loading: () => <Skeleton height="160px" /> });
+const ExtractionPanel = dynamic(() => import("@/components/extraction-panel").then((m) => m.ExtractionPanel), {
+  loading: () => <Skeleton height="160px" />,
+});
 
 export default function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
   const { me } = useSession();
   const { now, health } = useServerClock();
-  const [card, setCard] = useState<NBACard | null>(null);
-  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [card, setCard] = useState<NBACard | null>(() => (me ? (peek<NBACard>(keys.card(caseId, me.userId)) ?? null) : null));
+  const [customer, setCustomer] = useState<Customer | null>(() => (me ? (peek<Customer>(keys.customer(caseId, me.userId)) ?? null) : null));
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -55,7 +61,12 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   useEffect(() => {
     if (!me) return;
     let live = true;
-    Promise.all([api.card(caseId, me), api.customer(caseId, me)]).then(
+    // a hover in the queue may have fetched these already; after a change (nonce) always fetch again
+    const fresh = nonce ? { fresh: 0 } : undefined;
+    Promise.all([
+      load(keys.card(caseId, me.userId), () => api.card(caseId, me), fresh),
+      load(keys.customer(caseId, me.userId), () => api.customer(caseId, me), fresh),
+    ]).then(
       ([c, cu]) => {
         if (!live) return;
         setCard(c);
@@ -80,8 +91,12 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
     if (!me || !note.trim()) return;
     setNoting(true);
     try {
-      setCard(await api.note(caseId, note.trim(), me));
-      setCustomer(await api.customer(caseId, me));
+      const c = await api.note(caseId, note.trim(), me);
+      setCard(c);
+      set(keys.card(caseId, me.userId), c);
+      const cu = await load(keys.customer(caseId, me.userId), () => api.customer(caseId, me), { fresh: 0 });
+      setCustomer(cu);
+      invalidate(keys.queue(me.userId));
       setNote("");
       loadAudit();
       loadNotes();
