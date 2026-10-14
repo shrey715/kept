@@ -181,7 +181,7 @@ function ApprovalRow({ item, onOpen }: { item: ApprovalItem; onOpen: () => void 
             {p.sizing && <Text color="gray">· {money(p.sizing.amount)} × {p.sizing.installments}</Text>}
           </Flex>
           <Text as="div" size="1" color="gray" mt="1" className="tabular">
-            <Link href={`/cases/${p.case_id}`}>{p.case_id}</Link>
+            <Link href={`/cases/${p.case_id}?tab=review`}>{p.case_id}</Link>
             {p.window_start && ` · ${when(p.window_start)}`} · expires {when(p.expires_at)}
             {item.first_approver && ` · approved by ${item.first_approver}`}
           </Text>
@@ -237,7 +237,7 @@ function GreenBatch({ items, now, onDone }: { items: ApprovalItem[]; now: Date |
             <motion.div key={a.proposal.proposal_id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.03 } }}>
               <Flex justify="between" align="center" py="2" style={{ borderBottom: "1px solid var(--k-line)" }}>
                 <Text size="2">
-                  {ACTION_LABEL[a.proposal.action]} · <Link href={`/cases/${a.proposal.case_id}`}>{a.proposal.case_id}</Link>
+                  {ACTION_LABEL[a.proposal.action]} · <Link href={`/cases/${a.proposal.case_id}?tab=review`}>{a.proposal.case_id}</Link>
                 </Text>
                 <AnimatePresence mode="wait">
                   {s && (

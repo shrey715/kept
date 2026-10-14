@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons
 import { Box, Button, Callout, Card, Flex, Grid, Skeleton, Tabs, Text, TextArea, Tooltip } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useState } from "react";
 import { CustomerPanel } from "@/components/customer-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
@@ -25,6 +26,8 @@ const ExtractionPanel = dynamic(() => import("@/components/extraction-panel").th
   loading: () => <Skeleton height="160px" />,
 });
 
+const TABS = ["overview", "review", "activity"];
+
 export default function CasePage({ params }: { params: Promise<{ caseId: string }> }) {
   const { caseId } = use(params);
   const { me } = useSession();
@@ -37,7 +40,16 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   const [note, setNote] = useState("");
   const [noting, setNoting] = useState(false);
   const [preset, setPreset] = useState<string | undefined>(undefined);
-  const [tab, setTab] = useState("review");
+  // a case opens on its overview; a tab in the URL (?tab=review, ?tab=activity) still deep-links
+  const asked = useSearchParams().get("tab");
+  const [tab, setTabState] = useState(asked && TABS.includes(asked) ? asked : "overview");
+  const setTab = (t: string) => {
+    setTabState(t);
+    const u = new URL(window.location.href);
+    if (t === "overview") u.searchParams.delete("tab");
+    else u.searchParams.set("tab", t);
+    window.history.replaceState(window.history.state, "", u);
+  };
   const [notes, setNotes] = useState<NoteExtraction[]>([]);
   const [calls, setCalls] = useState<CallOut[]>([]);
   const [history, setHistory] = useState<CaseHistory | null>(() => (me ? (peek<CaseHistory>(keys.history(caseId, me.userId)) ?? null) : null));
@@ -217,8 +229,8 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>
               <Tabs.List>
+                <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
                 <Tabs.Trigger value="review">Review</Tabs.Trigger>
-                <Tabs.Trigger value="customer">Customer</Tabs.Trigger>
                 <Tabs.Trigger value="activity">Activity</Tabs.Trigger>
               </Tabs.List>
               <Box pt="4">
@@ -250,7 +262,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                     </Text>
                   </Flex>
                 </Tabs.Content>
-                <Tabs.Content value="customer">{customer && <CustomerPanel c={customer} />}</Tabs.Content>
+                <Tabs.Content value="overview">{customer ? <CustomerPanel c={customer} /> : <Skeleton height="320px" />}</Tabs.Content>
                 <Tabs.Content value="activity">
                   <AuditTimeline events={events} />
                 </Tabs.Content>
