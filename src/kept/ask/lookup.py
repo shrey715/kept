@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -46,11 +46,42 @@ def pin_today(sql: str, as_of: date | None) -> str:
     return _TODAY.sub(f"DATE '{as_of.isoformat()}'", sql) if as_of else sql
 
 
-def lint_sql(question: str, sql: str) -> list[str]:
+def qualify_tables(sql: str, allowed: frozenset[str] | set[str]) -> str:
+    """Models drop the schema on a rewrite (FROM contact_history); the guard only accepts schema-qualified
+    names. A bare name after FROM or JOIN that matches exactly one allowed table gets its schema."""
+    by_name: dict[str, list[str]] = {}
+    for t in allowed:
+        by_name.setdefault(t.split(".")[-1], []).append(t)
+
+    ctes = {c.lower() for c in re.findall(r"\b([a-z_][a-z0-9_]*)\s+as\s*\(", sql, flags=re.I)}
+
+    def fix(m: re.Match[str]) -> str:
+        hits = [] if m[2].lower() in ctes else by_name.get(m[2].lower(), [])
+        return f"{m[1]}{hits[0]}" if len(hits) == 1 else m[0]
+
+    return re.sub(r"(\b(?:from|join)\s+)([a-z_][a-z0-9_]*)\b(?!\s*\.)(?!\s*\()", fix, sql, flags=re.I)
+
+
+def lint_sql(question: str, sql: str, dates: Sequence[tuple[str, date, date]] = ()) -> list[str]:
     """What a draft that ran still gets wrong against the data dictionary's conventions, as feedback for one
-    rewrite (a linter for the model). Each rule is cheap and only fires on a clear miss."""
+    rewrite (a linter for the model). Each rule is cheap and only fires on a clear miss. `dates` are the
+    question's resolved date ranges: a date literal the query uses must be one of their bounds."""
     q, s = question.lower(), sql.lower()
     out = []
+    if dates:
+        ok = {d for _, a, b in dates for d in (a, b, a - timedelta(days=1), b + timedelta(days=1))}
+        used = {date.fromisoformat(d) for d in re.findall(r"'(\d{4}-\d{2}-\d{2})'", sql)}
+        if stray := sorted(used - ok):
+            want = "; ".join(f'"{p}" is {a} to {b}' for p, a, b in dates)
+            odd = ", ".join(map(str, stray))
+            out.append(f"The query uses dates the question doesn't ({odd}). Use: {want}.")
+        compares = len(dates) >= 2 and re.search(r"\b(compared?|versus|vs)\b|days before|the previous", q)
+        if compares and not re.search(r"\bgroup by\b|\bunion\b", s):
+            out.append(
+                "The question compares periods: return one row per period, e.g. CASE WHEN <date> >= DATE "
+                "'<start of the later period>' THEN '<later period>' ELSE '<earlier period>' END AS period, "
+                "with a WHERE covering both periods, GROUP BY period."
+            )
     if re.search(r"\bcalls?\b", q) and "contact_history" in s and "channel" not in s:
         out.append("The question is about calls: filter contact_history on channel = 'call'.")
     if re.search(r"\boutbound\b", q) and "contact_history" in s and "direction" not in s:

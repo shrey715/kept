@@ -24,6 +24,7 @@ from kept.ask.lookup import (
     majority_result,
     normalize_result,
     pin_today,
+    qualify_tables,
 )
 from kept.ask.metrics import CertifiedQuery, MetricDefinition
 from kept.ask.policy import PolicyIndex, local_embedder
@@ -140,6 +141,8 @@ _CONVENTIONS = """Conventions (from the data dictionary):
   agent_id. province_code, queue and test_cell live on collections_cases.
 - Dates and hours of contacts use the local time contact_ts_local (never contact_ts_utc); contact_hour_local
   is the hour 0-23.
+- A reviewed (QA) call is a contact_history row with qa_selected_flag and a qa_score; its site is
+  contact_history.agent_site (the agent's site at the time of the call).
 - Disputes and complaints raised in a date range are events: count contact_history rows with
   dispute_raised_flag (or complaint_raised_flag), dated by contact_ts_local, with no other filter (the type
   exists only on collections_cases). collections_cases.dispute_date is just the latest dispute on a case."""
@@ -398,12 +401,13 @@ class CollectionsAsk:
         drafts = generate_candidates(
             intent, spec, self._llm, n=n, actor_id=request.user_id, question=question
         )
-        drafts = [pin_today(d, as_of) for d in drafts]
+        drafts = [qualify_tables(pin_today(d, as_of), policy.allowed_tables) for d in drafts]
+        dates = resolve_dates(question.text, as_of)
         guards = [guard_sql(d, policy) for d in drafts]
         results = [self._try(g) if g.allowed else (None, None) for g in guards]
         ran = [r for r, _ in results]
         for i, (r, error) in enumerate(results):
-            if r is not None and (issues := lint_sql(question.text, guards[i].sql)):
+            if r is not None and (issues := lint_sql(question.text, guards[i].sql, dates)):
                 error = "it ran, but it doesn't follow the conventions: " + " ".join(issues)
             if error and (
                 fixed := self._repair(request, question, intent, schema, drafts[i], error, policy, as_of)
@@ -667,7 +671,11 @@ class CollectionsAsk:
             "Write a corrected query. Join tables on case_id when you need columns from another table."
         )
         fixed = draft_sql(self._llm, lookup_system(intent, schema), user, request.user_id)
-        guarded = guard_sql(pin_today(fixed, as_of), policy) if fixed else None
+        guarded = (
+            guard_sql(qualify_tables(pin_today(fixed, as_of), policy.allowed_tables), policy)
+            if fixed
+            else None
+        )
         if guarded is None or not guarded.allowed:
             return None
         result = self._run(guarded)

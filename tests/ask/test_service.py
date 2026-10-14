@@ -605,3 +605,34 @@ def test_check_bucket_adds_the_named_bucket_unless_grouped() -> None:
     grouped = i.model_copy(update={"group_by": ("dpd_bucket",)})
     assert check_bucket(q, grouped, allowed) == (grouped, None)
     assert check_bucket("roll rate by product", i, allowed) == (i, None)
+
+
+def test_qualify_tables_adds_the_schema_to_bare_allowed_tables_only() -> None:
+    from kept.ask.lookup import qualify_tables
+
+    allowed = {"silver.contact_history", "silver.agents"}
+    sql = "WITH agents AS (SELECT 1 AS x) SELECT * FROM contact_history h JOIN agents a ON 1 = 1"
+    assert qualify_tables(sql, allowed) == (
+        "WITH agents AS (SELECT 1 AS x) SELECT * FROM silver.contact_history h JOIN agents a ON 1 = 1"
+    )
+    assert qualify_tables("SELECT EXTRACT(day FROM ts) FROM silver.agents", allowed) == (
+        "SELECT EXTRACT(day FROM ts) FROM silver.agents"
+    )
+
+
+def test_lint_sql_holds_drafts_to_the_resolved_dates_and_period_rows() -> None:
+    from datetime import date
+
+    from kept.ask.lookup import lint_sql
+    from kept.ask.templates import resolve_dates
+
+    q = "How many complaints were raised from 14 to 20 September 2026, compared with the 7 days before?"
+    dates = resolve_dates(q, date(2026, 9, 28))
+    wrong = "SELECT count(*) AS n FROM silver.contact_history WHERE d BETWEEN '2026-08-25' AND '2026-09-20'"
+    issues = lint_sql(q, wrong, dates)
+    assert any("2026-08-25" in i for i in issues) and any("one row per period" in i for i in issues)
+    right = (
+        "SELECT CASE WHEN d >= '2026-09-14' THEN 'later' ELSE 'earlier' END AS period, count(*) AS n "
+        "FROM silver.contact_history WHERE d BETWEEN '2026-09-07' AND '2026-09-20' GROUP BY period"
+    )
+    assert lint_sql(q, right, dates) == []
