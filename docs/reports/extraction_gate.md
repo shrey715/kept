@@ -1,24 +1,28 @@
 # Text extraction: the release gate
 
-The local model (`gemma3:12b`, prompt `extract-v4` plus the cease rule) on the release's public labels. Every text is
-redacted first, and every positive value must quote the text it came from. Gate: F1 ≥ 0.80, hardship recall ≥ 0.90.
-The holdout split was used only to check, not to tune.
+The local model (Qwen3.8-27B on llama.cpp since 15 October; Gemma 3 12B on Ollama before), prompt `extract-v4` plus the
+cease rule, on the release's public labels. Every text is redacted first, and every positive value must quote the text
+it came from. Gate: F1 ≥ 0.80, hardship recall ≥ 0.90. The holdout split was used only to check, not to tune.
 
     uv run python scripts/eval_extraction.py --source notes --split holdout
     uv run python scripts/eval_extraction.py --source transcripts --split holdout
     uv run python scripts/eval_extraction.py --source transcripts --calls whisper   # or --calls release
 
-## Holdout: every field passes
+## Holdout: every field passes, on both models
 
-| Field | Notes F1 (149) | Recall | Calls F1 (149) | Recall |
-|---|---:|---:|---:|---:|
-| Hardship | 0.84 | **1.00** | 0.99 | **1.00** |
-| Promise to pay | 0.88 | 0.92 | 0.97 | 1.00 |
-| Promised date | 0.84 | 0.73 | 0.96 | 0.92 |
-| Promised amount | 0.93 | 0.86 | 1.00 | 1.00 |
-| Dispute | 0.86 | 1.00 | 0.93 | 1.00 |
-| Cease request | 1.00 | 1.00 | 1.00 | 1.00 |
-| Third party present | 1.00 | 1.00 | 1.00 | 1.00 |
+| Field | Notes F1 (149), Qwen | Gemma | Recall, Qwen | Calls F1 (149), Qwen | Gemma | Recall, Qwen |
+|---|---:|---:|---:|---:|---:|---:|
+| Hardship | **0.88** | 0.84 | **1.00** | **0.99** | 0.99 | **1.00** |
+| Promise to pay | **0.88** | 0.88 | 0.95 | **0.99** | 0.97 | 1.00 |
+| Promised date | **0.91** | 0.84 | 0.83 | 0.95 | 0.96 | 0.90 |
+| Promised amount | **0.96** | 0.93 | 0.92 | **1.00** | 1.00 | 1.00 |
+| Dispute | 0.86 | 0.86 | 1.00 | **1.00** | 0.93 | 1.00 |
+| Cease request | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+| Third party present | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+
+Qwen is the default: as good or better on every notes field, and on calls level or better except promised date (0.95
+against 0.96). It also lets one model serve the Ask, the briefs and extraction on the 16 GB GPU (Gemma on Ollama and
+Qwen on llama.cpp don't fit together). About 3.6 s a note and 4.1 s a call with two requests at once.
 
 Every text gets a usable reply: the local model decodes straight to the JSON schema (each field's value typed), so it
 can't return a malformed field. Before that, 10 of the 149 calls broke the schema and were left out. Cease and third

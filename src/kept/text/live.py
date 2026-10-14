@@ -19,7 +19,7 @@ from kept.contracts.interfaces import LLMGateway, Redactor
 from kept.text.extract import LLMExtractor, transcript_text
 from kept.text.store import DuckDBExtractionStore
 
-DEFAULT_MODEL = "ollama/gemma3:12b-it-qat"  # .env.example KEPT_TEXT_LLM_MODEL
+DEFAULT_MODEL = "llamacpp/qwen3.8-27b"  # .env.example KEPT_TEXT_LLM_MODEL
 
 
 @dataclass(frozen=True, slots=True)

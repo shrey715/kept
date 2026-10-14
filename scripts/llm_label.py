@@ -4,7 +4,7 @@
 
 Samples distinct redacted texts from the latest data/exports/redacted_notes/*.parquet (never the public
 label ids, so the gate stays honest): half at random, half matching hardship / rare-field wording so the
-classifier sees enough positives. Runs LLMExtractor (KEPT_TEXT_LLM_MODEL, local Ollama) and appends one
+classifier sees enough positives. Runs LLMExtractor (KEPT_TEXT_LLM_MODEL, the local model) and appends one
 JSON line per text to data/labels/llm_labels_<prompt>.jsonl. Reruns skip ids already labelled.
 """
 
@@ -74,7 +74,7 @@ def main() -> None:
     todo = [r for r in rows if r[0] not in done]
     print(f"{len(rows)} sampled from {src}, {len(done)} already labelled, {len(todo)} to go", flush=True)
 
-    model = os.environ.get("KEPT_TEXT_LLM_MODEL", "ollama/gemma3:12b-it-qat")
+    model = os.environ.get("KEPT_TEXT_LLM_MODEL", "llamacpp/qwen3.8-27b")
     extractor = LLMExtractor(LiteLLMGateway(model=model, audit_log=DuckDBAuditLog(), timeout_s=180))
     redactor_version = duckdb.execute(
         "select any_value(redactor_version) from read_parquet(?)", [src]

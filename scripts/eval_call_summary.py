@@ -1,6 +1,6 @@
 """Score kept.text.calls against the public gold summaries (label_summary_gold), plus BQ-016/021/022.
 
-    uv run python scripts/eval_call_summary.py [N] [--model ollama/gemma3:12b-it-qat]
+    uv run python scripts/eval_call_summary.py [N] [--model llamacpp/qwen3.8-27b]
 
 Reads the redacted transcripts straight from the Parquet export (no warehouse lock needed). Prints exact
 matches and per-part accuracy (reason, promise, next step) over the first N labelled transcripts.
@@ -39,7 +39,7 @@ def parts(s: str) -> dict[str, str]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("n", type=int, nargs="?", default=100)
-    ap.add_argument("--model", default="ollama/gemma3:12b-it-qat")
+    ap.add_argument("--model", default="llamacpp/qwen3.8-27b")
     a = ap.parse_args()
     conn = duckdb.connect()
     conn.execute("create schema text")
