@@ -63,6 +63,8 @@ leak-free model**. Kept's promise model drops this feature (phase 2).
 | Kept's model: the action it scores best | 37.2% [36.8, 37.6] | 39.7% [38.2, 41.1] |
 | Wait: contact nobody | 22.4% [21.2, 23.4] | 22.4% [22.0, 22.8] |
 
+Paired on the same decisions, Kept's choice against the bank's: **+61 customers paying within 14 days per 1,000 decisions** [+55, +67] (doubly robust).
+
 Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
 uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
 They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
@@ -142,3 +144,24 @@ distinguishable (the interval includes zero). Kept's model scores at the moment 
 before the bank's. We tried and dropped: random forest, extra trees and logistic regression alone, one model per
 product or channel, the agent's past kept rate, call audio measures and the note text (none added beyond the noise);
 features dated after the promise score 0.79 but only by seeing contacts after a missed due date, so they are excluded.
+
+## 9. Uplift where the bank randomised
+
+The live uplift model learns from randomly assigned cases, but within them the action each day was the strategy's
+choice, not random. The one thing the bank did randomise is the cell: a case was either worked by a strategy or held
+out. This model uses only that: one LightGBM for worked cases and one for held-out cases, on what is known when the
+case opens, with overdue dollars cured within 30 days as the outcome. Because the arms were randomised, the difference
+inside any group of cases is an unbiased estimate of what working them added.
+
+| Cases worked (held-out 32,465 cases, 1,569 of them held out) | Overdue dollars cured in 30 days, worked minus held out, per 1,000 cases [95% CI] |
+|---|---:|
+| Everyone (what the bank does) | $+17,909 [$-9,403, $+42,488] |
+| The top 50% by the model's uplift | $+20,510 [$-22,638, $+63,011] |
+| The top 30% by the model's uplift | $+29,147 [$-39,116, $+102,675] |
+| The top 10% by the model's uplift | $+41,969 [$-138,853, $+222,080] |
+
+The estimates rise as the model's top cases are taken first, which is what a working uplift ranking looks like, but
+**every interval includes zero**: the held-out arm in this window is small and was mostly contacted anyway (§1). So on
+the bank's randomisation alone, targeting by uplift is promising and unproven. That matches §1: contact intensity barely
+changes outcomes, which is why Kept's main lever is the due date (§2), and why the uplift model only replaces the
+bank's strategy behind a gate (`docs/reports/tuning.md`).

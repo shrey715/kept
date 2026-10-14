@@ -47,7 +47,10 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
   plan holds out 5% on the old strategy and adds a randomised due-date cell.
 - **Payday is known for about 1 customer in 4** from deposit data. The pay page asks the rest; agents already hear it on
   calls (41% of open customers have stated one).
-- **The uplift signal is small** (call Qini 0.0073). Payroll features added to training didn't beat the champion.
+- **The uplift signal is small.** Off-policy, Kept's choice of action gives +61 more customers paying within 14 days per
+  1,000 decisions than the bank's strategy [55, 67] (evidence §4), but that rests on a model of how the bank chose. On the
+  bank's randomisation alone (worked vs held out), targeting by uplift points the right way and its intervals include
+  zero (evidence §9). Payroll features added to training didn't beat the champion.
 - **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
 - **Kept's shipped promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). A wider model on the same kinds
