@@ -23,7 +23,7 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 - [x] Maple logo links to the landing page
 - [x] Ask redesign: prompt bar, example cards by path, thinking steps, chart/table tabs, grounding ladder, session history
 - [x] Redesign every page in the same language: Approvals (stage cards), Audit, Bench, Steward, case page, sign-in (two-pane, pencil sketch)
-- [ ] Guided demo and pay page in the same language
+- [x] Guided demo and pay page in the same language (pay: framed card, steps, secure-link chip)
 - [x] Lazy loading: charts, citations, panels below the fold load on demand; `content-visibility` on long lists
 - [x] Stale-while-revalidate cache for page data; prefetch a case on queue row hover
 - [x] Optimistic UI where safe (steward verdicts, mark-as-read); releases wait for the server's safety recheck
@@ -33,26 +33,29 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 ## Next: local model and orchestration
 - [x] Gateway supports `llamacpp/` models (local llama-server, schema-constrained) (#169)
 - [x] Gemma 4 26B tried as challenger: too slow on 16 GB (24 s a note), not more accurate; stays out
-- [ ] Gemma 3 12B on llama-server (needs the model file copied, see Waiting on Akshat)
-- [ ] Ask falls back to the local model when the free hosted tier rate-limits (fully offline demo)
-- [ ] LangGraph Ask: route → retrieve → answer → grounding check → retry/refuse → cite, with the trace shown in the UI; merges only if released 21/21, stress ≥ 35/42, drill ≥ 26/30
+- [x] Gemma 3 12B on llama-server (the standard QAT Q4_0 GGUF; Ollama's own file isn't llama.cpp-compatible)
+- [x] Local models only (14 Oct): the Ask runs on local Gemma 3 too; no hosted API, no keys
+- [~] LangGraph Ask: the pipeline as graph nodes, a per-answer trace in the UI, a channel intent check; first run 21/21 · 34/42 (KS-002: the router dropped "calls", now checked) · drill pending; merges only at 21/21, ≥ 35/42, ≥ 26/30
 
 ## Next: insight pages
 - [x] Case page: full TreeSHAP drivers (both signs), warehouse history (contacts, promises, month-end balance and payments), stat tiles (#170)
-- [ ] Case page: LLM case brief with quoted sources
+- [x] Case brief: local model, every bullet cites facts or quotes, numbers checked, template fallback
 - [x] Portfolio page: KPIs, balance and recovery by bucket, cases by action, the bank's A/B as a forest plot (Wilson 95% CIs), cohort heatmap, insights each with its SQL, case explorer (server-side filter/sort/page, CSV), analysts aggregates-only
-- [ ] Portfolio: fairness and drift panels; LLM-written daily brief over the computed facts (numbers checked)
+- [x] Portfolio: tonight's cited brief; Models and governance section (reliability curve, Qini curve, TreeSHAP importance, fairness grid, drift PSI)
 - [x] Explainability per case: TreeSHAP drivers on every card (#170)
-- [ ] Explainability, global: feature importance, calibration and uplift (Qini) curves
+- [x] Explainability, global: `scripts/model_card.py` (promise AUC 0.610, Brier 0.221 on 50,653 held-out promises; uplift Qini with noise)
 
 ## Next: models (behind the champion/challenger gate)
-- [ ] Hyperparameter search for the promise and uplift models; report honestly whether they beat the champion
+- [x] Uplift hyperparameter search, 40 candidates (`scripts/tune_uplift.py`, `docs/reports/tuning.md`): worse than the champion on held-out decisions, champion kept
 - [ ] Promised-date recall on notes (0.73): prompt or rule fix, re-gated
+
+## Deck
+- [x] LaTeX deck (`make deck`, 24 slides with appendix) and speaker notes; `docs/team/DECK_ISSUES.md` DK-01 to DK-17 drafted
 
 ## Phase 5 (unchanged, see NEXT_ROUND_PLAN.md §4a)
 - [ ] Final benchmark run to `data/exports/reports/`
-- [ ] Secret scan of the working tree and full history
-- [ ] Deck PDF and video link in the repo
+- [x] Secret scan of the working tree and full history: clean (`scripts/secret_scan.sh`, 115,795 added lines, 488 commits)
+- [~] Deck PDF in the repo (`docs/deck/kept.pdf`); the video link is the team's to add
 - [ ] Two dress rehearsals and the Q&A drill; track logs updated
 - [ ] Freeze Thu 18:00; evening refresh and preflight GO (§7a)
 
@@ -61,6 +64,6 @@ Freeze Thu 15 Oct 18:00: anything not green by 16:00 stays out. Ticked = merged 
 - [x] Phone access: dev server allows the LAN IP (KEPT_DEV_ORIGINS)
 
 ## Waiting on Akshat
-- [ ] Copy the model file for llama.cpp (one `sudo cp`, see the chat)
+- [x] Copy the model file for llama.cpp (it turned out unusable; a standard GGUF was downloaded instead and the copy deleted)
 - [ ] Check the pay page in a browser
 - [ ] Review deck v2

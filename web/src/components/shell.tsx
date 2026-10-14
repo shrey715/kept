@@ -34,7 +34,7 @@ export const NAV = [
   { href: "/ask", label: "Ask", icon: ChatBubbleIcon, blurb: "Questions in plain English, certified metrics", show: () => true },
   { href: "/bench", label: "Bench", icon: BarChartIcon, blurb: "The evidence: benchmark, model and fairness", show: () => true },
   { href: "/steward", label: "Steward", icon: MixerHorizontalIcon, blurb: "Uncertain customer matches to review", show: can.steward },
-  { href: "/demo", label: "Guided demo", icon: PlayIcon, blurb: "Jane's case, start to finish, in five steps", show: () => true },
+  { href: "/demo", label: "Guided demo", icon: PlayIcon, blurb: "One case, start to finish, in six steps", show: () => true },
 ];
 
 // phones get the bottom tab bar (globals.css, max-width 767px): menus open above it, not beside it

@@ -9,6 +9,7 @@ import {
   CounterClockwiseClockIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
+  MagnifyingGlassIcon,
   MixIcon,
   QuestionMarkCircledIcon,
   ReaderIcon,
@@ -31,7 +32,7 @@ const AnswerChart = dynamic(() => import("@/components/answer-chart").then((m) =
 // released benchmark questions the Ask gets right on the dev split, one per path (metric, policy, comparison, guardrail)
 const EXAMPLES: { q: string; path: string; icon: React.ReactNode }[] = [
   { q: "What is the average days past due of open cases by queue?", path: "Certified metric", icon: <BarChartIcon /> },
-  { q: "How many collections cases are open today, by current bucket?", path: "Certified metric", icon: <BarChartIcon /> },
+  { q: "How many collections cases are open today, by current bucket?", path: "Lookup, voted", icon: <MagnifyingGlassIcon /> },
   {
     q: "Among randomised cases, compare the promise-kept rate of the champion strategy with challenger_A and challenger_B.",
     path: "Comparison",
@@ -279,6 +280,7 @@ export default function AskPage() {
                     <Sources r={r} onOpen={verify} />
                   </div>
                 )}
+                {r.trace && r.trace.length > 0 && <Trace steps={r.trace} />}
                 <Flex mt="3" justify="end">
                   <Button
                     variant="ghost"
@@ -357,5 +359,29 @@ function Thinking() {
       ))}
       <Skeleton height="120px" mt="2" />
     </Flex>
+  );
+}
+
+/** The path the Ask actually took (kept.ask.graph): one chip per step, in order. */
+function Trace({ steps }: { steps: readonly string[] }) {
+  return (
+    <div className="k-card" style={{ marginTop: 12, padding: "14px 18px" }}>
+      <div className="k-eyebrow">How this was answered · LangGraph path</div>
+      <ol className="k-trace">
+        {steps.map((t, i) => {
+          const [head, ...rest] = t.split(": ");
+          const bad = /refused|failed|blocked|too low|disagreed|out \(/.test(t);
+          return (
+            <motion.li key={`${i}-${t}`} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0, transition: { delay: i * 0.06 } }} data-bad={bad}>
+              <span className="k-trace-n">{i + 1}</span>
+              <span>
+                <b>{head}</b>
+                {rest.length > 0 && <span style={{ color: "var(--gray-11)" }}> · {rest.join(": ")}</span>}
+              </span>
+            </motion.li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }

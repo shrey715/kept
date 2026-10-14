@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case Brief */
+        get: operations["case_brief_cases__case_id__brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Brief */
+        get: operations["portfolio_brief_portfolio_brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portfolio": {
         parameters: {
             query?: never;
@@ -534,6 +568,11 @@ export interface components {
              * @default []
              */
             citations: components["schemas"]["Citation"][];
+            /**
+             * Trace
+             * @default []
+             */
+            trace: string[];
         };
         /** AskRequest */
         AskRequest: {
@@ -620,6 +659,29 @@ export interface components {
             gold: {
                 [key: string]: string;
             }[];
+        };
+        /** Brief */
+        Brief: {
+            /** Bullets */
+            bullets: components["schemas"]["Bullet"][];
+            /** Sources */
+            sources: components["schemas"]["Source"][];
+            /** Model */
+            model: string | null;
+            /** Dropped */
+            dropped: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+        };
+        /** Bullet */
+        Bullet: {
+            /** Text */
+            text: string;
+            /** Cites */
+            cites: string[];
         };
         /** CallOut */
         CallOut: {
@@ -826,6 +888,11 @@ export interface components {
             /** Question */
             question: string;
             intent?: components["schemas"]["Intent"] | null;
+            /**
+             * Trace
+             * @default []
+             */
+            trace: string[];
         };
         /** CohortCell */
         CohortCell: {
@@ -1467,6 +1534,11 @@ export interface components {
             message: string;
             /** Suggestion */
             suggestion?: string | null;
+            /**
+             * Trace
+             * @default []
+             */
+            trace: string[];
         };
         /**
          * RefusalReason
@@ -1537,6 +1609,20 @@ export interface components {
             balance: number;
             /** Expected */
             expected: number;
+        };
+        /** Source */
+        Source: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fact" | "quote";
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
         };
         /** SourceIn */
         SourceIn: {
@@ -1866,6 +1952,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApprovalItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_brief_cases__case_id__brief_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brief"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_brief_portfolio_brief_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brief"];
                 };
             };
             /** @description Validation Error */

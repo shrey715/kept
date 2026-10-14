@@ -15,13 +15,15 @@ import {
 import { Box, Callout, Flex, Grid, Select, Skeleton, Table, Text, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TierBadge } from "@/components/bits";
 import { CountUp, Rise, Stagger } from "@/components/motion";
+import { BriefCard } from "@/components/brief-card";
+import { ModelPanels } from "@/components/model-panels";
 import { PageHeader, SectionTitle } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
 import { download, toCsv } from "@/lib/csv";
-import { ACTION_LABEL, api, money, type Action, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
+import { ACTION_LABEL, api, money, type Action, type Governance, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
 import { keys, load, peek } from "@/lib/live";
 import { can, useSession } from "@/lib/session";
 
@@ -50,6 +52,8 @@ export default function PortfolioPage() {
     };
   }, [me]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const loadBrief = useCallback(() => api.portfolioBrief(me!), [me?.userId]);
   if (!me) return null;
   const share = (n: number, d: number) => (d ? n / d : 0);
   return (
@@ -100,6 +104,11 @@ export default function PortfolioPage() {
         ))}
       </Grid>
 
+      {p && (
+        <Box mt="5">
+          <BriefCard load={loadBrief} eyebrow="Tonight's brief · every number checked against the facts" title="What to know before the day starts" />
+        </Box>
+      )}
       {p && p.insights.length > 0 && (
         <Box mt="5">
           <SectionTitle eyebrow="Grounded insights" title="What tonight's numbers say" />
@@ -161,6 +170,8 @@ export default function PortfolioPage() {
           </Grid>
         )
       )}
+
+      <ModelsSection />
 
       {can.portfolioCases(me.role) ? (
         <CaseExplorer />
@@ -364,6 +375,27 @@ function QuarterRow({ q, products, at, min, max }: { q: string; products: string
         );
       })}
     </>
+  );
+}
+
+/** The models behind the cards, how well they hold up, and the fairness and drift checks (the reports' JSON). */
+function ModelsSection() {
+  const { me } = useSession();
+  const [g, setG] = useState<Governance | null>(null);
+  useEffect(() => {
+    if (!me) return;
+    let live = true;
+    api.portfolioModels(me).then((x) => live && setG(x), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [me]);
+  if (!g) return null;
+  return (
+    <Box mt="6">
+      <SectionTitle eyebrow="Models and governance" title="How far to trust the numbers above" />
+      <ModelPanels g={g} />
+    </Box>
   );
 }
 

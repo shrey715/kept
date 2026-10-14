@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Sequence
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -30,6 +31,79 @@ Hints from the question parser (may be empty): {hints}"""
 def _sql_only(text: str) -> str:
     """Models like to fence their SQL and end it with a semicolon."""
     return re.sub(r"^\s*```(?:sql)?\s*|\s*```\s*$", "", text).strip().rstrip(";").strip()
+
+
+_TODAY = re.compile(
+    r"\b(?:current_date|current_timestamp|localtimestamp)\b(?:\s*\(\s*\))?"
+    r"|\b(?:today|now|get_current_timestamp)\s*\(\s*\)",
+    re.I,
+)
+
+
+def pin_today(sql: str, as_of: date | None) -> str:
+    """The warehouse is a snapshot: "today" is its as-of date, not the server's clock. A draft that compares
+    with CURRENT_DATE or now() would find nothing newer than the snapshot."""
+    return _TODAY.sub(f"DATE '{as_of.isoformat()}'", sql) if as_of else sql
+
+
+def qualify_tables(sql: str, allowed: frozenset[str] | set[str]) -> str:
+    """Models drop the schema on a rewrite (FROM contact_history); the guard only accepts schema-qualified
+    names. A bare name after FROM or JOIN that matches exactly one allowed table gets its schema."""
+    by_name: dict[str, list[str]] = {}
+    for t in allowed:
+        by_name.setdefault(t.split(".")[-1], []).append(t)
+
+    ctes = {c.lower() for c in re.findall(r"\b([a-z_][a-z0-9_]*)\s+as\s*\(", sql, flags=re.I)}
+
+    def fix(m: re.Match[str]) -> str:
+        hits = [] if m[2].lower() in ctes else by_name.get(m[2].lower(), [])
+        return f"{m[1]}{hits[0]}" if len(hits) == 1 else m[0]
+
+    return re.sub(r"(\b(?:from|join)\s+)([a-z_][a-z0-9_]*)\b(?!\s*\.)(?!\s*\()", fix, sql, flags=re.I)
+
+
+def lint_sql(question: str, sql: str, dates: Sequence[tuple[str, date, date]] = ()) -> list[str]:
+    """What a draft that ran still gets wrong against the data dictionary's conventions, as feedback for one
+    rewrite (a linter for the model). Each rule is cheap and only fires on a clear miss. `dates` are the
+    question's resolved date ranges: a date literal the query uses must be one of their bounds."""
+    q, s = question.lower(), sql.lower()
+    out = []
+    if dates:
+        ok = {d for _, a, b in dates for d in (a, b, a - timedelta(days=1), b + timedelta(days=1))}
+        used = {date.fromisoformat(d) for d in re.findall(r"'(\d{4}-\d{2}-\d{2})'", sql)}
+        if stray := sorted(used - ok):
+            want = "; ".join(f'"{p}" is {a} to {b}' for p, a, b in dates)
+            odd = ", ".join(map(str, stray))
+            out.append(f"The query uses dates the question doesn't ({odd}). Use: {want}.")
+        compares = len(dates) >= 2 and re.search(r"\b(compared?|versus|vs)\b|days before|the previous", q)
+        if compares and not re.search(r"\bgroup by\b|\bunion\b", s):
+            out.append(
+                "The question compares periods: return one row per period, e.g. CASE WHEN <date> >= DATE "
+                "'<start of the later period>' THEN '<later period>' ELSE '<earlier period>' END AS period, "
+                "with a WHERE covering both periods, GROUP BY period."
+            )
+    if re.search(r"\bcalls?\b", q) and "contact_history" in s and "channel" not in s:
+        out.append("The question is about calls: filter contact_history on channel = 'call'.")
+    if re.search(r"\boutbound\b", q) and "contact_history" in s and "direction" not in s:
+        out.append("The question says outbound: filter direction = 'outbound'.")
+    if re.search(r"\bdisputes?\b", q) and "dispute_type" in s and "dispute_raised_flag" not in s:
+        out.append("Count disputes as contact_history rows with dispute_raised_flag, not dispute_type.")
+    if re.search(r"\binterval\b", s):
+        out.append("Don't add or subtract an INTERVAL: write each date bound as a literal DATE 'YYYY-MM-DD'.")
+    if re.search(r"\bopen (collections )?cases?\b|\bcases? (that are |still )?open\b", q) and (
+        "collections_cases" in s and "outcome is null" not in s
+    ):
+        out.append("An open case has collections_cases.outcome IS NULL.")
+    by = [
+        m[0].strip()
+        for m in re.finditer(r"\b(?:by|per|for each|each)\s+([a-z_ ]+?)(?=[,?.]|$)", q)
+        if not re.match(r"(?:by|per) (?:the )?(?:end|start|week|month|day)\b", m[0])
+    ]
+    if by and "group by" not in s:
+        out.append(f"The question asks for a breakdown ({by[0]}): GROUP BY that column.")
+    if "contact_ts_utc" in s:
+        out.append("Use contact_ts_local for dates and hours of contacts, never contact_ts_utc.")
+    return out
 
 
 def lookup_system(intent: Intent, schema_doc: str) -> str:

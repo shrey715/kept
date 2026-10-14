@@ -40,6 +40,7 @@ CONSENT_CHANGE_SLA: Final = timedelta(minutes=15)  # consent/cease/hold via onli
 
 # ------------------------------------------------------------ Layer 2: Ask
 SQL_CANDIDATES: Final = 3  # lookups: 3 LLM-written candidates, keep the majority
+SQL_EXTRA: Final = 2  # when the 3 disagree: 2 more drafts, then a strict majority of all 5
 ASK_DEFAULT_ROW_LIMIT: Final = 1_000
 ASK_SQL_TIMEOUT_S: Final = 10.0
 ASK_LATENCY_BUDGET_S: Final = 5.0

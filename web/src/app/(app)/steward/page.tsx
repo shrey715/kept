@@ -2,10 +2,11 @@
 
 import { PageHeader } from "@/components/page-header";
 import { MixerHorizontalIcon } from "@radix-ui/react-icons";
-import { Button, Callout, Card, Code, Flex, Skeleton, Spinner, Text } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, Flex, Skeleton, Spinner, Text } from "@radix-ui/themes";
+import { SYSTEM_COLOR } from "@/components/customer-panel";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Rise, Stagger, spring } from "@/components/motion";
+import { Meter, Rise, Stagger, spring } from "@/components/motion";
 import { ApiError, api, type StewardItem } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
@@ -95,12 +96,21 @@ export default function StewardPage() {
               <Card size="2">
                 <Flex align="center" gap="4" wrap="wrap">
                   <Flex direction="column" style={{ flex: 1 }}>
-                    <Text>
-                      <Code>{i.left_key}</Code> vs <Code>{i.right_key}</Code>
-                    </Text>
-                    <Text size="1" color="gray">
-                      score {i.score.toFixed(2)} · {i.reasons.join("; ")}
-                    </Text>
+                    <Flex align="center" gap="2" wrap="wrap">
+                      <RecordKey k={i.left_key} />
+                      <Text size="1" color="gray">
+                        and
+                      </Text>
+                      <RecordKey k={i.right_key} />
+                    </Flex>
+                    <Flex align="center" gap="2" mt="2">
+                      <Box style={{ width: 72 }}>
+                        <Meter value={i.score} />
+                      </Box>
+                      <Text size="1" color="gray">
+                        {Math.round(i.score * 100)}% match · {i.reasons.map((r) => r.replaceAll("_", " ").replace(/\bids\b/, "IDs")).join("; ")}
+                      </Text>
+                    </Flex>
                   </Flex>
                   {done[i.item_id] ? (
                     <Text size="2" color="gray">
@@ -129,5 +139,22 @@ export default function StewardPage() {
         </Flex>
       )}
     </Stagger>
+  );
+}
+
+/** One source record: the system it comes from, then its key. */
+function RecordKey({ k }: { k: string }) {
+  const [system, key] = k.includes(":") ? [k.slice(0, k.indexOf(":")), k.slice(k.indexOf(":") + 1)] : ["", k];
+  return (
+    <Flex align="center" gap="2">
+      {system && (
+        <Badge color={SYSTEM_COLOR[system as keyof typeof SYSTEM_COLOR] ?? "gray"} variant="soft">
+          {system}
+        </Badge>
+      )}
+      <Text size="2" style={{ fontFamily: "var(--code-font-family)" }}>
+        {key}
+      </Text>
+    </Flex>
   );
 }

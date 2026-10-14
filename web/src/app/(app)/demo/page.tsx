@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { SectionTitle } from "@/components/page-header";
+import { ArrowLeftIcon, ArrowRightIcon, ChatBubbleIcon, CheckIcon, PlayIcon, ReloadIcon } from "@radix-ui/react-icons";
 import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Kbd, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
@@ -119,16 +120,15 @@ export default function DemoPage() {
   return (
     <Grid columns={{ initial: "1", md: "280px 1fr" }} gap="6">
       <Box>
-        <Text size="1" weight="bold" color="ruby">GUIDED DEMO</Text>
-        <Heading size="6" mt="1" mb="4">Jane&apos;s case, start to finish</Heading>
+        <SectionTitle eyebrow="Guided demo" title="One case, start to finish" icon={<PlayIcon />} />
         <Flex direction={{ initial: "row", md: "column" }} gap="1" position="relative" className="k-steps">
           {STEPS.map((st, i) => (
             <button key={st.title} onClick={() => setStep(i)} style={{ all: "unset", cursor: "pointer", position: "relative" }}>
               {i === step && (
-                <motion.div layoutId="demo-step" transition={spring} style={{ position: "absolute", inset: 0, borderRadius: "var(--radius-3)", background: "var(--accent-a3)" }} />
+                <motion.div layoutId="demo-step" transition={spring} style={{ position: "absolute", inset: 0, borderRadius: 14, background: "var(--k-chip)", boxShadow: "0 1px 0 var(--k-line)" }} />
               )}
               <Flex gap="3" align="center" p="2" style={{ position: "relative" }}>
-                <Flex align="center" justify="center" style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, background: i < step ? "var(--accent-9)" : "var(--gray-a3)", color: i < step ? "white" : "var(--gray-11)", transition: "background 200ms" }}>
+                <Flex align="center" justify="center" style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, background: i < step ? "var(--k-red)" : i === step ? "var(--k-strong)" : "var(--gray-a3)", color: i < step ? "white" : i === step ? "var(--k-on-strong)" : "var(--gray-11)", transition: "background 200ms" }}>
                   {i < step ? <CheckIcon /> : <Text size="1" weight="bold">{i + 1}</Text>}
                 </Flex>
                 <Text size="2" weight={i === step ? "bold" : "regular"} color={i === step ? undefined : "gray"} className="k-step-title">{st.title}</Text>
@@ -143,8 +143,12 @@ export default function DemoPage() {
         <AnimatePresence mode="wait">
           <motion.div key={step} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={spring}>
             <Flex align="center" gap="2" mb="2">
-              <Badge variant="soft" radius="full">Step {step + 1} of {STEPS.length}</Badge>
-              <Badge variant="outline" color="gray" radius="full">as {s.who.name} · {s.who.title}</Badge>
+              <span className="k-badge" style={{ background: "var(--k-hi)", color: "var(--k-hi-ink)", height: 28, borderRadius: 999, padding: "0 10px" }}>
+                Step {step + 1} of {STEPS.length}
+              </span>
+              <span className="k-badge" style={{ height: 28, borderRadius: 999, padding: "0 10px" }}>
+                as {s.who.name} · {s.who.title}
+              </span>
             </Flex>
             <Heading size="8">{s.title}</Heading>
             <Text as="p" size="4" color="gray" mt="2" mb="5" style={{ maxWidth: 720 }}>{s.says}</Text>
@@ -212,7 +216,7 @@ export default function DemoPage() {
                 <NbaCard card={card} />
                 {step === 3 && (
                   <Card size="3">
-                    <Heading size="4" mb="3">Agent note</Heading>
+                    <SectionTitle eyebrow="Step 4" title="Agent note" mb="3" />
                     <TextArea rows={5} value={note} onChange={(e) => setNote(e.target.value)} />
                     <Button mt="3" size="3" style={{ width: "100%" }} loading={busy} onClick={() => void run(async () => setCard(await api.note(CASE, note, AGENT)))}>
                       Save note and re-check
@@ -257,8 +261,14 @@ export default function DemoPage() {
             )}
 
             <Flex justify="between" mt="6">
-              <Button variant="soft" color="gray" disabled={step === 0} onClick={() => setStep(step - 1)}><ArrowLeftIcon /> Back</Button>
-              {step < STEPS.length - 1 && <Button onClick={() => setStep(step + 1)}>Next <ArrowRightIcon /></Button>}
+              <button className="k-tab" style={{ height: 44 }} disabled={step === 0} onClick={() => setStep(step - 1)}>
+                <ArrowLeftIcon /> Back
+              </button>
+              {step < STEPS.length - 1 && (
+                <button className="k-strong-btn" onClick={() => setStep(step + 1)}>
+                  Next <ArrowRightIcon />
+                </button>
+              )}
             </Flex>
           </motion.div>
         </AnimatePresence>

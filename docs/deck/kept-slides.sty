@@ -1,0 +1,73 @@
+% Kept's slide theme: ink, warm sand and maple red, as in the workspace. XeLaTeX (fontspec).
+\ProvidesPackage{kept-slides}
+\RequirePackage{fontspec}
+% static font files (the variable Noto fonts break xdvipdfmx), the same ones the reports use
+\setsansfont{OpenSans}[Path=/usr/share/fonts/open-sans/, Extension=.ttf, UprightFont=*-Regular,
+  ItalicFont=*-Italic, BoldFont=*-Bold, BoldItalicFont=*-BoldItalic]
+\newfontfamily\displayfont{OpenSans}[Path=/usr/share/fonts/open-sans/, Extension=.ttf, UprightFont=*-Light,
+  BoldFont=*-SemiBold, Ligatures=TeX]
+\setmonofont{NotoSansMono}[Path=/usr/share/fonts/google-noto/, Extension=.ttf, UprightFont=*-Regular,
+  BoldFont=*-Bold, Scale=0.85]
+\RequirePackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.misc,calc,fit,backgrounds}
+\RequirePackage{booktabs}
+\RequirePackage{xcolor}
+
+\definecolor{ink}{HTML}{1C1917}
+\definecolor{sand}{HTML}{F6F3EE}
+\definecolor{card}{HTML}{ECE7DF}
+\definecolor{chip}{HTML}{FFFFFF}
+\definecolor{maple}{HTML}{C8102E}
+\definecolor{rose}{HTML}{F6CBD1}
+\definecolor{muted}{HTML}{6B645C}
+\definecolor{line}{HTML}{DDD6CB}
+\definecolor{kblue}{HTML}{2A78D6}
+\definecolor{kgreen}{HTML}{1B8A5A}
+\definecolor{kamber}{HTML}{C98500}
+
+\setbeamercolor{background canvas}{bg=sand}
+\setbeamercolor{normal text}{fg=ink}
+\setbeamercolor{frametitle}{fg=ink}
+\setbeamercolor{structure}{fg=maple}
+\setbeamercolor{itemize item}{fg=maple}
+\setbeamercolor{itemize subitem}{fg=muted}
+\setbeamercolor{alerted text}{fg=maple}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{itemize item}{\raisebox{0.15em}{\tikz\fill[maple](0,0)circle(0.11em);}}
+\setbeamertemplate{itemize subitem}{\raisebox{0.15em}{\tikz\fill[muted](0,0)circle(0.08em);}}
+\setlength{\leftmargini}{1.1em}
+\setbeamerfont{normal text}{size=\small}
+
+% eyebrow + title, like the workspace's section headings
+% beamer typesets the title and the footer outside the frame body's group: global definitions
+\def\eyebrow{}
+\newcommand{\kicker}[1]{\gdef\eyebrow{#1}}
+\setbeamertemplate{frametitle}{%
+  \vspace*{0.9em}%
+  \ifx\eyebrow\empty\else{\color{maple}\fontsize{7}{8}\selectfont\bfseries\addfontfeatures{LetterSpace=10}\MakeUppercase{\eyebrow}}\par\vspace{0.15em}\fi
+  {\displayfont\fontsize{21}{24}\selectfont\insertframetitle}\par
+  \ifx\insertframesubtitle\empty\else\vspace{0.2em}{\color{muted}\small\insertframesubtitle}\par\fi
+}
+
+% the footer: what the slide's numbers come from, and the page
+\def\src{}
+\newcommand{\source}[1]{\gdef\src{#1}}
+\setbeamertemplate{footline}{%
+  \hbox to \paperwidth{\hspace{1.4em}%
+    {\color{muted}\fontsize{6}{7}\selectfont\textbf{\color{maple}Kept}\ \ ·\ \ Team Sharpe Shooters\hfill
+     \ifx\src\empty\else Source: \src\quad\fi\insertframenumber}\hspace{1.4em}}\vspace{0.9em}}
+
+% a soft card, as in the app
+\newcommand{\kcard}[2][\linewidth]{%
+  \begin{tikzpicture}\node[fill=card, rounded corners=8pt, inner sep=8pt, text width=#1-16pt, align=left,
+    font=\scriptsize]{#2};\end{tikzpicture}}
+\newcommand{\cardtitle}[1]{{\small\bfseries #1}\\[0.25em]}
+\newcommand{\bignum}[3][24]{{\displayfont\fontsize{#1}{#1}\selectfont #2}\\[0.1em]{\color{muted}\scriptsize #3}}
+\newcommand{\chip}[1]{\tikz[baseline=(c.base)]\node(c)[fill=chip, rounded corners=4pt, inner sep=2.5pt, font=\scriptsize]{#1};}
+\newcommand{\pill}[2][maple]{\tikz[baseline=(c.base)]\node(c)[fill=#1, text=white, rounded corners=6pt, inner sep=2.5pt, font=\scriptsize\bfseries]{#2};}
+
+% every new frame starts without an eyebrow or source unless it sets one
+\AtBeginEnvironment{frame}{\gdef\eyebrow{}\gdef\src{}}
+\renewcommand{\arraystretch}{1.3}
+\RequirePackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}

@@ -1,4 +1,4 @@
-.PHONY: help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build serve serve-demo web-setup web
+.PHONY: deck help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build llm serve serve-demo web-setup web
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -59,8 +59,11 @@ typecheck:  ## mypy (strict)
 dbt-build:  ## build bronze -> silver -> gold -> features
 	cd dbt && uv run dbt build --profiles-dir . --project-dir .
 
-serve:  ## run the API (real services from G4)
-	uv run kept serve
+llm:  ## the local LLM: Qwen3.8-27B on llama.cpp, :8081 (start before serve)
+	scripts/llm_server.sh
+
+serve:  ## run the API (real services from G4); the GPU is left to the LLM, embeddings run on the CPU
+	CUDA_VISIBLE_DEVICES= HF_HUB_OFFLINE=1 uv run kept serve
 
 serve-demo:  ## run the API on twelve in-memory demo cases (no warehouse needed)
 	uv run kept serve --demo  # add --reload to restart on code changes (resets demo state)
@@ -70,3 +73,7 @@ web-setup:  ## install the Next.js frontend (web/)
 
 web:  ## run the frontend on :3000; it proxies /api to the API on :8000 (KEPT_API_URL)
 	cd web && pnpm dev
+
+deck:  ## the LaTeX deck: numbers from the reports, then XeLaTeX twice -> docs/deck/kept.pdf
+	uv run python docs/deck/build_numbers.py
+	cd docs/deck && xelatex -interaction=nonstopmode kept.tex >/dev/null && xelatex -interaction=nonstopmode kept.tex >/dev/null

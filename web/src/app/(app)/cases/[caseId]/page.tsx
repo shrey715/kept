@@ -11,6 +11,7 @@ import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
 import { TierBadge } from "@/components/bits";
+import { BriefCard } from "@/components/brief-card";
 import { HistoryPanel, WhyChart } from "@/components/case-insights";
 import { ApiError, api, money, type AuditEvent, type CaseHistory, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
@@ -92,6 +93,9 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
     };
   }, [caseId, me, nonce, loadAudit, loadNotes, demo]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const loadBrief = useCallback(() => api.caseBrief(caseId, me!), [caseId, me?.userId, nonce]);
+
   async function addNote() {
     if (!me || !note.trim()) return;
     setNoting(true);
@@ -149,6 +153,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
       {card && (
         <Grid columns={{ initial: "1", md: "3fr 2fr" }} gap="4" align="start">
           <Flex direction="column" gap="4">
+            <BriefCard load={loadBrief} eyebrow="Case brief · local model, every claim cited" title="Before you act" />
             <NbaCard card={card} balance={customer ? Number(customer.total_overdue) : undefined} />
             <WhyChart card={card} />
             {card.proposal?.sizing && customer && (

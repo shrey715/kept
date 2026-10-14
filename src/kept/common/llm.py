@@ -1,7 +1,7 @@
 """LiteLLM gateway (owner: Track B; used by A, B, C).
 
 Every LLM call in the system goes through here so that:
-  * the model is set by config (KEPT_ASK_LLM_MODEL hosted for the Ask, KEPT_TEXT_LLM_MODEL local for text),
+  * the model is set by config (KEPT_ASK_LLM_MODEL for the Ask, KEPT_TEXT_LLM_MODEL for text; both local),
   * the user content is a RedactedText (PII redaction before any LLM),
   * every call is written to the audit log (purpose, actor, model, latency, tokens).
 """
@@ -34,6 +34,8 @@ class Purpose:
     ASK_NARRATE = "ask.narrate"  # Track B: explain the result rows
     ASK_CHART = "ask.chart"  # kept.app.charts: pick a chart for the result rows (#100)
     TEXT_EXTRACT = "text.extract"  # Track C: note/transcript extraction
+    CASE_BRIEF = "app.case_brief"  # kept.app.briefs: the agent's cited case brief (local model)
+    PORTFOLIO_BRIEF = "app.portfolio_brief"  # kept.app.briefs: tonight's cited portfolio brief
     OPS_PREFLIGHT = "ops.preflight"  # kept preflight: one tiny call to prove a model answers before a demo
 
 
