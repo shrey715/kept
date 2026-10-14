@@ -11,7 +11,7 @@ import { PipelineCanvas, type NodeId } from "@/components/pipeline-canvas";
 import { CustomerPanel, SYSTEM_TINT } from "@/components/customer-panel";
 import { spring } from "@/components/motion";
 import { NbaCard } from "@/components/nba-card";
-import { api, decision, humanize, type AskResponse, type AuditEvent, type Customer, type NBACard, type ReleaseResult } from "@/lib/api";
+import { api, decision, humanize, matchPct, type AskResponse, type AuditEvent, type Customer, type NBACard, type ReleaseResult } from "@/lib/api";
 import { nowIso, useServerClock } from "@/lib/clock";
 import { PERSONAS, REAL_USER_IDS } from "@/lib/session";
 
@@ -25,7 +25,7 @@ const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId:
 const QUESTIONS = ["What is the promise kept rate by product for the last 90 days?", "What is the kept rate by gender?"];
 
 const STEPS: { title: string; who: typeof COMPLIANCE; says: string; nodes: NodeId[] }[] = [
-  { title: "Identity resolution", who: COMPLIANCE, nodes: ["sources", "identity"], says: "Five source systems each hold their own customer key. They are resolved to one golden ID, with the weakest match shown." },
+  { title: "Identity resolution", who: COMPLIANCE, nodes: ["sources", "identity"], says: "Five source systems each hold their own customer key. They are resolved to one golden ID, with the weakest link shown." },
   { title: "Ask a question", who: ANALYST, nodes: ["sources", "identity", "features", "ask"], says: "A certified metric is answered with its query and sources; a question about a protected attribute is refused with a suggested alternative." },
   { title: "Next best action", who: AGENT_PERSONA, nodes: ["features", "models", "decide"], says: "Rules run first, then the models: a contact inside the customer's permitted hours, with the factors behind it." },
   { title: "A note updates the case", who: AGENT_PERSONA, nodes: ["notes", "features", "models", "decide"], says: "The agent records that the customer's hours were cut. Hardship becomes possible, intensive actions are removed and the case moves to Red." },
@@ -428,7 +428,7 @@ function Convergence({ c }: { c: Customer }) {
           <span className="who">{c.display_name ?? "Customer"}</span>
           <span className="meta">
             {c.match_review_status === "auto" ? "Auto-matched" : humanize(c.match_review_status)}
-            {conf !== null && ` · ${Math.round(conf * 100)}% weakest match`}
+            {conf !== null && ` · ${matchPct(conf)} weakest link`}
           </span>
         </motion.div>
           </HoverCard.Trigger>
@@ -460,7 +460,7 @@ function Convergence({ c }: { c: Customer }) {
           <span>Records sharing a key are linked before any scoring.</span>
         </div>
         <div>
-          <b>{conf !== null ? `${Math.round(conf * 100)}%` : "—"} weakest match</b>
+          <b>{conf !== null ? matchPct(conf) : "—"} weakest link</b>
           <span>Uncertain pairs go to a data steward for review.</span>
         </div>
       </div>

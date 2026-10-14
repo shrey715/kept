@@ -2,7 +2,7 @@
 
 import { CheckIcon, ClockIcon, Cross2Icon, EnvelopeClosedIcon, GlobeIcon, LockClosedIcon, MobileIcon, PersonIcon } from "@radix-ui/react-icons";
 import { motion } from "motion/react";
-import { humanize, money, type Customer } from "@/lib/api";
+import { humanize, matchPct, money, type Customer } from "@/lib/api";
 import { initials } from "./bits";
 import { Donut, spring } from "./motion";
 
@@ -38,11 +38,11 @@ export function CustomerPanel({ c }: { c: Customer }) {
           </div>
         </div>
         {conf !== null && (
-          <div className="k-cust-match" title="The weakest pairwise match in this customer's cluster">
-            <Donut value={conf} size={44} label={`Match confidence ${Math.round(conf * 100)}%`} />
+          <div className="k-cust-match" title="The weakest link between this customer's source records. Records link automatically at 95% or above; lower scores go to a data steward.">
+            <Donut value={conf} size={44} label={`Weakest link ${matchPct(conf)}`} />
             <span>
-              <b className="tabular">{Math.round(conf * 100)}%</b>
-              match
+              <b className="tabular">{matchPct(conf)}</b>
+              weakest link
             </span>
           </div>
         )}
