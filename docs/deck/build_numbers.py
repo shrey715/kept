@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (deck number formatting)
 """Write numbers.tex: every number the deck shows, read from the reports and the warehouse, as LaTeX macros.
 
     uv run python docs/deck/build_numbers.py && (cd docs/deck && xelatex kept.tex && xelatex kept.tex)
@@ -63,6 +64,58 @@ def main() -> None:
         "invarianceDiffer": str(inv["cards_differ"]),
         "driftHeadline": esc(drift["headline"]),
         "fairnessAttributes": str(len(fair["attributes"])),
+    }
+    # the statistics behind each claim (scripts/evidence_report.py, scripts/uplift_learners.py, business_case.py)
+    ev, ul = load("evidence.json"), load("uplift_learners.json")
+
+    def pt(v: list[float], unit: str = "") -> str:  # "+6.1" and "2.8–10.6"
+        return f"{v[0]:+.1f}{unit}"
+
+    def iv(lo: float, hi: float) -> str:
+        return f"{lo:+.1f} to {hi:+.1f}" if lo < 0 < hi else f"{lo:.1f}–{hi:.1f}"
+
+    wide, blend = ev["auc|Kept, wide: LightGBM + random forest, averaged ranks|all"], ev["auc|Kept's wide model and the bank's score, averaged ranks|all"]
+    wide_fair = ev["auc|Kept, wide: LightGBM + random forest, averaged ranks|before_due"]
+    placebo = [v for k, v in ev.items() if k.startswith("placebo_")]
+    sim, be = biz["simulation"], biz["breakeven_payday_pts"]
+    best, ut = ul["best"], ul["test"]
+    BANK = "The bank's strategy"
+    con = duckdb.connect(str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"), read_only=True)
+    per_week = con.execute(
+        "select count(*) / 52.0 from silver.promises_to_pay where ptp_created_ts >= date '2025-09-28' - interval 1 year"
+        " and ptp_created_ts < date '2025-09-28' + interval 0 day"
+    ).fetchone()[0] or 1
+    kept0 = 0.368  # kept rate of promises from June 2026 (evidence.md §7 window); the base the hold-out is measured on
+
+    def weeks(delta: float, share: float) -> float:  # 80% power, two-sided 5%
+        from scipy.stats import norm
+
+        z = norm.ppf(0.975) + norm.ppf(0.8)
+        p2 = kept0 + delta
+        return z**2 * (kept0 * (1 - kept0) / share + p2 * (1 - p2) / (1 - share)) / delta**2 / per_week
+
+    m |= {
+        "payMoney": pt(ev["payday_money"]), "payMoneyCI": iv(*ev["payday_money"][1:]),
+        "payKept": pt(ev["payday_kept"]), "payKeptCI": iv(*ev["payday_kept"][1:]),
+        "payPromises": f"{ev['payday_promises']:,}",
+        "onBefore": pt(ev["on_vs_before"]), "onBeforeCI": iv(*ev["on_vs_before"][1:]),
+        "onAfter": pt(ev["on_vs_after"]), "onAfterCI": iv(*ev["on_vs_after"][1:]),
+        "within": pt(ev["within_customer"]), "withinCI": iv(*ev["within_customer"][1:]),
+        "placeboNull": f"{sum(lo < 0 < hi for _, lo, hi in placebo)} of {len(placebo)}",
+        "wideAuc": f"{wide[0]:.3f}", "wideGap": f"{wide[1]:+.1f}", "wideGapCI": iv(*wide[2:]),
+        "wideFairGap": f"{wide_fair[1]:+.1f}", "wideFairGapCI": iv(*wide_fair[2:]),
+        "blendAuc": f"{blend[0]:.3f}", "blendGap": f"{blend[1]:+.1f}", "blendGapCI": iv(*blend[2:]),
+        "offPolicy": f"{ev['offpolicy_per_1000'][0]:+.0f}", "offPolicyCI": f"{ev['offpolicy_per_1000'][1]:.0f}–{ev['offpolicy_per_1000'][2]:.0f}",
+        "cellAll": f"\\${ev['cell_top100'][0] / 1e3:+.0f}K", "cellTop": f"\\${ev['cell_top10'][0] / 1e3:+.0f}K",
+        "pPayback": f"{100 * sim['p_payback_year1']:.2f}\\%", "pPaybackTogether": f"{100 * sim['p_payback_year1_together']:.1f}\\%",
+        "breakevenLow": f"{be['low']:.1f}",
+        "drName": esc(best),
+        "drCall": f"{ut['call'][best]:+.4f}", "drSms": f"{ut['sms_payment_link'][best]:+.4f}", "drEmail": f"{ut['email'][best]:+.4f}",
+        "chCall": f"{ut['call']['Champion (live)']:+.4f}", "chSms": f"{ut['sms_payment_link']['Champion (live)']:+.4f}",
+        "chEmail": f"{ut['email']['Champion (live)']:+.4f}",
+        "bkCall": f"{ut['call'][BANK]:+.4f}", "bkSms": f"{ut['sms_payment_link'][BANK]:+.4f}",
+        "bkEmail": f"{ut['email'][BANK]:+.4f}",
+        "weeksFive": f"{weeks(ev['payday_kept'][0] / 100, 0.05):.0f}", "weeksTwenty": f"{weeks(ev['payday_kept'][0] / 100, 0.20):.0f}",
     }
     lines = [f"\\newcommand{{\\K{k}}}{{{v}}}" for k, v in m.items()]
     # value drivers, base case, in $k, largest first (for the value-tree bars)

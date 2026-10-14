@@ -180,6 +180,11 @@ The gate's own metric on the same test decisions:
 - The bank's randomised cells say contact intensity barely changes outcomes (`evidence.md` §1), so a small uplift
   signal is the expected result. Kept's main lever is the due date (`evidence.md` §2, §2a).
 """)
+    import json
+
+    (REPO / "data" / "exports" / "reports" / "uplift_learners.json").write_text(
+        json.dumps({"best": best, "test": t, "gate": {n: {k: g[k] for k in ("qini_call", "qini_any_contact")} for n, g in gate.items()}}, indent=1)
+    )
     print(f"wrote {OUT}")
 
 
