@@ -511,3 +511,12 @@ def test_repair_intent_fits_loose_column_names_to_the_certified_query() -> None:
     assert "Intent repair: grouping agent_site -> site" in notes and len(notes) == 4
     ok = i.model_copy(update={"filters": {"site": "Halifax"}, "group_by": ["product"]})
     assert repair_intent(ok, q) == (ok, [])
+
+
+def test_check_open_drops_is_open_unless_the_question_asks_about_open_cases() -> None:
+    from kept.ask.graph import check_open
+    from kept.contracts.ask import Intent, IntentKind
+
+    i = Intent(kind=IntentKind.METRIC, metric_id="hardship_rate", filters={"is_open": True}, confidence=0.9)
+    assert check_open("hardship rate of cases opened in 2026, by product", i)[0].filters == {}
+    assert check_open("hardship rate of open cases by product", i) == (i, None)

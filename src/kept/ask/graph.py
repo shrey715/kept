@@ -52,6 +52,20 @@ def check_channel(
     return fixed, f"Intent check: added channel = {named[0]} (the question names it)"
 
 
+_OPEN = re.compile(r"\b(open|still open|currently open|active|outstanding)\b", re.I)
+
+
+def check_open(question: str, intent: Intent) -> tuple[Intent, str | None]:
+    """An is_open filter needs the question to ask about open cases; "cases opened in 2026" is about when
+    cases started, not whether they're open (a slip smaller models make)."""
+    if not intent.filters.get("is_open") or _OPEN.search(question):
+        return intent, None
+    filters = {k: v for k, v in intent.filters.items() if k != "is_open"}
+    return intent.model_copy(
+        update={"filters": filters}
+    ), "Intent check: dropped is_open (the question doesn't ask about open cases)"
+
+
 def ground_filters(intent: Intent, values: Any) -> tuple[Intent, list[str]]:
     """Check each text filter value against the column's real values (`values(col)`: a list, or None when
     unknown). A near miss maps to what's stored ("instalment" -> "instalment_1_of_n"); a value matching
@@ -219,8 +233,9 @@ def build_graph(ask: CollectionsAsk) -> Any:
             return {"reroute": True, "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"]}
         intent, repaired = repair_intent(s["intent"], query)
         intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
+        intent, open_note = check_open(s["request"].question, intent)
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
-        notes = [*repaired, *([note] if note else []), *grounded]
+        notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
         except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
