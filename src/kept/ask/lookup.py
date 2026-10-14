@@ -46,6 +46,35 @@ def pin_today(sql: str, as_of: date | None) -> str:
     return _TODAY.sub(f"DATE '{as_of.isoformat()}'", sql) if as_of else sql
 
 
+def lint_sql(question: str, sql: str) -> list[str]:
+    """What a draft that ran still gets wrong against the data dictionary's conventions, as feedback for one
+    rewrite (a linter for the model). Each rule is cheap and only fires on a clear miss."""
+    q, s = question.lower(), sql.lower()
+    out = []
+    if re.search(r"\bcalls?\b", q) and "contact_history" in s and "channel" not in s:
+        out.append("The question is about calls: filter contact_history on channel = 'call'.")
+    if re.search(r"\boutbound\b", q) and "contact_history" in s and "direction" not in s:
+        out.append("The question says outbound: filter direction = 'outbound'.")
+    if re.search(r"\bdisputes?\b", q) and "dispute_type" in s and "dispute_raised_flag" not in s:
+        out.append("Count disputes as contact_history rows with dispute_raised_flag, not dispute_type.")
+    if re.search(r"\binterval\b", s):
+        out.append("Don't add or subtract an INTERVAL: write each date bound as a literal DATE 'YYYY-MM-DD'.")
+    if re.search(r"\bopen (collections )?cases?\b|\bcases? (that are |still )?open\b", q) and (
+        "collections_cases" in s and "outcome is null" not in s
+    ):
+        out.append("An open case has collections_cases.outcome IS NULL.")
+    by = [
+        m[0].strip()
+        for m in re.finditer(r"\b(?:by|per|for each|each)\s+([a-z_ ]+?)(?=[,?.]|$)", q)
+        if not re.match(r"(?:by|per) (?:the )?(?:end|start|week|month|day)\b", m[0])
+    ]
+    if by and "group by" not in s:
+        out.append(f"The question asks for a breakdown ({by[0]}): GROUP BY that column.")
+    if "contact_ts_utc" in s:
+        out.append("Use contact_ts_local for dates and hours of contacts, never contact_ts_utc.")
+    return out
+
+
 def lookup_system(intent: Intent, schema_doc: str) -> str:
     """The system prompt for a lookup draft: the rules, the schema and the router's hints."""
     hints = intent.model_dump_json(exclude={"kind", "confidence"}, exclude_defaults=True)

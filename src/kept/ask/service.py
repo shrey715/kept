@@ -19,6 +19,7 @@ from kept.ask.grounding import extract_numbers, needs_clarification, ungrounded_
 from kept.ask.lookup import (
     draft_sql,
     generate_candidates,
+    lint_sql,
     lookup_system,
     majority_result,
     normalize_result,
@@ -402,14 +403,12 @@ class CollectionsAsk:
         results = [self._try(g) if g.allowed else (None, None) for g in guards]
         ran = [r for r, _ in results]
         for i, (r, error) in enumerate(results):
-            if (
-                r is None
-                and error
-                and (
-                    fixed := self._repair(request, question, intent, schema, drafts[i], error, policy, as_of)
-                )
+            if r is not None and (issues := lint_sql(question.text, guards[i].sql)):
+                error = "it ran, but it doesn't follow the conventions: " + " ".join(issues)
+            if error and (
+                fixed := self._repair(request, question, intent, schema, drafts[i], error, policy, as_of)
             ):
-                guards[i], ran[i] = fixed
+                guards[i], ran[i] = fixed  # a lint-failing draft that can't be fixed keeps its own result
         return guards, ran
 
     def _judge(

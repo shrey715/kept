@@ -6,8 +6,8 @@ route) and write the answers CSV in the organisers' template, plus a results JSO
     uv run python scripts/bench_run.py benchmarks/stress_questions.csv --gold benchmarks/stress_gold.csv \\
         --out data/exports/reports/stress_answers.csv
 
-Same rows as `kept benchmark` (the server asks each question the same way), without stopping the server. Paced,
-and a question that fails is retried, because the free LLM tier rate-limits by the minute.
+Same rows as `kept benchmark` (the server asks each question the same way), without stopping the server. A question that
+fails is retried (a busy local server can drop a connection).
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=REPO / "submission" / "benchmark_answers.csv")
     ap.add_argument("--json", type=Path, help="results for the report (default: next to --out)")
     ap.add_argument("--api", default="http://localhost:8000")
+    ap.add_argument("--pace", type=float, default=0.0, help="seconds between questions (local models: none)")
     a = ap.parse_args()
     with a.questions.open(encoding="utf-8", newline="") as f:
         questions = list(csv.DictReader(f))
@@ -63,7 +64,7 @@ def main() -> None:
         results.append(r)
         mark = {True: "right", False: "WRONG", None: ""}[r["correct"]]  # type: ignore[index]
         print(f"{q['question_id']:8} {r['rung']:10} {mark:6} {int(r['ms']) / 1000:5.1f}s", flush=True)  # type: ignore[call-overload]
-        time.sleep(5)  # stay under the free tier's per-minute limit
+        time.sleep(a.pace)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     with a.out.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, COLUMNS)

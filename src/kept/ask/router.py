@@ -7,7 +7,7 @@ from datetime import date
 from typing import Any
 
 from kept.common.llm import Purpose
-from kept.contracts.ask import Intent, IntentKind
+from kept.contracts.ask import Intent
 from kept.contracts.features import RedactedText
 from kept.contracts.interfaces import LLMGateway
 
@@ -56,8 +56,8 @@ def route(
     metric_hints: Mapping[str, str] | None = None,
     date_hints: str = "",
 ) -> Intent:
-    """Ask the LLM for an Intent. Reject (ValueError) a METRIC intent whose metric_id is
-    not in known_metric_ids, or any reply that fails Intent validation.
+    """Ask the LLM for an Intent. A METRIC intent whose metric_id isn't in known_metric_ids becomes a lookup;
+    a reply that fails Intent validation raises ValueError.
     `as_of` is the data's snapshot date, so "last month" means the same thing every time.
     `metric_hints` maps metric_id to a one-line description (what it is, allowed filters and group-bys)."""
     system = (
@@ -84,7 +84,7 @@ def route(
         **reply.parsed,
         "filters": {k: v for k, v in (reply.parsed.get("filters") or {}).items() if v is not None},
     }
-    intent = Intent.model_validate(parsed)  # pydantic's ValidationError is a ValueError
-    if intent.kind is IntentKind.METRIC and intent.metric_id not in known_metric_ids:
-        raise ValueError(f"unknown metric {intent.metric_id!r}")
-    return intent
+    if parsed.get("kind") == "metric" and parsed.get("metric_id") not in known_metric_ids:
+        # "a metric" with no metric we certify: still a data question, so a lookup can answer it
+        parsed = {**parsed, "kind": "lookup", "metric_id": None}
+    return Intent.model_validate(parsed)  # pydantic's ValidationError is a ValueError

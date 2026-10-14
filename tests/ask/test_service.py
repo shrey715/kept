@@ -124,7 +124,7 @@ def test_lookup_majority_answer(build) -> None:  # type: ignore[no-untyped-def]
     a = svc.ask(_req("how many cases per product"))
     assert isinstance(a, AskAnswer)
     assert a.rows == (("credit_card", 30), ("personal_loan", 30))
-    assert llm.purposes().count(Purpose.ASK_SQL) == 3
+    assert llm.purposes().count(Purpose.ASK_SQL) == 4  # 3 drafts; the one with no GROUP BY is linted once
 
 
 def test_ungrounded_narrative_never_reaches_the_user(build) -> None:  # type: ignore[no-untyped-def]
@@ -185,7 +185,7 @@ def test_disagreeing_drafts_escalate_then_the_judge_picks(build) -> None:  # typ
             Purpose.ASK_NARRATE: ["Cases by product."],
         }
     )
-    r = svc.ask(_req("open cases by product"))
+    r = svc.ask(_req("case counts"))  # nothing for the linter to flag: only the vote and the judge
     assert isinstance(r, AskAnswer) and r.sql.startswith("SELECT primary_product")
     assert llm.purposes().count(Purpose.ASK_SQL) == 6  # 3 drafts, 2 more, then the judge
     assert any("picked one" in t for t in r.trace)
@@ -361,8 +361,8 @@ def test_a_draft_that_will_not_run_is_repaired_once_with_the_error(build) -> Non
     )
     a = svc.ask(_req("how many cases per product"))
     assert isinstance(a, AskAnswer) and a.rows == (("credit_card", 30), ("personal_loan", 30))
-    repair = [c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL][-1]
-    assert "failed with" in repair["user"].text and "nope" in repair["user"].text
+    repair = next(c for c in llm.calls if c["purpose"] == Purpose.ASK_SQL and "failed with" in c["user"].text)
+    assert "nope" in repair["user"].text
 
 
 # ----------------------------------------------------------------- "summarise the most recent call on case X"
@@ -578,3 +578,16 @@ def test_a_can_we_question_is_a_policy_question() -> None:
     assert _POLICY.search("How many call attempts can we make on a mid-stage account in a week?")
     assert _POLICY.search("Are collection calls allowed on Sundays?")
     assert not _POLICY.search("What share of outbound calls were outside permitted calling hours?")
+
+
+def test_lint_sql_flags_clear_convention_misses_only() -> None:
+    from kept.ask.lookup import lint_sql
+
+    calls = "SELECT count(*) AS n FROM silver.contact_history WHERE direction = 'outbound'"
+    assert lint_sql("How many outbound calls were made in September 2026?", calls) == [
+        "The question is about calls: filter contact_history on channel = 'call'."
+    ]
+    by = lint_sql("What share rolled by the end of June 2026, by product?", "SELECT 1 AS n")
+    assert by == ["The question asks for a breakdown (by product): GROUP BY that column."]
+    ok = "SELECT current_bucket, count(*) AS n FROM silver.collections_cases WHERE outcome IS NULL GROUP BY 1"
+    assert lint_sql("How many collections cases are open today, by current bucket?", ok) == []
