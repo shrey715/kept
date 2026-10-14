@@ -29,6 +29,7 @@ from kept.nba import promise_model as pm
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "evidence.md"
 BOOT = 300
+EV: dict[str, object] = {}  # the headline numbers, for the decks (data/exports/reports/evidence.json)
 TRAIN_CUTOFF = datetime(2026, 8, 15)  # the live uplift champion's split (kept train --cutoff)
 AUDIT_CUTOFF = datetime(2026, 3, 1)  # the split the leak was found on (the model now cuts at pm.CUTOFF)
 
@@ -113,6 +114,7 @@ def payday(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
             f"| {b} days after payday | {len(s):,} | {100 * s.kept.mean():.1f}% | {100 * s.paid.sum() / s.amt.sum():.1f}% |"
         )
     k, m, p = boot(x, gain("kept")), boot(x, gain("money")), boot(x, policy)
+    EV.update(payday_kept=k, payday_money=m, payday_policy=p, payday_promises=len(x))
     summary = (
         f"- **Kept in full:** {k[0]:+.1f} pts [{k[1]:+.1f}, {k[2]:+.1f}] when due 0–2 days after payday rather than 8+, within days-past-due bands.\n"
         f"- **Promised money paid (the primary metric):** {m[0]:+.1f} pts [{m[1]:+.1f}, {m[2]:+.1f}].\n"
@@ -154,7 +156,7 @@ def payday_designs(con: duckdb.DuckDBPyConnection) -> tuple[str, str]:
                 w.append(len(g))
         return 100 * float(np.average(out, weights=w))
 
-    def ci(df: pd.DataFrame, f, cluster: bool = False) -> str:  # type: ignore[no-untyped-def]
+    def ci(df: pd.DataFrame, f, cluster: bool = False, key: str | None = None) -> str:  # type: ignore[no-untyped-def]
         rng = np.random.default_rng(0)
         if cluster:  # resample customers, not promises
             grp = df.groupby("crm_customer_id").indices
@@ -162,7 +164,10 @@ def payday_designs(con: duckdb.DuckDBPyConnection) -> tuple[str, str]:
             xs = [f(df.iloc[np.concatenate([grp[i] for i in rng.choice(ids, len(ids))])].reset_index(drop=True)) for _ in range(BOOT)]
         else:
             xs = [f(df.iloc[rng.integers(0, len(df), len(df))].reset_index(drop=True)) for _ in range(BOOT)]
-        return f"{f(df):+.1f} [{np.percentile(xs, 2.5):+.1f}, {np.percentile(xs, 97.5):+.1f}]"
+        v = (f(df), float(np.percentile(xs, 2.5)), float(np.percentile(xs, 97.5)))
+        if key:
+            EV[key] = v
+        return f"{v[0]:+.1f} [{v[1]:+.1f}, {v[2]:+.1f}]"
 
     near = d[d.x.between(-3, 3)]
     by_day = near.groupby("x").agg(n=("kept", "size"), kept=("kept", "mean"), paid=("paid", "sum"), amt=("amt", "sum"))
@@ -192,13 +197,13 @@ def payday_designs(con: duckdb.DuckDBPyConnection) -> tuple[str, str]:
     for shift in (-10, -5, -3, 3, 5, 10):
         p = _signed_payday(con, shift)
         p = p[~p.ptp_id.map(real).abs().isin([0, 7, 14])].reset_index(drop=True)  # no real paydays in either group
-        placebo.append(f"{shift:+d} days: {ci(p, lambda df: gap(df, df.x == 0, df.x.between(-3, -1) | df.x.between(1, 3)))}")
+        placebo.append(f"{shift:+d} days: {ci(p, lambda df: gap(df, df.x == 0, df.x.between(-3, -1) | df.x.between(1, 3)), key=f"placebo_{shift}")}")
     rows_md = "\n".join([
         "| Check | Kept in full, pts [95% CI] | Promised money paid, pts [95% CI] |",
         "|---|---:|---:|",
-        f"| Due on payday against 1–3 days before | {ci(d, on_vs(-3, -1))} | {ci(d, on_vs(-3, -1, True))} |",
-        f"| Due on payday against 1–3 days after | {ci(d, on_vs(1, 3))} | {ci(d, on_vs(1, 3, True))} |",
-        f"| The same customer, on payday against not ({both.crm_customer_id.nunique():,} customers, {len(both):,} promises) | {ci(both, within, cluster=True)} | |",
+        f"| Due on payday against 1–3 days before | {ci(d, on_vs(-3, -1), key="on_vs_before")} | {ci(d, on_vs(-3, -1, True))} |",
+        f"| Due on payday against 1–3 days after | {ci(d, on_vs(1, 3), key="on_vs_after")} | {ci(d, on_vs(1, 3, True))} |",
+        f"| The same customer, on payday against not ({both.crm_customer_id.nunique():,} customers, {len(both):,} promises) | {ci(both, within, cluster=True, key="within_customer")} | |",
     ])
     return day_md, rows_md + "\n\nFake paydays (every payday moved, promises due near a real payday removed), on the fake payday against 1–3 days either side: " + "; ".join(placebo) + "."
 
@@ -358,6 +363,7 @@ def off_policy(con: duckdb.DuckDBPyConnection) -> str:
     gap = (ours - theirs)[has_legacy]
     rng = np.random.default_rng(0)
     bs = [gap[rng.integers(0, len(gap), len(gap))].mean() for _ in range(BOOT)]
+    EV["offpolicy_per_1000"] = (1000 * gap.mean(), 1000 * float(np.percentile(bs, 2.5)), 1000 * float(np.percentile(bs, 97.5)))
     out.append(
         f"\nPaired on the same decisions, Kept's choice against the bank's: **{1000 * gap.mean():+.0f} customers paying "
         f"within 14 days per 1,000 decisions** [{1000 * np.percentile(bs, 2.5):+.0f}, {1000 * np.percentile(bs, 97.5):+.0f}] "
@@ -433,6 +439,7 @@ def cell_uplift(con: duckdb.DuckDBPyConnection) -> str:
     for top in (1.0, 0.5, 0.3, 0.1):
         v = lift(everyone, top)
         bs = [lift(i, top) for i in draws]
+        EV[f"cell_top{int(top * 100)}"] = (1000 * v, 1000 * float(np.percentile(bs, 2.5)), 1000 * float(np.percentile(bs, 97.5)))
         label = "Everyone (what the bank does)" if top == 1.0 else f"The top {top:.0%} by the model's uplift"
         rows_md.append(
             f"| {label} | ${1000 * v:+,.0f} [${1000 * np.percentile(bs, 2.5):+,.0f}, ${1000 * np.percentile(bs, 97.5):+,.0f}] |"
@@ -552,7 +559,8 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
     from sklearn.ensemble import RandomForestClassifier
 
     w = con.execute(SQL_WIDE).df().merge(con.execute(SQL_HISTORY).df(), on="ptp_id")
-    r = rows.drop(columns=["amount_ratio"], errors="ignore").merge(w, on="ptp_id")
+    r = rows.drop(columns=["amount_ratio"], errors="ignore").merge(w, on="ptp_id").sort_values(["created", "ptp_id"])
+    r = r.reset_index(drop=True)  # a fixed row order: LightGBM's bagging depends on it
     for c in CATEGORIES:
         r[c] = r[c].astype("category")
     feats = [*pm.FEATURES, *(c for c in w.columns if c != "ptp_id")]
@@ -607,6 +615,9 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
             draws = (rng.integers(0, len(yy), len(yy)) for _ in range(BOOT))
             gap = [roc_auc_score(yy[i], pp[i]) - roc_auc_score(yy[i], bb[i]) for i in draws]
             d = roc_auc_score(yy, pp) - roc_auc_score(yy, bb)
+            EV[f"auc|{name}|{'all' if m.all() else 'before_due'}"] = (
+                float(roc_auc_score(yy, pp)), 100 * d, 100 * float(np.percentile(gap, 2.5)), 100 * float(np.percentile(gap, 97.5))
+            )
             cells.append(f"{100 * d:+.1f} [{100 * np.percentile(gap, 2.5):+.1f}, {100 * np.percentile(gap, 97.5):+.1f}]")
         out.append(f"| {name} | " + " | ".join(cells) + " |")
     return "\n".join(out) + (
@@ -645,7 +656,8 @@ def main() -> None:
     uplift_md = cell_uplift(con)
     OUT.write_text(f"""# Measured evidence
 
-Generated by `scripts/evidence_report.py` from the release data (read-only). Intervals are 95%.
+Generated by `scripts/evidence_report.py` from the release data (read-only). Intervals are 95%. In §8, interval
+ends can move by 0.1 between runs: some source rows share a date, and which one counts as latest is not fixed.
 
 ## 1. The bank's randomised test cells
 
@@ -782,6 +794,9 @@ the bank's randomisation alone, targeting by uplift is promising and unproven. T
 changes outcomes, which is why Kept's main lever is the due date (§2), and why the uplift model only replaces the
 bank's strategy behind a gate (`docs/reports/tuning.md`).
 """)
+    import json
+
+    (REPO / "data" / "exports" / "reports" / "evidence.json").write_text(json.dumps(EV, indent=1, default=float))
     print(f"wrote {OUT}")
 
 
