@@ -142,7 +142,9 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
             {customer && <span className="k-badge">{money(customer.total_overdue, true)} overdue</span>}
             {card?.proposal && <TierBadge tier={card.proposal.tier} long={false} />}
           </Flex>
-          <h1 className="k-display">{customer?.display_name ?? (error ? "Case" : <Skeleton>Customer name</Skeleton>)}</h1>
+          <h1 className="k-display">
+            {customer ? (customer.display_name ?? "Name not on record") : error ? "Case" : <Skeleton>Customer name</Skeleton>}
+          </h1>
         </Box>
         <Tooltip content="Recommend again on fresh data">
           <button className="k-round-btn" style={{ marginLeft: "auto" }} onClick={() => setNonce((n) => n + 1)} aria-label="Refresh">
