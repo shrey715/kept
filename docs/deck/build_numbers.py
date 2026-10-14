@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (deck number formatting)
 """Write numbers.tex: every number the deck shows, read from the reports and the warehouse, as LaTeX macros.
 
     uv run python docs/deck/build_numbers.py && (cd docs/deck && xelatex kept.tex && xelatex kept.tex)
