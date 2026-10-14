@@ -122,6 +122,87 @@ def payday(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
     return "\n".join(rows_md), summary
 
 
+def _signed_payday(con: duckdb.DuckDBPyConnection, shift: int = 0) -> pd.DataFrame:
+    """Resolved promises with x = signed days from the nearest recorded payday (0 = due on payday, < 0 before it).
+    shift moves every payday by that many days (the placebo)."""
+    d = con.execute(f"""
+        with pr as (select ptp_id, crm_customer_id, ptp_due_date due, (ptp_status = 'kept')::int kept,
+                           ptp_amount::double amt, coalesce(amount_paid_against, 0)::double paid, dpd_at_creation dpd
+                    from silver.promises_to_pay where ptp_status in ('kept', 'partially_kept', 'broken')),
+        pay as (select distinct crm_customer_id, unnest([first_credit_date, last_credit_date]) + {int(shift)} as d
+                from silver.salary_credit_history where crm_customer_id is not null),
+        lst as (select p.ptp_id, max(y.d) lp from pr p join pay y on y.crm_customer_id = p.crm_customer_id
+                and y.d between p.due - 40 and p.due group by 1),
+        nxt as (select p.ptp_id, min(y.d) np from pr p join pay y on y.crm_customer_id = p.crm_customer_id
+                and y.d > p.due and y.d <= p.due + 40 group by 1)
+        select p.*, p.due - l.lp aft, n.np - p.due bef from pr p join lst l using (ptp_id) join nxt n using (ptp_id)
+        order by ptp_id""").df()
+    return d.assign(x=np.where(d.aft <= d.bef, d.aft, -d.bef), dpdb=pd.cut(d.dpd, [-1, 30, 60, 99999], labels=False))
+
+
+def payday_designs(con: duckdb.DuckDBPyConnection) -> tuple[str, str]:
+    """Three checks that the §2 effect is the payday: a sharp comparison around it, the same customer on and off it,
+    and fake paydays."""
+    d = _signed_payday(con)
+
+    def gap(df: pd.DataFrame, a: pd.Series, b: pd.Series, money: bool = False) -> float:  # within dpd bands
+        out, w = [], []
+        for _, g in df.groupby("dpdb"):
+            A, B = g[a.loc[g.index]], g[b.loc[g.index]]
+            if len(A) and len(B):
+                out.append(A.paid.sum() / A.amt.sum() - B.paid.sum() / B.amt.sum() if money else A.kept.mean() - B.kept.mean())
+                w.append(len(g))
+        return 100 * float(np.average(out, weights=w))
+
+    def ci(df: pd.DataFrame, f, cluster: bool = False) -> str:  # type: ignore[no-untyped-def]
+        rng = np.random.default_rng(0)
+        if cluster:  # resample customers, not promises
+            grp = df.groupby("crm_customer_id").indices
+            ids = np.array(list(grp))
+            xs = [f(df.iloc[np.concatenate([grp[i] for i in rng.choice(ids, len(ids))])].reset_index(drop=True)) for _ in range(BOOT)]
+        else:
+            xs = [f(df.iloc[rng.integers(0, len(df), len(df))].reset_index(drop=True)) for _ in range(BOOT)]
+        return f"{f(df):+.1f} [{np.percentile(xs, 2.5):+.1f}, {np.percentile(xs, 97.5):+.1f}]"
+
+    near = d[d.x.between(-3, 3)]
+    by_day = near.groupby("x").agg(n=("kept", "size"), kept=("kept", "mean"), paid=("paid", "sum"), amt=("amt", "sum"))
+    day_md = "\n".join(
+        ["| Due, days from payday | " + " | ".join(f"{x:+d}" if x else "on payday" for x in by_day.index) + " |",
+         "|---|" + "---:|" * len(by_day),
+         "| Promises | " + " | ".join(f"{n:,}" for n in by_day.n) + " |",
+         "| Kept in full | " + " | ".join(f"{100 * k:.1f}%" for k in by_day.kept) + " |",
+         "| Promised money paid | " + " | ".join(f"{100 * p / a:.1f}%" for p, a in zip(by_day.paid, by_day.amt, strict=True)) + " |"]
+    )
+
+    def on_vs(lo: int, hi: int, money: bool = False):  # type: ignore[no-untyped-def]
+        return lambda df: gap(df, df.x == 0, df.x.between(lo, hi), money)
+
+    def within(df: pd.DataFrame) -> float:  # customer fixed effects: kept on "due on payday", dpd bands as controls
+        on = (df.x == 0).astype(float)
+        keep = on.groupby(df.crm_customer_id).transform("std") > 0
+        df, on = df[keep], on[keep]
+        dm = lambda v: v - v.groupby(df.crm_customer_id).transform("mean")  # noqa: E731
+        bands = pd.get_dummies(df.dpdb, prefix="b").astype(float).iloc[:, 1:]
+        X = np.column_stack([dm(on), *(dm(bands[c]) for c in bands)])
+        return 100 * float(np.linalg.lstsq(X, dm(df.kept.astype(float)), rcond=None)[0][0])
+
+    both = d[(d.x == 0).groupby(d.crm_customer_id).transform("std") > 0]
+    real = d.set_index("ptp_id").x
+    placebo = []
+    for shift in (-10, -5, -3, 3, 5, 10):
+        p = _signed_payday(con, shift)
+        p = p[~p.ptp_id.map(real).abs().isin([0, 7, 14])].reset_index(drop=True)  # no real paydays in either group
+        placebo.append(f"{shift:+d} days: {ci(p, lambda df: gap(df, df.x == 0, df.x.between(-3, -1) | df.x.between(1, 3)))}")
+    rows_md = "\n".join([
+        "| Check | Kept in full, pts [95% CI] | Promised money paid, pts [95% CI] |",
+        "|---|---:|---:|",
+        f"| Due on payday against 1–3 days before | {ci(d, on_vs(-3, -1))} | {ci(d, on_vs(-3, -1, True))} |",
+        f"| Due on payday against 1–3 days after | {ci(d, on_vs(1, 3))} | {ci(d, on_vs(1, 3, True))} |",
+        f"| The same customer, on payday against not ({both.crm_customer_id.nunique():,} customers, {len(both):,} promises) | {ci(both, within, cluster=True)} | |",
+    ])
+    return day_md, rows_md + "\n\nFake paydays (every payday moved, promises due near a real payday removed), on the fake payday against 1–3 days either side: " + "; ".join(placebo) + "."
+
+
 def models(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str]:
     lgbm = dict(n_estimators=200, num_leaves=15, min_child_samples=200, learning_rate=0.05, verbose=-1, deterministic=True, force_row_wise=True)  # reruns give the same numbers
     clean = list(pm.FEATURES)  # leak-free since #142
@@ -500,6 +581,7 @@ def main() -> None:
     )
     cell_md = cells(con)
     pay_md, pay_sum = payday(con, rows)
+    day_md, design_md = payday_designs(con)
     abl_md, h2h_md, where_md = models(con, rows)
     wide_md = standalone(con, rows)
     uplift_md = cell_uplift(con)
@@ -526,6 +608,27 @@ Payday timing itself wasn't randomised (it's where the due date happened to fall
 measured on the randomised population, compared within days-past-due bands, with intervals. Promises due 3–7 days after
 payday do as well as 0–2: what matters is falling due **within a week of payday**, not after the money has gone. The plan's next step is a
 randomised due-date test, which the bank can run as a fourth challenger cell.
+
+## 2a. Is it the payday? Three checks
+
+Without randomised due dates, the question is whether something else that comes with payday-dated promises explains
+§2. These checks use every resolved promise with a recorded payday on each side of its due date, not only the
+randomised cases, and compare within days-past-due bands.
+
+{day_md:s}
+
+{design_md:s}
+
+- **Sharp comparison.** Promises due on payday are kept far more often than those due a day or three either side, and
+  the days on either side look alike. A difference in the customers would not switch on and off within a day.
+- **The same customer.** Comparing each customer only with themselves removes everything fixed about the customer
+  (income, attitude, history): the effect shrinks but stays above zero.
+- **Fake paydays.** Moving every payday by 3 to 10 days, with promises near a real payday removed, the "effect" at the
+  fake payday disappears: every interval includes zero.
+
+The peak is the payday itself: a promise due the day after payday does no better than one due the day before. The
+bank's deposit data records only the first and last credit of each month, so for customers paid weekly or every two
+weeks some paydays are missing; promises due on those show up 7 days from a recorded one, where kept rates spike too.
 
 ## 3. Promise model: leakage audit
 

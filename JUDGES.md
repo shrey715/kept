@@ -26,6 +26,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 | Claim | Where it's shown | Reproduce |
 |---|---|---|
 | Dating a promise to just after payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases | [`docs/reports/evidence.md`](docs/reports/evidence.md) §2 | `uv run python scripts/evidence_report.py` |
+| It is the payday: due on payday vs 1–3 days either side **+7.7 to +8.3 pts** kept; the same customer on vs off payday **+4.0** (CI 1.1–7.4); fake paydays show nothing | evidence §2a | same |
 | The bank's own A/B cells can't tell its strategies apart | evidence §1 | same |
 | Kept's contact policy, off-policy: **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** on the same decisions | evidence §4 | same |
 | A leaky feature found and removed (promise AUC 0.92 → 0.63), and the leak-free model combined with the bank's score beats the bank's alone (0.728 vs 0.702, +2.5 AUC points, 95% CI 1.9–3.3) | evidence §3, §6 | same |
@@ -43,7 +44,9 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 
 ## 4. What we know isn't solved
 
-- **The payday effect is measured, not yet trialled.** Due dates weren't randomised, so the interval is wide. The pilot
+- **The payday effect is measured, not yet trialled.** Due dates weren't randomised. Three checks point to the payday
+  itself (evidence §2a): due on payday vs 1–3 days either side, +7.7 to +8.3 pts kept; the same customer on and off
+  payday, +4.0 [1.1, 7.4]; fake paydays show nothing. The pilot
   plan holds out 5% on the old strategy and adds a randomised due-date cell.
 - **Payday is known for about 1 customer in 4** from deposit data. The pay page asks the rest; agents already hear it on
   calls (41% of open customers have stated one).

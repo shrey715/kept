@@ -33,6 +33,37 @@ measured on the randomised population, compared within days-past-due bands, with
 payday do as well as 0–2: what matters is falling due **within a week of payday**, not after the money has gone. The plan's next step is a
 randomised due-date test, which the bank can run as a fourth challenger cell.
 
+## 2a. Is it the payday? Three checks
+
+Without randomised due dates, the question is whether something else that comes with payday-dated promises explains
+§2. These checks use every resolved promise with a recorded payday on each side of its due date, not only the
+randomised cases, and compare within days-past-due bands.
+
+| Due, days from payday | -3 | -2 | -1 | on payday | +1 | +2 | +3 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Promises | 780 | 780 | 772 | 4,852 | 1,207 | 1,076 | 786 |
+| Kept in full | 50.0% | 51.2% | 51.0% | 59.1% | 49.5% | 54.1% | 47.1% |
+| Promised money paid | 62.9% | 55.2% | 57.3% | 68.8% | 53.8% | 66.1% | 54.4% |
+
+| Check | Kept in full, pts [95% CI] | Promised money paid, pts [95% CI] |
+|---|---:|---:|
+| Due on payday against 1–3 days before | +7.7 [+5.0, +9.8] | +8.7 [+3.9, +14.0] |
+| Due on payday against 1–3 days after | +8.3 [+6.1, +10.5] | +9.1 [+4.5, +14.0] |
+| The same customer, on payday against not (1,448 customers, 3,602 promises) | +4.0 [+1.1, +7.4] | |
+
+Fake paydays (every payday moved, promises due near a real payday removed), on the fake payday against 1–3 days either side: -10 days: -3.0 [-7.2, +1.0]; -5 days: +2.3 [-1.7, +6.0]; -3 days: +1.3 [-2.7, +5.7]; +3 days: -2.0 [-5.8, +1.4]; +5 days: -1.7 [-6.0, +2.9]; +10 days: -2.2 [-5.5, +1.3].
+
+- **Sharp comparison.** Promises due on payday are kept far more often than those due a day or three either side, and
+  the days on either side look alike. A difference in the customers would not switch on and off within a day.
+- **The same customer.** Comparing each customer only with themselves removes everything fixed about the customer
+  (income, attitude, history): the effect shrinks but stays above zero.
+- **Fake paydays.** Moving every payday by 3 to 10 days, with promises near a real payday removed, the "effect" at the
+  fake payday disappears: every interval includes zero.
+
+The peak is the payday itself: a promise due the day after payday does no better than one due the day before. The
+bank's deposit data records only the first and last credit of each month, so for customers paid weekly or every two
+weeks some paydays are missing; promises due on those show up 7 days from a recorded one, where kept rates spike too.
+
 ## 3. Promise model: leakage audit
 
 | Features | Test AUC (promises after 1 Mar) |
