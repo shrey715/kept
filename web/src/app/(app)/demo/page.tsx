@@ -1,12 +1,13 @@
 "use client";
 
 import { SectionTitle } from "@/components/page-header";
-import { ArrowLeftIcon, ArrowRightIcon, ChatBubbleIcon, CheckIcon, PlayIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Kbd, Text, TextArea, TextField } from "@radix-ui/themes";
+import { ArrowLeftIcon, ArrowRightIcon, ChatBubbleIcon, CheckIcon, PauseIcon, PlayIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { CitedText, Sources, useVerify } from "@/components/citations";
+import { PipelineCanvas, type NodeId } from "@/components/pipeline-canvas";
 import { CustomerPanel } from "@/components/customer-panel";
 import { spring } from "@/components/motion";
 import { NbaCard } from "@/components/nba-card";
@@ -23,19 +24,22 @@ const REAL_CASE = { caseId: "CS-2026-820205", agent: { ...AGENT_PERSONA, userId:
 
 const QUESTIONS = ["What is the promise kept rate by product for the last 90 days?", "What is the kept rate by gender?"];
 
-const STEPS = [
-  { title: "One customer, one ID", who: COMPLIANCE, says: "Five systems each keep their own customer key. Kept resolves them to one golden ID, with the weakest match shown." },
-  { title: "Ask in plain English", who: ANALYST, says: "A certified metric answered with its SQL and sources, and a question about a protected attribute refused with a safer suggestion. Try your own." },
-  { title: "The next best action", who: AGENT_PERSONA, says: "Rules first, then the model: a call in the customer's own calling hours, with the three reasons that drove it." },
-  { title: "A new note changes everything", who: AGENT_PERSONA, says: "The agent logs that shifts were cut. Hardship turns possible, aggressive actions drop out, and the case goes Red." },
-  { title: "Two people release it", who: SPECIALIST, says: "A hardship specialist approves first, a team lead second. Every safety rule is rechecked at release." },
-  { title: "Every step on the record", who: COMPLIANCE, says: "The audit trail shows each recommendation, the hardship change, and both approvals." },
+const STEPS: { title: string; who: typeof COMPLIANCE; says: string; nodes: NodeId[] }[] = [
+  { title: "Identity resolution", who: COMPLIANCE, nodes: ["sources", "identity"], says: "Five source systems each hold their own customer key. They are resolved to one golden ID, with the weakest match shown." },
+  { title: "Ask a question", who: ANALYST, nodes: ["sources", "identity", "features", "ask"], says: "A certified metric is answered with its query and sources; a question about a protected attribute is refused with a suggested alternative." },
+  { title: "Next best action", who: AGENT_PERSONA, nodes: ["features", "models", "decide"], says: "Rules run first, then the models: a contact inside the customer's permitted hours, with the factors behind it." },
+  { title: "A note updates the case", who: AGENT_PERSONA, nodes: ["notes", "features", "models", "decide"], says: "The agent records that the customer's hours were cut. Hardship becomes possible, intensive actions are removed and the case moves to Red." },
+  { title: "Two-person release", who: SPECIALIST, nodes: ["decide", "release"], says: "A hardship specialist approves first and a team lead second. Every safety rule is rechecked at release." },
+  { title: "Audit trail", who: COMPLIANCE, nodes: ["release", "audit"], says: "Each recommendation, the hardship change and both approvals are recorded in the hash-chained log." },
 ];
+const STEP_OF: Record<NodeId, number> = { sources: 0, identity: 0, ask: 1, features: 2, models: 2, decide: 2, notes: 3, release: 4, audit: 5 };
+const PLAY_MS = 6500; // each step's time on screen when the demo runs by itself
 
 export default function DemoPage() {
   const { now, health } = useServerClock();
   const { caseId: CASE, agent: AGENT } = health?.demo === false ? REAL_CASE : DEMO_CASE;
   const [step, setStep] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [answers, setAnswers] = useState<{ q: string; r: AskResponse }[]>([]);
   const [own, setOwn] = useState("");
@@ -101,12 +105,27 @@ export default function DemoPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") setPlaying(false);
       if (e.key === "ArrowRight") setStep((s) => Math.min(s + 1, STEPS.length - 1));
       if (e.key === "ArrowLeft") setStep((s) => Math.max(s - 1, 0));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Run the case: the demo plays itself, one step every PLAY_MS; any manual move stops it
+  useEffect(() => {
+    if (!playing) return;
+    const t = setTimeout(() => {
+      if (step >= STEPS.length - 1) setPlaying(false);
+      else setStep(step + 1);
+    }, PLAY_MS);
+    return () => clearTimeout(t);
+  }, [playing, step]);
+  const pick = (i: number) => {
+    setPlaying(false);
+    setStep(i);
+  };
 
   const approve = (who: typeof SPECIALIST) =>
     run(async () => {
@@ -118,26 +137,36 @@ export default function DemoPage() {
 
   const s = STEPS[step];
   return (
-    <Grid columns={{ initial: "1", md: "280px 1fr" }} gap="6">
-      <Box>
-        <SectionTitle eyebrow="Guided demo" title="One case, start to finish" icon={<PlayIcon />} />
-        <Flex direction={{ initial: "row", md: "column" }} gap="1" position="relative" className="k-steps">
-          {STEPS.map((st, i) => (
-            <button key={st.title} onClick={() => setStep(i)} style={{ all: "unset", cursor: "pointer", position: "relative" }}>
-              {i === step && (
-                <motion.div layoutId="demo-step" transition={spring} style={{ position: "absolute", inset: 0, borderRadius: 14, background: "var(--k-chip)", boxShadow: "0 1px 0 var(--k-line)" }} />
-              )}
-              <Flex gap="3" align="center" p="2" style={{ position: "relative" }}>
-                <Flex align="center" justify="center" style={{ width: 24, height: 24, borderRadius: 999, flexShrink: 0, background: i < step ? "var(--k-red)" : i === step ? "var(--k-strong)" : "var(--gray-a3)", color: i < step ? "white" : i === step ? "var(--k-on-strong)" : "var(--gray-11)", transition: "background 200ms" }}>
-                  {i < step ? <CheckIcon /> : <Text size="1" weight="bold">{i + 1}</Text>}
-                </Flex>
-                <Text size="2" weight={i === step ? "bold" : "regular"} color={i === step ? undefined : "gray"} className="k-step-title">{st.title}</Text>
-              </Flex>
-            </button>
-          ))}
-        </Flex>
-        <Text as="p" size="1" color="gray" mt="4" className="k-desktop-only"><Kbd><ArrowLeftIcon aria-label="left arrow" /></Kbd> <Kbd><ArrowRightIcon aria-label="right arrow" /></Kbd> to move between steps</Text>
-      </Box>
+    <Box>
+      <Flex justify="between" align="end" gap="4" wrap="wrap" mb="4">
+        <SectionTitle eyebrow="Guided demo" title="One case, start to finish" icon={<PlayIcon />} mb="0" />
+        <button
+          className="k-run"
+          onClick={() => {
+            if (playing) return setPlaying(false);
+            if (step === STEPS.length - 1) setStep(0);
+            setPlaying(true);
+          }}
+        >
+          <span className="ring">{playing ? <PauseIcon /> : <PlayIcon />}</span>
+          {playing ? "Pause" : step === STEPS.length - 1 ? "Run again" : "Run the case"}
+        </button>
+      </Flex>
+      <div className="k-demo-steps" role="tablist" aria-label="Steps">
+        {STEPS.map((st, i) => (
+          <button key={st.title} role="tab" aria-selected={i === step} className="k-demo-step" data-state={i < step ? "done" : i === step ? "now" : "next"} onClick={() => pick(i)}>
+            {i === step && <motion.span layoutId="demo-step" className="k-demo-step-bg" transition={spring} />}
+            <span className="num">{i < step ? <CheckIcon /> : i + 1}</span>
+            <span className="txt">{st.title}</span>
+            {i === step && playing && (
+              <motion.span key={`p${step}`} className="bar" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: PLAY_MS / 1000, ease: "linear" }} />
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="k-pipe-scroll" style={{ margin: "14px 0 22px" }}>
+        <PipelineCanvas active={STEPS[step].nodes} onPick={(id) => pick(STEP_OF[id])} />
+      </div>
 
       <Box>
         <AnimatePresence mode="wait">
@@ -274,7 +303,7 @@ export default function DemoPage() {
         </AnimatePresence>
         {verifyDialog}
       </Box>
-    </Grid>
+    </Box>
   );
 }
 

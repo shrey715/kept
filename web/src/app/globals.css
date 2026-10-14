@@ -2424,3 +2424,234 @@ html {
 .k-note-kbd {
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- the guided demo: the pipeline as a node-flow canvas */
+.k-pipe {
+  border-radius: 28px;
+  background-color: var(--k-card);
+  background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px);
+  background-size: 18px 18px;
+  padding: 18px 22px 14px;
+}
+.k-pipe-canvas {
+  position: relative;
+  width: 100%;
+  min-width: 760px;
+}
+.k-pipe-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.k-pipe-edge {
+  fill: none;
+  stroke: var(--gray-7);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 5;
+  transition: stroke 0.3s;
+}
+.k-pipe-edge[data-on="true"] {
+  stroke: var(--k-red);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+.k-pipe-pulse {
+  fill: var(--k-red);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--k-red) 70%, transparent));
+}
+.k-pipe-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--t-bg);
+  color: var(--gray-12);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  opacity: 0.62;
+  transition: opacity 0.25s, box-shadow 0.25s;
+}
+.k-pipe-node:hover,
+.k-pipe-node:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gray-8);
+}
+.k-pipe-node[data-on="true"] {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--t-ink), 0 16px 32px -18px rgba(0, 0, 0, 0.55);
+}
+.k-pipe-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 99px;
+  background: var(--k-frame);
+  color: var(--t-ink);
+}
+.k-pipe-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.k-pipe-txt b {
+  font: 600 13px/1.2 var(--default-font-family);
+  white-space: nowrap;
+}
+.k-pipe-txt span {
+  font: 400 11px/1.3 var(--default-font-family);
+  color: var(--gray-11);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-pipe-handle {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 99px;
+  background: var(--k-frame);
+  box-shadow: inset 0 0 0 1.5px var(--gray-8);
+}
+.k-pipe-handle.in {
+  left: -5px;
+}
+.k-pipe-handle.out {
+  right: -5px;
+}
+.k-pipe-node[data-on="true"] .k-pipe-handle {
+  box-shadow: inset 0 0 0 2px var(--k-red);
+}
+.k-pipe-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 2px 0;
+  font: 400 13px/1.45 var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-pipe-detail b {
+  color: var(--gray-12);
+  font-weight: 600;
+}
+.k-pipe-scroll {
+  overflow-x: auto;
+}
+/* the run control: the studio's dark pill */
+.k-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--k-rail);
+  color: #f3eee6;
+  font: 500 14px/1 var(--default-font-family);
+  cursor: pointer;
+}
+.k-run .ring {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 99px;
+  background: #f3eee6;
+  color: #1c1917;
+}
+.k-run-progress {
+  height: 3px;
+  border-radius: 99px;
+  background: var(--k-line);
+  overflow: hidden;
+}
+.k-run-progress span {
+  display: block;
+  height: 100%;
+  background: var(--k-red);
+}
+.k-demo-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 20px;
+  background: var(--k-card);
+}
+.k-demo-step {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: var(--gray-11);
+  font: 500 13px/1.2 var(--default-font-family);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.k-demo-step:hover {
+  color: var(--gray-12);
+}
+.k-demo-step-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--k-strong);
+}
+.k-demo-step[data-state="now"] {
+  color: var(--k-on-strong);
+}
+.k-demo-step .num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 99px;
+  background: var(--k-frame);
+  color: var(--gray-12);
+  font: 600 12px/1 var(--default-font-family);
+}
+.k-demo-step[data-state="done"] .num {
+  background: var(--k-red);
+  color: #fff;
+}
+.k-demo-step .txt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-demo-step .bar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--k-red);
+  transform-origin: left;
+}
+@media (max-width: 900px) {
+  .k-demo-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
