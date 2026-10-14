@@ -387,6 +387,12 @@ def build_graph(ask: CollectionsAsk) -> Any:
         notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
         spans = resolve_dates(s["request"].question, s.get("as_of"))
         if query.date_column and len(spans) >= 2 and COMPARE.search(s["request"].question):
+            if query.date_column in intent.group_by and not _DAILY.search(s["request"].question):
+                # the period is the grouping: one total per period, not per day
+                intent = intent.model_copy(
+                    update={"group_by": tuple(c for c in intent.group_by if c != query.date_column)}
+                )
+                notes = [*notes, f"Intent check: one total per period, so not grouped by {query.date_column}"]
             return compare_periods(intent, spans[:2], notes)
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
