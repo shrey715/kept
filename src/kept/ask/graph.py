@@ -138,6 +138,19 @@ def check_bucket(question: str, intent: Intent, allowed: frozenset[str]) -> tupl
     )
 
 
+_DAILY = re.compile(r"\b(each|every|per|by) day\b|\bdaily\b|\bday by day\b", re.I)
+
+
+def check_daily(question: str, intent: Intent, q: Any) -> tuple[Intent, str | None]:
+    """ "On each day" / "daily" is a breakdown by the metric's day column when it has one to group by."""
+    col = q.date_column
+    if not col or col not in q.allowed_group_by or col in intent.group_by or not _DAILY.search(question):
+        return intent, None
+    return intent.model_copy(
+        update={"group_by": (*intent.group_by, col)}
+    ), f"Intent check: grouped by {col} (daily)"
+
+
 def as_lookup(intent: Intent) -> Intent:
     """A rerouted question goes to the lookup as a lookup, without the metric the router wrongly named (it
     would pull every SQL draft toward it). Dates and filters stay as hints."""
@@ -212,7 +225,8 @@ def repair_intent(intent: Intent, q: Any) -> tuple[Intent, list[str]]:
             filters[to] = v
     groups: list[str] = []
     for col in intent.group_by:
-        to = None if col == q.date_column else _closest(col, q.allowed_group_by)
+        dated = col == q.date_column and col not in q.allowed_group_by  # a range column, not a breakdown
+        to = None if dated else _closest(col, q.allowed_group_by)
         if to is None:
             notes.append(f"Intent repair: dropped grouping {col}")
         elif to not in groups:
@@ -367,7 +381,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
         intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
         intent, open_note = check_open(s["request"].question, intent)
         intent, bucket_note = check_bucket(s["request"].question, intent, query.allowed_filters)
-        open_note = "; ".join(n for n in (open_note, bucket_note) if n) or None
+        intent, daily_note = check_daily(s["request"].question, intent, query)
+        open_note = "; ".join(n for n in (open_note, bucket_note, daily_note) if n) or None
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
         notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
         spans = resolve_dates(s["request"].question, s.get("as_of"))

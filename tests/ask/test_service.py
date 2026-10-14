@@ -661,3 +661,16 @@ def test_new_templates_compile_to_reviewed_sql() -> None:
     assert params == [True, date(2026, 9, 14), date(2026, 9, 20)]
     for mid in ("qa_score", "open_cases", "overdraft_past_due"):
         compile_metric(Intent(kind=IntentKind.METRIC, metric_id=mid, confidence=0.9), defs, queries)
+
+
+def test_daily_questions_group_by_the_day_column_when_the_metric_allows_it() -> None:
+    from kept.ask.graph import check_daily, repair_intent
+    from kept.ask.templates import TEMPLATES
+    from kept.contracts.ask import Intent, IntentKind
+
+    q = TEMPLATES["contact_events"][1]
+    i = Intent(kind=IntentKind.METRIC, metric_id="contact_events", confidence=0.9)
+    fixed, note = check_daily("How many calls were made on each day last week?", i, q)
+    assert fixed.group_by == ("contact_date",) and note
+    kept_day, _ = repair_intent(i.model_copy(update={"group_by": ("contact_date",)}), q)
+    assert kept_day.group_by == ("contact_date",)  # a breakdown column here, not just the date range
