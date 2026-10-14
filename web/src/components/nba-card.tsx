@@ -198,8 +198,24 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
           </Card>
         </motion.div>
       )}
-      {card.similar_cases_text && <Text size="2" color="gray">{card.similar_cases_text}</Text>}
-      {card.legacy_text && <Text size="2" color="gray">{card.legacy_text}</Text>}
+      {(card.similar_cases_text || card.legacy_text) && (
+        <div className="k-context">
+          {card.similar_cases_text && (
+            <div>
+              <span className="k-eyebrow">Similar past cases</span>
+              <p>{card.similar_cases_text.replace(/^Similar past cases \([^)]*\):\s*/, "").replace(/\s*\(Descriptive, not causal\.\)\s*$/i, "")}</p>
+              <span className="note">Same product and stage. Descriptive, not causal.</span>
+            </div>
+          )}
+          {card.legacy_text && (
+            <div>
+              <span className="k-eyebrow">Compared with the bank&apos;s strategy</span>
+              <p>{card.legacy_text.replace(/^The bank's current strategy would: /, "The bank's strategy: ")}</p>
+              <span className="note">The bank&apos;s current rule for this case, scored by the same model.</span>
+            </div>
+          )}
+        </div>
+      )}
     </Flex>
   );
 }

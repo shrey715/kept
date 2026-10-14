@@ -383,15 +383,15 @@ function KindDots({ evs }: { evs: CalendarEvent[] }) {
 function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; evs: CalendarEvent[]; today: string; height: number | null; onAgenda: () => void; feedPath: string }) {
   const sorted = [...evs].sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.start.localeCompare(b.start));
   // as many rows as the list's measured height holds (a row is 50px)
-  const listRef = useRef<HTMLDivElement>(null);
+  // the list element changes each time the day crossfades, so measure whichever one is mounted (a callback ref)
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
   const [space, setSpace] = useState<number | null>(null);
   useLayoutEffect(() => {
-    const el = listRef.current;
-    if (!el || height == null) return setSpace(null);
-    const ro = new ResizeObserver(() => setSpace(el.clientHeight));
-    ro.observe(el);
+    if (!listEl || height == null) return;
+    const ro = new ResizeObserver(() => setSpace(listEl.clientHeight));
+    ro.observe(listEl); // reports the current size straight away
     return () => ro.disconnect();
-  }, [height]);
+  }, [listEl, height]);
   const rows = space == null ? 8 : Math.max(1, Math.floor(space / 50)); // the "+N more" button sits below the list
   const n = new Map<Kind, number>();
   for (const e of evs) n.set(e.kind, (n.get(e.kind) ?? 0) + 1);
@@ -427,7 +427,7 @@ function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; 
             ))}
           </div>
         )}
-        <div className="k-day-list" ref={listRef}>
+        <div className="k-day-list" ref={setListEl}>
           {sorted.length ? (
             sorted.slice(0, rows).map((e, i) => (
               <motion.div key={e.id} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, ease: EASE, delay: 0.08 + i * 0.04 }}>

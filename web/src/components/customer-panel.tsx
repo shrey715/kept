@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ClockIcon, EnvelopeClosedIcon, GlobeIcon, LockClosedIcon, MobileIcon, Cross2Icon } from "@radix-ui/react-icons";
+import { CheckIcon, ClockIcon, Cross2Icon, EnvelopeClosedIcon, GlobeIcon, LockClosedIcon, MobileIcon, PersonIcon } from "@radix-ui/react-icons";
 import { motion } from "motion/react";
 import { humanize, money, type Customer } from "@/lib/api";
 import { initials } from "./bits";
@@ -16,7 +16,8 @@ const CHANNEL_LABEL: Record<(typeof CHANNELS)[number], string> = { call: "Call",
  * contacted. Personal data arrives already masked for every role but compliance. */
 export function CustomerPanel({ c }: { c: Customer }) {
   const conf = c.match_confidence_min ?? null;
-  const name = c.display_name ?? "Unknown customer";
+  const name = c.display_name ?? "Name not on record";
+  const unlinked = c.match_review_status === "unlinked";
   const hours = c.permitted_call_start_local && c.permitted_call_end_local ? `${c.permitted_call_start_local.slice(0, 5)}–${c.permitted_call_end_local.slice(0, 5)}` : null;
   const payday = c.expected_next_payroll_date
     ? `${new Date(`${c.expected_next_payroll_date}T00:00:00`).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}${c.payroll_frequency_detected ? ` · ${humanize(c.payroll_frequency_detected)}` : ""}`
@@ -25,14 +26,14 @@ export function CustomerPanel({ c }: { c: Customer }) {
     <div className="k-cust">
       <div className="k-cust-head">
         <span className="k-cust-ava t-ice" aria-hidden>
-          {initials(name)}
+          {c.display_name ? initials(c.display_name) : <PersonIcon width={20} height={20} />}
         </span>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="k-cust-name">{name}</div>
           <div className="k-cust-id">
             <code>{c.golden_customer_id}</code>
             <span className="k-cust-chip" data-tone={c.match_review_status === "auto" ? "good" : "warn"}>
-              {c.match_review_status === "auto" ? "Auto-matched" : humanize(c.match_review_status)}
+              {c.match_review_status === "auto" ? "Auto-matched" : unlinked ? "Unlinked" : humanize(c.match_review_status)}
             </span>
           </div>
         </div>
@@ -46,6 +47,14 @@ export function CustomerPanel({ c }: { c: Customer }) {
           </div>
         )}
       </div>
+
+      {unlinked && (
+        <p className="k-cust-note">
+          This record exists only in {c.source_keys.length === 1 ? "one system" : `${c.source_keys.length} systems`} and has not been matched to
+          the customer&apos;s other records, so name, contact details and consent are not available here. Matching runs nightly;
+          uncertain pairs are confirmed by a data steward.
+        </p>
+      )}
 
       <div className="k-cust-stats">
         <div>
@@ -63,7 +72,7 @@ export function CustomerPanel({ c }: { c: Customer }) {
       </div>
 
       <section>
-        <h4 className="k-cust-h">Source records · {c.source_keys.length} systems</h4>
+        <h4 className="k-cust-h">Source records · {c.source_keys.length} {c.source_keys.length === 1 ? "system" : "systems"}</h4>
         <div className="k-cust-sources">
           {c.source_keys.map((k, i) => (
             <motion.div
@@ -134,7 +143,7 @@ export function CustomerPanel({ c }: { c: Customer }) {
             <dt>Hardship</dt>
             <dd>
               <span className="k-cust-chip" data-tone={c.hardship_status === "none" ? "quiet" : "warn"}>
-                {c.hardship_status === "none" ? "None recorded" : humanize(c.hardship_status)}
+                {c.hardship_status === "none" ? "None recorded" : c.hardship_status[0].toUpperCase() + c.hardship_status.slice(1)}
               </span>
             </dd>
           </div>
