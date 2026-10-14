@@ -2717,3 +2717,208 @@ html {
 .k-text-btn:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* ---------------------------------------------------------------- the customer panel (case overview) */
+.k-cust {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.k-cust-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.k-cust-ava {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 99px;
+  background: var(--t-bg);
+  color: var(--t-ink);
+  font: 600 17px/1 var(--default-font-family);
+}
+.k-cust-name {
+  font: 400 26px/1.1 var(--heading-font-family);
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-cust-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.k-cust-id code {
+  font: 600 13px/1 var(--code-font-family);
+  color: var(--gray-11);
+}
+.k-cust-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 99px;
+  font: 600 11.5px/1 var(--default-font-family);
+  background: var(--k-chip);
+  color: var(--gray-11);
+}
+.k-cust-chip[data-tone="good"] {
+  background: var(--k-mint);
+  color: var(--k-mint-ink);
+}
+.k-cust-chip[data-tone="warn"] {
+  background: var(--k-butter);
+  color: var(--k-butter-ink);
+}
+.k-cust-chip[data-tone="bad"] {
+  background: var(--k-rose);
+  color: var(--k-rose-ink);
+}
+.k-cust-match {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 99px;
+  background: var(--k-frame);
+}
+.k-cust-match .k-donut .arc {
+  stroke: var(--k-mint-ink);
+}
+.k-cust-match span {
+  display: flex;
+  flex-direction: column;
+  font: 400 11px/1.2 var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-cust-match b {
+  font: 600 15px/1.1 var(--default-font-family);
+  color: var(--gray-12);
+}
+.k-cust-stats {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+}
+.k-cust-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--k-frame);
+}
+.k-cust-stats > div:first-child {
+  background: var(--k-butter);
+}
+.k-cust-stats span {
+  font: 500 11.5px/1 var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-cust-stats b {
+  font: 400 24px/1 var(--heading-font-family);
+  letter-spacing: -0.03em;
+  color: var(--gray-12);
+}
+.k-cust-h {
+  margin: 0 0 10px;
+  font: 600 11px/1 var(--default-font-family);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-11);
+}
+.k-cust-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.k-cust-src {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--t-bg, var(--k-frame));
+  min-width: 0;
+}
+.k-cust-src .sys {
+  font: 600 11px/1 var(--default-font-family);
+  color: var(--t-ink, var(--gray-11));
+}
+.k-cust-src code {
+  font: 500 13px/1.2 var(--code-font-family);
+  color: var(--gray-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-cust-rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.k-cust-rows > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+  border-bottom: 1px solid var(--k-line);
+}
+.k-cust-rows > div:last-child {
+  border-bottom: 0;
+}
+.k-cust-rows dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 13.5px/1.3 var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-cust-rows dd {
+  margin: 0;
+  text-align: right;
+  font: 500 13.5px/1.3 var(--default-font-family);
+  color: var(--gray-12);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-cust-consent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.k-cust-consent span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px 0 8px;
+  border-radius: 99px;
+  font: 500 12.5px/1 var(--default-font-family);
+  background: var(--k-frame);
+  color: var(--gray-9);
+  text-decoration: line-through;
+  text-decoration-color: var(--gray-8);
+}
+.k-cust-consent span[data-ok="true"] {
+  background: var(--k-mint);
+  color: var(--k-mint-ink);
+  text-decoration: none;
+}
+.k-cust-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding-top: 4px;
+  font: 400 12px/1.4 var(--default-font-family);
+  color: var(--gray-10);
+}
