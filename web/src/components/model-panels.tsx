@@ -57,7 +57,7 @@ function PromiseCard({ p }: { p: Card["promise"] }) {
   const maxN = Math.max(...p.reliability.map((r) => r.n));
   const h = hover == null ? null : p.reliability[hover];
   return (
-    <div className="k-card" style={{ padding: 22 }}>
+    <div className="k-card t-lilac" style={{ padding: 22 }}>
       <SectionTitle eyebrow="Promise model · held out" title="Is a 60% promise kept 60% of the time?" />
       <Grid columns="3" gap="2" mb="3">
         <Stat label="AUC" value={p.auc.toFixed(3)} />
@@ -95,7 +95,7 @@ function PromiseCard({ p }: { p: Card["promise"] }) {
                 cy={y(r.observed)}
                 r={4 + 5 * Math.sqrt(r.n / maxN)}
                 fill="var(--k-red)"
-                stroke="var(--k-card)"
+                stroke="var(--t-bg, var(--k-card))"
                 strokeWidth="2"
                 opacity={hover == null || hover === i ? 1 : 0.4}
                 onMouseEnter={() => setHover(i)}
@@ -146,7 +146,7 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
   const x = (v: number) => 12 + v * (W - 20);
   const y = (v: number) => H - 20 - ((v - lo) / (hi - lo)) * (H - 36);
   return (
-    <div className="k-card" style={{ padding: 22 }}>
+    <div className="k-card t-lilac" style={{ padding: 22 }}>
       <SectionTitle eyebrow="Uplift model · held out" title="Who does a contact actually help?" />
       <Grid columns="3" gap="2" mb="3">
         <Stat label="Qini, any contact" value={u.qini_any_contact.toFixed(4)} note={`noise ± ${u.qini_noise.toFixed(4)}`} />
@@ -203,7 +203,7 @@ function FairnessCard({ f }: { f: Fairness }) {
   const attrs = Object.keys(f.attributes);
   const outcomes = [...new Set(attrs.flatMap((a) => Object.keys(f.attributes[a].outcomes)))];
   return (
-    <div className="k-card" style={{ padding: 22 }}>
+    <div className="k-card t-lilac" style={{ padding: 22 }}>
       <SectionTitle eyebrow={`Fairness · written ${f.written}`} title="Do protected groups get the same treatment?" />
       <Text as="p" size="1" color="gray" mb="3">
         Lowest group&apos;s rate over the highest&apos;s (1.00 = equal). Under 0.80 is flagged (the four-fifths rule); hatched cells have too few events to judge. Protected attributes are never model inputs.
@@ -257,7 +257,7 @@ function DriftCard({ d }: { d: Drift }) {
   const cap = 1; // PSI above 1 runs off the scale; its value is printed
   const color = { drift: "var(--k-red)", watch: "var(--amber-9)", stable: "var(--gray-8)" } as const;
   return (
-    <div className="k-card" style={{ padding: 22 }}>
+    <div className="k-card t-lilac" style={{ padding: 22 }}>
       <SectionTitle eyebrow={`Drift · written ${d.written}`} title="Has tonight's data moved away from training?" />
       <Text as="p" size="1" color="gray" mb="3">
         {d.headline} Lines: watch at {d.watch}, drift at {d.drift}. Drift on a model input pauses promotion until a retrain is checked.

@@ -1440,8 +1440,13 @@ html {
 }
 
 /* ---------------------------------------------------------------- cited briefs */
+/* written by the local model: lilac, the tint for models and the LLM */
 .k-brief {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--k-hi) 45%, var(--k-card)), var(--k-card) 60%);
+  background: linear-gradient(135deg, var(--k-lilac), color-mix(in srgb, var(--k-lilac) 40%, var(--k-card)) 70%);
+}
+.k-brief .k-chip {
+  background: var(--k-lilac-2);
+  color: var(--k-lilac-ink);
 }
 .k-brief-list {
   margin: 0;
