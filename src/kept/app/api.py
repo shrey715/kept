@@ -14,7 +14,7 @@ import csv
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +34,7 @@ from kept.app.briefs import (
     portfolio_sources,
 )
 from kept.app.briefs import write as write_brief
+from kept.app.calendar_events import CalendarFeed
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
@@ -95,6 +96,7 @@ class Services:
     calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
     reads: ReadState | None = None  # how far each person has read the bell
     history: Callable[[str], CaseHistory] | None = None  # real: contacts, promises, months from silver
+    calendar: Callable[[date, date, str, Role], CalendarFeed] | None = None  # real: cards and silver
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
     governance: Callable[[], dict[str, Any]] | None = None  # real: model card, fairness, drift (report JSON)
@@ -230,6 +232,11 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
     GET  /cases/{case_id}/history?user_id&role    200 CaseHistory (contacts, promises, month-ends); 503 demo
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
+    GET  /calendar?user_id&role&start&end         200 CalendarFeed: promise dues, send windows, approval
+                                                  deadlines, paydays, hardship plan ends in [start, end]
+                                                  (dates, at most 62 days); agents their cases, case-wide
+                                                  roles their queue's, others counts only; 422 bad range;
+                                                  503 demo
     GET  /cases/{case_id}/brief?user_id&role      200 Brief: cited bullets from the local model, each number
                                                   checked against what it cites; else a template brief
     GET  /portfolio/brief?user_id&role            200 Brief over tonight's computed portfolio facts
@@ -345,6 +352,35 @@ def create_app(services: Services) -> FastAPI:
     @app.get("/cases/{case_id}/customer", response_model=GoldenCustomer)
     def get_customer(case_id: str, user_id: str, role: Role) -> GoldenCustomer:
         return masked_view(guard_case(case_id, user_id, role), role)
+
+    @app.get("/calendar", response_model=CalendarFeed)
+    def get_calendar(user_id: str, role: Role, start: date, end: date) -> CalendarFeed:
+        if end < start or (end - start).days > 62:
+            raise HTTPException(422, "start..end must be a range of at most 62 days")
+        if services.calendar is None:
+            raise HTTPException(503, "the calendar reads the warehouse; the demo has none")
+        feed = services.calendar(start, end, user_id, role)
+        # proposals move on after review: a live status beats the nightly card's, and a deadline that's
+        # been met (released, rejected, expired) is no longer coming up
+        now = services.clock()
+        for e in feed.events:
+            live = services.proposals.get(e.proposal_id or "")
+            if live is not None:
+                e.status = live.status.value
+        lapsed = {
+            e.proposal_id
+            for e in feed.events
+            if e.kind == "approval_deadline" and e.start < now and e.status in ("pending", "approved")
+        }
+        for e in feed.events:
+            if e.kind == "contact" and e.proposal_id in lapsed:
+                e.status = "expired"  # nobody released it in time
+        feed.events = [
+            e
+            for e in feed.events
+            if e.kind != "approval_deadline" or (e.status in ("pending", "approved") and e.start >= now)
+        ]
+        return feed
 
     @app.get("/approvals", response_model=list[ApprovalItem])
     def approvals(user_id: str, role: Role) -> list[ApprovalItem]:

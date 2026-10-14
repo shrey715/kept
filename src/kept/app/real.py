@@ -17,6 +17,7 @@ from pathlib import Path
 import duckdb
 
 from kept.app.api import QueueItem, Services
+from kept.app.calendar_events import calendar_feed
 from kept.app.history import case_history
 from kept.app.notifications import ReadState
 from kept.app.portfolio import case_page, overview
@@ -126,6 +127,9 @@ def real_services(
             Path(os.environ.get("KEPT_VOICE_DIR", RAW_DIR / "files" / "voice")),
         ),
         history=lambda case_id: case_history(conn, case_id),
+        calendar=lambda start, end, user_id, role: calendar_feed(
+            conn, start=start, end=end, user_id=user_id, role=role
+        ),
         portfolio=lambda: overview(conn),
         brief_llm=_brief_llm(audit_log),
         governance=_governance,
