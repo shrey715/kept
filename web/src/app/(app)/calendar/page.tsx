@@ -10,6 +10,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   HeartIcon,
+  Link2Icon,
   PaperPlaneIcon,
   TimerIcon,
 } from "@radix-ui/react-icons";
@@ -86,6 +87,7 @@ export default function CalendarPage() {
     typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches ? "agenda" : "month",
   );
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+  const [selected, setSelected] = useState(() => startOfDay(new Date()));
   const [kinds, setKinds] = useState<Set<Kind>>(() => new Set(KINDS.map((k) => k.kind)));
   const [tiers, setTiers] = useState<Set<string>>(() => new Set(TIERS.map((t) => t[0])));
   const { start, end } = useMemo(() => rangeFor(view, anchor), [view, anchor]);
@@ -118,6 +120,12 @@ export default function CalendarPage() {
     return m;
   }, [shown]);
   const today = key(new Date());
+  const peak = useMemo(() => Math.max(0, ...[...byDay.values()].map((v) => v.length)), [byDay]);
+  const perKind = useMemo(() => {
+    const m = new Map<Kind, number>();
+    for (const e of shown) m.set(e.kind, (m.get(e.kind) ?? 0) + (e.count ?? 1));
+    return m;
+  }, [shown]);
   const fitRef = useRef<HTMLDivElement>(null);
   const fit = useFitHeight(fitRef, [view, feed == null, error]);
   const toggle = <T,>(set: Set<T>, v: T) => {
@@ -185,6 +193,7 @@ export default function CalendarPage() {
             <button key={k.kind} className={`k-filter t-${k.tint}`} data-on={kinds.has(k.kind)} onClick={() => setKinds((s) => toggle(s, k.kind))} aria-pressed={kinds.has(k.kind)}>
               <span className="k-filter-dot" />
               {k.label}
+              {feed && <span className="k-filter-n tabular">{(perKind.get(k.kind) ?? 0).toLocaleString("en-CA")}</span>}
             </button>
           ))}
           {feed?.scope !== "aggregate" && (
@@ -206,17 +215,29 @@ export default function CalendarPage() {
         </Callout.Root>
       )}
       <Rise>
-        <Box mt="4" ref={fitRef}>
-          {!feed && !error ? (
-            <Skeleton height={`${fit ?? 560}px`} />
-          ) : view === "month" ? (
-            <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} onDay={(d) => (setAnchor(d), setView("week"))} height={fit} />
-          ) : view === "week" ? (
-            <WeekView start={start} byDay={byDay} today={today} onMore={(d) => (setAnchor(startOfDay(d)), setView("agenda"))} height={fit} />
-          ) : (
-            <Agenda start={start} end={end} byDay={byDay} today={today} />
+        <div className="k-cal-wrap" data-panel={view === "month"} ref={fitRef} style={fit && view !== "agenda" ? { height: fit } : undefined}>
+          <div className="k-cal-pane">
+            {!feed && !error ? (
+              <Skeleton height={`${fit ?? 560}px`} />
+            ) : view === "month" ? (
+              <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} selected={key(selected)} onSelect={setSelected} peak={peak} height={fit} />
+            ) : view === "week" ? (
+              <WeekView start={start} byDay={byDay} today={today} onMore={(d) => setSelected(startOfDay(d))} height={fit} />
+            ) : (
+              <Agenda start={start} end={end} byDay={byDay} today={today} />
+            )}
+          </div>
+          {view === "month" && feed && (
+            <DayPanel
+              day={selected}
+              evs={byDay.get(key(selected)) ?? []}
+              today={today}
+              height={fit}
+              onAgenda={() => (setAnchor(startOfDay(selected)), setView("agenda"))}
+              feedPath={api.calendarFeedPath(me)}
+            />
           )}
-        </Box>
+        </div>
       </Rise>
     </Stagger>
   );
@@ -231,7 +252,7 @@ function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[])
     const measure = () => {
       const el = ref.current;
       if (!el || window.innerWidth <= 900) return setH(null);
-      setH(Math.max(440, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 28)));
+      setH(Math.max(460, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 52)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -244,12 +265,11 @@ function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[])
 /** How many event chips fit in `space` pixels, leaving room for a "+N more" line; at least one. */
 const fitting = (space: number, chip: number) => Math.max(1, Math.floor((space - 20) / chip));
 
-function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; onDay: (d: Date) => void; height: number | null }) {
-  // six week rows share the height: the cell minus its padding and day number holds this many 23px chips
-  // the "+N more" sits beside the day number, so the rest of the cell is all chips
-  const maxIn = height ? Math.min(4, Math.max(1, Math.floor(((height - 20 - 27 - 30) / 6 - 12 - 30) / 23))) : 3;
+function MonthGrid({ start, month, byDay, today, selected, onSelect, peak, height }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; selected: string; onSelect: (d: Date) => void; peak: number; height: number | null }) {
+  // each day shows its first event when there's room; the rest is the count and a dot per kind
+  const roomy = height == null || (height - 77) / 6 > 104;
   return (
-    <div className="k-cal k-dots" data-fit={height != null} style={height ? { height } : undefined}>
+    <div className="k-cal k-dots" data-fit={height != null}>
       <div className="k-cal-grid k-cal-head" aria-hidden>
         {WEEKDAYS.map((w) => (
           <span key={w}>{w}</span>
@@ -258,24 +278,34 @@ function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date;
       <div className="k-cal-grid" role="grid">
         {Array.from({ length: 42 }, (_, i) => {
           const d = addDays(start, i);
-          const evs = byDay.get(key(d)) ?? [];
+          const k = key(d);
+          const evs = byDay.get(k) ?? [];
+          const load = peak ? Math.sqrt(evs.length / peak) : 0; // sqrt: a quiet day still shows
           return (
-            <div key={i} role="gridcell" className="k-cal-cell" data-out={d.getMonth() !== month} data-today={key(d) === today}>
+            <div
+              key={i}
+              role="gridcell"
+              tabIndex={0}
+              aria-selected={k === selected}
+              aria-label={`${d.toDateString()}: ${evs.length} event${evs.length === 1 ? "" : "s"}`}
+              className="k-cal-cell"
+              data-out={d.getMonth() !== month}
+              data-today={k === today}
+              data-selected={k === selected}
+              style={{ "--load": load.toFixed(3) } as React.CSSProperties}
+              onClick={() => onSelect(d)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(d))}
+            >
               <div className="k-cal-cell-head">
-                <button className="k-cal-num" onClick={() => onDay(d)} aria-label={`Week of ${d.toDateString()}`}>
-                  {d.getDate()}
-                </button>
-                {evs.length > maxIn && (
-                  <button className="k-cal-more" onClick={() => onDay(d)}>
-                    +{evs.length - maxIn} more
-                  </button>
-                )}
+                <span className="k-cal-num">{d.getDate()}</span>
+                {evs.length > 0 && <span className="k-cal-count tabular">{evs.length}</span>}
               </div>
-              <div className="k-cal-evs">
-                {evs.slice(0, maxIn).map((e) => (
-                  <EventChip key={e.id} e={e} compact />
-                ))}
-              </div>
+              {roomy && evs[0] && (
+                <div className="k-cal-evs" onClick={(e) => e.stopPropagation()}>
+                  <EventChip e={evs[0]} compact />
+                </div>
+              )}
+              {evs.length > 0 && <KindDots evs={evs} />}
             </div>
           );
         })}
@@ -284,10 +314,128 @@ function MonthGrid({ start, month, byDay, today, onDay, height }: { start: Date;
   );
 }
 
+/** A dot per kind of event on a day, with how many: the day's mix at a glance. */
+function KindDots({ evs }: { evs: CalendarEvent[] }) {
+  const n = new Map<Kind, number>();
+  for (const e of evs) n.set(e.kind, (n.get(e.kind) ?? 0) + (e.count ?? 1));
+  return (
+    <div className="k-cal-kinds" aria-hidden>
+      {KINDS.filter((k) => n.has(k.kind)).map((k) => (
+        <span key={k.kind} className={`k-cal-kind t-${k.tint}`} title={`${k.label}: ${n.get(k.kind)}`}>
+          <i />
+          {n.get(k.kind)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The selected day beside the grid: its date, the mix by kind, and as many events as fit; then the feed. */
+function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; evs: CalendarEvent[]; today: string; height: number | null; onAgenda: () => void; feedPath: string }) {
+  const sorted = [...evs].sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.start.localeCompare(b.start));
+  // as many rows as the list's measured height holds (a row is 50px)
+  const listRef = useRef<HTMLDivElement>(null);
+  const [space, setSpace] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el || height == null) return setSpace(null);
+    const ro = new ResizeObserver(() => setSpace(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [height]);
+  const rows = space == null ? 8 : Math.max(1, Math.floor(space / 50)); // the "+N more" button sits below the list
+  const n = new Map<Kind, number>();
+  for (const e of evs) n.set(e.kind, (n.get(e.kind) ?? 0) + 1);
+  return (
+    <aside className="k-day-panel" aria-label="The selected day">
+      <div className="k-day-card">
+        <Flex align="end" justify="between" gap="3">
+          <div>
+            <div className="k-eyebrow">{key(day) === today ? "Today" : day.toLocaleDateString("en-CA", { weekday: "long" })}</div>
+            <div className="k-day-date">{day.toLocaleDateString("en-CA", { month: "long", day: "numeric" })}</div>
+          </div>
+          <span className="k-badge tabular">{evs.length} event{evs.length === 1 ? "" : "s"}</span>
+        </Flex>
+        {evs.length > 0 && (
+          <div className="k-day-mix" aria-hidden>
+            {KINDS.filter((k) => n.has(k.kind)).map((k) => (
+              <span key={k.kind} className={`t-${k.tint}`} style={{ flex: n.get(k.kind) }} title={`${k.label}: ${n.get(k.kind)}`} />
+            ))}
+          </div>
+        )}
+        <div className="k-day-list" ref={listRef}>
+          {sorted.length ? (
+            sorted.slice(0, rows).map((e) => <DayRow key={e.id} e={e} />)
+          ) : (
+            <Text as="p" size="2" color="gray" style={{ padding: "18px 2px" }}>
+              Nothing due this day.
+            </Text>
+          )}
+        </div>
+        {sorted.length > rows && (
+          <button className="k-tab" onClick={onAgenda} style={{ alignSelf: "flex-start" }}>
+            +{sorted.length - rows} more in the agenda <ChevronRightIcon />
+          </button>
+        )}
+      </div>
+      <SubscribeCard feedPath={feedPath} />
+    </aside>
+  );
+}
+
+function DayRow({ e }: { e: CalendarEvent }) {
+  const look = LOOK[e.kind];
+  return (
+    <Popover.Root>
+      <Popover.Trigger>
+        <button className="k-day-row">
+          <span className={`k-ava t-${tintOf(e)}`} aria-hidden style={{ width: 32, height: 32 }}>
+            {look.icon}
+          </span>
+          <span className="k-day-row-txt">
+            <b>{e.count != null ? e.title : e.display_name ?? e.title}</b>
+            <span>{[timeOf(e), e.count != null ? null : e.title, e.tier].filter(Boolean).join(" · ")}</span>
+          </span>
+        </button>
+      </Popover.Trigger>
+      <EventDetail e={e} />
+    </Popover.Root>
+  );
+}
+
+/** Keep these in a calendar app: a live subscription (refreshed hourly), its link, or a one-off file. */
+function SubscribeCard({ feedPath }: { feedPath: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}${feedPath}` : feedPath;
+  const webcal = url.replace(/^https?:/, "webcal:");
+  return (
+    <div className="k-sub-card">
+      <div className="k-sub-title">Keep it in your calendar</div>
+      <p>Subscribe once: Google, Outlook or Apple Calendar refresh this feed every hour.</p>
+      <Flex gap="2" wrap="wrap">
+        <a className="k-sub-btn" href={webcal}>
+          <CalendarIcon /> Subscribe
+        </a>
+        <button
+          className="k-sub-btn ghost"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1600);
+            });
+          }}
+        >
+          {copied ? <CheckCircledIcon /> : <Link2Icon />} {copied ? "Copied" : "Copy link"}
+        </button>
+      </Flex>
+    </div>
+  );
+}
+
 function WeekView({ start, byDay, today, onMore, height }: { start: Date; byDay: Map<string, CalendarEvent[]>; today: string; onMore: (d: Date) => void; height: number | null }) {
   const maxIn = height ? fitting(height - 24 - 44, 34) : Infinity; // a day's column minus its padding and header
   return (
-    <div className="k-week" data-fit={height != null} style={height ? { height } : undefined}>
+    <div className="k-week" data-fit={height != null}>
       {Array.from({ length: 7 }, (_, i) => {
         const d = addDays(start, i);
         const evs = [...(byDay.get(key(d)) ?? [])].sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.start.localeCompare(b.start));
@@ -397,7 +545,6 @@ function EventActions({ e, wide = false }: { e: CalendarEvent; wide?: boolean })
 
 /** One event on the grid: a tinted pill; clicking it shows the details, the case and the calendar links. */
 function EventChip({ e, compact = false }: { e: CalendarEvent; compact?: boolean }) {
-  const look = LOOK[e.kind];
   return (
     <Popover.Root>
       <Popover.Trigger>
@@ -409,38 +556,46 @@ function EventChip({ e, compact = false }: { e: CalendarEvent; compact?: boolean
           </span>
         </motion.button>
       </Popover.Trigger>
-      <Popover.Content className="k-pop" width="340px">
-        <Flex gap="3" align="start">
-          <span className={`k-ava t-${tintOf(e)}`} aria-hidden style={{ width: 36, height: 36 }}>
-            {look.icon}
-          </span>
-          <Box style={{ minWidth: 0, flex: 1 }}>
-            <Text as="div" size="1" color="gray">
-              {look.label.replace(/s$/, "")} · {e.all_day ? new Date(e.start).toLocaleDateString("en-CA", { timeZone: "UTC", dateStyle: "medium" }) : `${new Date(e.start).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}${e.end ? ` – ${new Date(e.end).toLocaleTimeString("en-CA", { timeStyle: "short" })}` : ""}`}
-            </Text>
-            <Text as="div" size="3" weight="medium" mt="1">
-              {e.title}
-            </Text>
-            {(e.display_name || e.case_id) && (
-              <Text as="div" size="2" mt="1">
-                {[e.display_name, e.case_id].filter(Boolean).join(" · ")}
-              </Text>
-            )}
-            {e.detail && (
-              <Text as="p" size="2" color="gray" mt="1">
-                {e.detail}
-              </Text>
-            )}
-            <Flex gap="2" mt="2" align="center" wrap="wrap">
-              {e.tier && <TierBadge tier={e.tier} long={false} size="1" />}
-              {e.status && <span className="k-badge">{e.status.replaceAll("_", " ")}</span>}
-            </Flex>
-          </Box>
-        </Flex>
-        <Box mt="3">
-          <EventActions e={e} wide />
-        </Box>
-      </Popover.Content>
+      <EventDetail e={e} />
     </Popover.Root>
+  );
+}
+
+/** An event's details, its case and the calendar links (the popover on a chip or a day row). */
+function EventDetail({ e }: { e: CalendarEvent }) {
+  const look = LOOK[e.kind];
+  return (
+    <Popover.Content className="k-pop" width="340px">
+      <Flex gap="3" align="start">
+        <span className={`k-ava t-${tintOf(e)}`} aria-hidden style={{ width: 36, height: 36 }}>
+          {look.icon}
+        </span>
+        <Box style={{ minWidth: 0, flex: 1 }}>
+          <Text as="div" size="1" color="gray">
+            {look.label.replace(/s$/, "")} · {e.all_day ? new Date(e.start).toLocaleDateString("en-CA", { timeZone: "UTC", dateStyle: "medium" }) : `${new Date(e.start).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}${e.end ? ` – ${new Date(e.end).toLocaleTimeString("en-CA", { timeStyle: "short" })}` : ""}`}
+          </Text>
+          <Text as="div" size="3" weight="medium" mt="1">
+            {e.title}
+          </Text>
+          {(e.display_name || e.case_id) && (
+            <Text as="div" size="2" mt="1">
+              {[e.display_name, e.case_id].filter(Boolean).join(" · ")}
+            </Text>
+          )}
+          {e.detail && (
+            <Text as="p" size="2" color="gray" mt="1">
+              {e.detail}
+            </Text>
+          )}
+          <Flex gap="2" mt="2" align="center" wrap="wrap">
+            {e.tier && <TierBadge tier={e.tier} long={false} size="1" />}
+            {e.status && <span className="k-badge">{e.status.replaceAll("_", " ")}</span>}
+          </Flex>
+        </Box>
+      </Flex>
+      <Box mt="3">
+        <EventActions e={e} wide />
+      </Box>
+    </Popover.Content>
   );
 }

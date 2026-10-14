@@ -34,7 +34,7 @@ from kept.app.briefs import (
     portfolio_sources,
 )
 from kept.app.briefs import write as write_brief
-from kept.app.calendar_events import CalendarFeed
+from kept.app.calendar_events import CalendarFeed, to_ics
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
@@ -381,6 +381,26 @@ def create_app(services: Services) -> FastAPI:
             if e.kind != "approval_deadline" or (e.status in ("pending", "approved") and e.start >= now)
         ]
         return feed
+
+    @app.get("/calendar.ics")
+    def get_calendar_ics(user_id: str, role: Role, days: int = Query(56, ge=1, le=56)) -> Response:
+        """The same events as a feed calendar apps subscribe to (webcal://): the past week and the next
+        `days`, refreshed hourly by the subscriber, each event linking back to its case."""
+        import os
+
+        today = services.clock().date()
+        feed = get_calendar(user_id, role, today - timedelta(days=6), today + timedelta(days=days))
+        body = to_ics(
+            feed.events,
+            os.environ.get("KEPT_WEB_URL", "http://localhost:3000"),
+            "Kept · coming up",
+            services.clock(),
+        )
+        return Response(
+            body,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Content-Disposition": 'inline; filename="kept.ics"', "Cache-Control": "no-store"},
+        )
 
     @app.get("/approvals", response_model=list[ApprovalItem])
     def approvals(user_id: str, role: Role) -> list[ApprovalItem]:

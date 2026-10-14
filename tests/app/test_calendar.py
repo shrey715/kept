@@ -88,3 +88,38 @@ def test_paydays_project_each_frequency() -> None:
         date(2026, 11, 30),
     ]
     assert paydays(date(2026, 10, 9), "unknown", *oct_) == []
+
+
+def test_ics_feed_is_rfc5545_with_dates_folding_and_case_links() -> None:
+    from datetime import UTC, datetime
+
+    from kept.app.calendar_events import CalendarEvent, to_ics
+
+    events = [
+        CalendarEvent(
+            id="pd-1",
+            kind="payday",
+            start=datetime(2026, 10, 16, tzinfo=UTC),
+            all_day=True,
+            title="Expected payday",
+            case_id="CS-1",
+            display_name="Jane D.",
+            detail="biweekly; " + "x" * 120,
+        ),
+        CalendarEvent(
+            id="ct-1",
+            kind="contact",
+            start=datetime(2026, 10, 15, 22, tzinfo=UTC),
+            all_day=False,
+            title="Call, send window",
+            status="expired",
+        ),
+    ]
+    ics = to_ics(events, "http://kept.local", "Kept · coming up", datetime(2026, 10, 15, 3, tzinfo=UTC))
+    lines = ics.split("\r\n")
+    assert lines[0] == "BEGIN:VCALENDAR" and ics.endswith("END:VCALENDAR\r\n")
+    assert "DTSTART;VALUE=DATE:20261016" in lines and "DTEND;VALUE=DATE:20261017" in lines
+    assert "DTSTART:20261015T220000Z" in lines and "DTEND:20261015T223000Z" in lines
+    assert "URL:http://kept.local/cases/CS-1" in lines and "STATUS:CANCELLED" in lines
+    assert all(len(x.encode()) <= 75 for x in lines)  # folded
+    assert r"DESCRIPTION:biweekly\; " in ics  # escaped

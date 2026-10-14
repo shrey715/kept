@@ -90,6 +90,8 @@ export const api = {
   customer: (caseId: string, w: Who) => call<Customer>(`/cases/${encodeURIComponent(caseId)}/customer?${q(w)}`),
   approvals: (w: Who) => call<ApprovalItem[]>(`/approvals?${q(w)}`),
   calendar: (w: Who, start: string, end: string) => call<CalendarFeed>(`/calendar?${q(w, { start, end })}`),
+  /** The live calendar feed (.ics) a calendar app subscribes to: the past week and the next eight. */
+  calendarFeedPath: (w: Who) => `/api/calendar.ics?${q(w)}`,
   audit: (w: Who, opts: { caseId?: string; kind?: AuditKind } = {}) =>
     call<AuditEvent[]>(
       `/audit?${q(w, { ...(opts.caseId ? { case_id: opts.caseId } : {}), ...(opts.kind ? { kind: opts.kind } : {}) })}`,

@@ -265,7 +265,8 @@ html {
 }
 .radix-themes.app-root {
   background: var(--k-canvas);
-  min-height: 100vh;
+  min-height: 100dvh;
+  display: flow-root; /* the frame's margin stays inside: a page that fits never scrolls by 12px */
 }
 
 /* Radix, restyled once for every page: soft borderless cards, light display headings */
@@ -296,7 +297,7 @@ html {
   gap: 20px;
   margin: 12px;
   padding: 12px;
-  min-height: calc(100vh - 24px);
+  min-height: calc(100dvh - 24px);
   background-color: var(--k-frame);
   background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px); /* the dotted canvas */
   background-size: 20px 20px;
@@ -306,10 +307,14 @@ html {
 .k-frame.k-solo {
   grid-template-columns: minmax(0, 1fr);
 }
+/* the rail floats: pinned to the window, its own shadow, while the page scrolls beside it */
 .k-rail {
-  position: sticky;
+  position: fixed;
   top: 24px;
-  height: calc(100vh - 48px);
+  left: 24px;
+  bottom: 24px;
+  width: 76px;
+  z-index: 30;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -318,7 +323,7 @@ html {
   background: var(--k-rail);
   border-radius: 24px;
   box-sizing: border-box;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 24px 48px -24px rgba(28, 25, 23, 0.55);
 }
 .k-rail-btn {
   position: relative;
@@ -361,6 +366,7 @@ html {
   background: var(--k-rail-active);
 }
 .k-main {
+  grid-column: 2; /* the rail is out of the flow; its column stays as the gutter */
   min-width: 0;
   padding: 8px 12px 24px 4px;
 }
@@ -375,11 +381,12 @@ html {
     padding: 12px 12px 96px;
     border-radius: 0;
     gap: 0;
-    min-height: 100vh;
+    min-height: 100dvh;
   }
   .k-rail {
     position: fixed;
     top: auto;
+    width: auto;
     left: 10px;
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom));
@@ -416,6 +423,7 @@ html {
     height: 42px;
   }
   .k-main {
+    grid-column: 1;
     padding: 0;
   }
   .k-strong-btn.k-demo-btn {
@@ -1966,5 +1974,200 @@ html {
   .k-donut .arc,
   .k-pill-tip {
     transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- calendar, v2: a load-shaded month, a day panel, the feed */
+.k-cal-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+.k-cal-wrap[data-panel="true"] {
+  grid-template-columns: minmax(0, 1fr) 330px;
+}
+.k-cal-pane {
+  min-width: 0;
+  min-height: 0;
+}
+.k-cal[data-fit="true"],
+.k-week[data-fit="true"] {
+  height: 100%;
+  box-sizing: border-box;
+}
+/* each day is shaded by how busy it is (--load: 0..1, square-rooted), maple over the frame */
+.k-cal-cell {
+  cursor: pointer;
+  background: color-mix(in srgb, var(--k-red) calc(var(--load, 0) * 16%), var(--k-frame));
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.k-cal-cell:hover {
+  box-shadow: inset 0 0 0 1px var(--gray-7);
+}
+.k-cal-cell:focus-visible {
+  outline: 2px solid var(--k-red);
+  outline-offset: 1px;
+}
+.k-cal-cell[data-selected="true"] {
+  box-shadow: inset 0 0 0 2px var(--gray-12);
+}
+.k-cal-cell[data-today="true"][data-selected="true"] {
+  box-shadow: inset 0 0 0 2px var(--k-red);
+}
+.k-cal-count {
+  font: 600 11px/1 var(--default-font-family);
+  color: var(--gray-11);
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: var(--k-card);
+}
+.k-cal-kinds {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 2px 2px 0;
+}
+.k-cal-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 11px/1 var(--default-font-family);
+  color: var(--gray-11);
+  font-variant-numeric: tabular-nums;
+}
+.k-cal-kind i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--t-ink);
+}
+.k-filter-n {
+  margin-left: 2px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--t-ink, var(--gray-11)) 14%, transparent);
+  font: 600 11px/1.3 var(--default-font-family);
+}
+/* the day panel: the selected day's mix and events, then the dark feed card */
+.k-day-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.k-day-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--k-card);
+  overflow: hidden;
+}
+.k-day-date {
+  font: 400 34px/1.05 var(--heading-font-family);
+  letter-spacing: -0.04em;
+}
+.k-day-mix {
+  display: flex;
+  gap: 3px;
+  height: 8px;
+}
+.k-day-mix span {
+  border-radius: 99px;
+  background: var(--t-ink);
+  min-width: 8px;
+}
+.k-day-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.k-day-list > * {
+  flex: none;
+}
+.k-day-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 50px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--gray-12);
+}
+.k-day-row:hover {
+  background: var(--k-frame);
+}
+.k-day-row-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.k-day-row-txt b,
+.k-day-row-txt span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-day-row-txt b {
+  font: 500 14px/1.3 var(--default-font-family);
+}
+.k-day-row-txt span {
+  font: 400 12px/1.4 var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-sub-card {
+  flex: none;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--k-rail);
+  color: #f3eee6;
+}
+.k-sub-title {
+  font: 400 22px/1.15 var(--heading-font-family);
+  letter-spacing: -0.03em;
+}
+.k-sub-card p {
+  margin: 6px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(243, 238, 230, 0.68);
+}
+.k-sub-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #f3eee6;
+  color: #1c1917;
+  font: 500 14px/1 var(--default-font-family);
+  text-decoration: none;
+  cursor: pointer;
+}
+.k-sub-btn.ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f3eee6;
+}
+@media (max-width: 1100px) {
+  .k-cal-wrap[data-panel="true"] {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto !important;
+  }
+  .k-cal[data-fit="true"],
+  .k-week[data-fit="true"] {
+    height: auto;
   }
 }
