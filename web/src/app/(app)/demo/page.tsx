@@ -1,17 +1,17 @@
 "use client";
 
 import { SectionTitle } from "@/components/page-header";
-import { ArrowLeftIcon, ArrowRightIcon, ChatBubbleIcon, CheckIcon, PauseIcon, PlayIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Text, TextArea, TextField } from "@radix-ui/themes";
+import { ArrowLeftIcon, ArrowRightIcon, ChatBubbleIcon, CheckIcon, Link2Icon, PauseIcon, PlayIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, HoverCard, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { CitedText, Sources, useVerify } from "@/components/citations";
 import { PipelineCanvas, type NodeId } from "@/components/pipeline-canvas";
-import { CustomerPanel } from "@/components/customer-panel";
+import { CustomerPanel, SYSTEM_TINT } from "@/components/customer-panel";
 import { spring } from "@/components/motion";
 import { NbaCard } from "@/components/nba-card";
-import { api, decision, type AskResponse, type AuditEvent, type Customer, type NBACard, type ReleaseResult } from "@/lib/api";
+import { api, decision, humanize, type AskResponse, type AuditEvent, type Customer, type NBACard, type ReleaseResult } from "@/lib/api";
 import { nowIso, useServerClock } from "@/lib/clock";
 import { PERSONAS, REAL_USER_IDS } from "@/lib/session";
 
@@ -192,7 +192,7 @@ export default function DemoPage() {
 
             {step === 0 && customer && (
               <Grid columns={{ initial: "1", lg: "1fr 1fr" }} gap="4">
-                <Card size="3" className="k-dots"><Convergence c={customer} /></Card>
+                <Card size="3" className="k-dots" style={{ display: "flex" }}><Convergence c={customer} /></Card>
                 <Card size="3"><CustomerPanel c={customer} /></Card>
               </Grid>
             )}
@@ -308,34 +308,162 @@ export default function DemoPage() {
 }
 
 /** Source keys fly in from the edges and merge into the golden ID. */
+/** What each source system's customer key is (shown on hover). */
+const SYSTEM_INFO: Record<string, { kind: string; about: string }> = {
+  bureau: { kind: "Credit bureau ID", about: "The customer's file number at the credit bureau, from the bureau's monthly report." },
+  card: { kind: "Card account number", about: "The credit card system's account for this customer." },
+  collections: { kind: "Collections customer key", about: "The key the collections platform uses for the customer behind a case." },
+  crm: { kind: "CRM customer ID", about: "The customer relationship system's record: contact details and consent." },
+  deposit: { kind: "Deposit customer number", about: "Chequing and savings records, including payroll deposits used to estimate payday." },
+  loan: { kind: "Loan account number", about: "The lending system's account: personal loans, lines of credit, auto and mortgage." },
+};
+
+/** Step 1: the customer's source records flow through matching into one golden ID. Records that share a key are
+ * linked; the match strip says how the cluster was resolved. */
 function Convergence({ c }: { c: Customer }) {
-  const n = c.source_keys.length;
+  const keys = c.source_keys;
+  const n = keys.length;
+  const conf = c.match_confidence_min ?? null;
+  // which records share a key with another (exact links come before probabilistic matching)
+  const shared = new Map<string, string[]>();
+  for (const k of keys) shared.set(k.key, [...(shared.get(k.key) ?? []), k.system]);
+  const W = 640;
+  const H = 400;
+  const tileY = (i: number) => 40 + (i * (H - 80)) / Math.max(1, n - 1);
+  const MX = 330; // matching node
+  const GX = 520; // golden ID
+  const CY = H / 2;
+  const label = (sys: string) => (sys === "crm" ? "CRM" : sys[0].toUpperCase() + sys.slice(1));
   return (
-    <Box position="relative" style={{ height: 300 }}>
-      <svg width="100%" height="100%" viewBox="0 0 400 300" aria-hidden style={{ position: "absolute", inset: 0 }}>
-        {c.source_keys.map((_, i) => {
-          const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    <div className="k-conv">
+      <div className="k-conv-canvas" style={{ aspectRatio: `${W} / ${H}` }}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="k-conv-edges" aria-hidden>
+          {keys.map((k, i) => {
+            const d = `M150,${tileY(i)} C240,${tileY(i)} 250,${CY} ${MX - 58},${CY}`;
+            return (
+              <g key={`${k.system}-${k.key}`}>
+                <motion.path d={d} className="k-conv-edge" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.3 + i * 0.1, duration: 0.7 }} />
+                <circle r={3.5} className="k-conv-pulse">
+                  <animateMotion dur="2.2s" begin={`${1 + i * 0.35}s`} repeatCount="indefinite" path={d} />
+                </circle>
+              </g>
+            );
+          })}
+          <motion.path d={`M${MX + 58},${CY} L${GX - 92},${CY}`} className="k-conv-edge strong" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 1, duration: 0.5 }} />
+        </svg>
+        {keys.map((k, i) => {
+          const twins = (shared.get(k.key) ?? []).filter((x) => x !== k.system);
           return (
-            <motion.line key={i} x1={200 + Math.cos(a) * 130} y1={150 + Math.sin(a) * 110} x2="200" y2="150" stroke="var(--accent-a7)" strokeWidth="2" strokeDasharray="4 4"
-              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.5 + i * 0.15, duration: 0.6 }} />
+            <HoverCard.Root key={`${k.system}-${k.key}`} openDelay={120} closeDelay={60}>
+              <HoverCard.Trigger>
+            <motion.div
+              tabIndex={0}
+              className={`k-conv-src ${SYSTEM_TINT[k.system] ? `t-${SYSTEM_TINT[k.system]}` : ""}`}
+              style={{ left: `${(14 / W) * 100}%`, top: `${((tileY(i) - 26) / H) * 100}%`, width: `${(136 / W) * 100}%`, height: `${(52 / H) * 100}%` }}
+              initial={{ opacity: 0, x: -24 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ ...spring, delay: i * 0.08 }}
+            >
+              <span className="sys">{label(k.system)}</span>
+              <code>{k.key}</code>
+              {twins.length > 0 && (
+                <span className="twin" aria-label={`Same key as ${twins.map(label).join(", ")}`}>
+                  <Link2Icon />
+                </span>
+              )}
+            </motion.div>
+              </HoverCard.Trigger>
+              <HoverCard.Content side="right" className="k-pop" style={{ maxWidth: 300 }}>
+                <div className="k-conv-tip">
+                  <span className="k-eyebrow">{label(k.system)}</span>
+                  <b>{SYSTEM_INFO[k.system]?.kind ?? "Customer key"}</b>
+                  <code>{k.key}</code>
+                  <p>{SYSTEM_INFO[k.system]?.about}</p>
+                  <p>
+                    {twins.length > 0
+                      ? `Linked exactly to ${twins.map(label).join(" and ")}: the same key appears in both systems.`
+                      : "Joined by probabilistic matching on name, date of birth, phone and postal code."}
+                  </p>
+                </div>
+              </HoverCard.Content>
+            </HoverCard.Root>
           );
         })}
-      </svg>
-      {c.source_keys.map((k, i) => {
-        const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-        return (
-          <motion.div key={`${k.system}-${k.key}`} initial={{ opacity: 0, x: Math.cos(a) * 240, y: Math.sin(a) * 200 }} animate={{ opacity: 1, x: Math.cos(a) * 130, y: Math.sin(a) * 110 }} transition={{ ...spring, delay: i * 0.12 }}
-            style={{ position: "absolute", left: "50%", top: "50%", translate: "-50% -50%" }}>
-            <Badge size="2" variant="surface" style={{ whiteSpace: "nowrap" }}>{k.system} · {k.key}</Badge>
-          </motion.div>
-        );
-      })}
-      <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ ...spring, delay: 1.2 }} style={{ position: "absolute", left: "50%", top: "50%", translate: "-50% -50%" }}>
-        <motion.div animate={{ boxShadow: ["0 0 0 0 var(--accent-a6)", "0 0 0 18px transparent"] }} transition={{ repeat: Infinity, duration: 1.8, delay: 1.6 }}
-          style={{ borderRadius: 999, background: "var(--accent-9)", color: "white", padding: "12px 18px" }}>
-          <Text weight="bold" className="tabular">{c.golden_customer_id}</Text>
+        <HoverCard.Root openDelay={120} closeDelay={60}>
+          <HoverCard.Trigger>
+        <motion.div
+          tabIndex={0}
+          className="k-conv-match"
+          style={{ left: `${((MX - 58) / W) * 100}%`, top: `${((CY - 34) / H) * 100}%`, width: `${(116 / W) * 100}%`, height: `${(68 / H) * 100}%` }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ ...spring, delay: 0.7 }}
+        >
+          <b>Matching</b>
+          <span>Exact keys, then Splink</span>
         </motion.div>
-      </motion.div>
-    </Box>
+          </HoverCard.Trigger>
+          <HoverCard.Content side="top" className="k-pop" style={{ maxWidth: 320 }}>
+            <div className="k-conv-tip">
+              <span className="k-eyebrow">Identity resolution</span>
+              <b>Two passes</b>
+              <p>Exact links first: records that carry the same key are joined.</p>
+              <p>Then Splink scores the remaining pairs on name, date of birth, phone and postal code. Pairs above the threshold are merged; uncertain pairs wait for a data steward.</p>
+            </div>
+          </HoverCard.Content>
+        </HoverCard.Root>
+        <HoverCard.Root openDelay={120} closeDelay={60}>
+          <HoverCard.Trigger>
+        <motion.div
+          tabIndex={0}
+          className="k-conv-golden"
+          style={{ left: `${((GX - 92) / W) * 100}%`, top: `${((CY - 70) / H) * 100}%`, width: `${(196 / W) * 100}%`, height: `${(140 / H) * 100}%` }}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ ...spring, delay: 1.2 }}
+        >
+          <motion.span className="halo" animate={{ opacity: [0.5, 0], scale: [1, 1.12] }} transition={{ repeat: Infinity, duration: 2.2, delay: 1.8 }} />
+          <span className="eyebrow">Golden ID</span>
+          <code>{c.golden_customer_id}</code>
+          <span className="who">{c.display_name ?? "Customer"}</span>
+          <span className="meta">
+            {c.match_review_status === "auto" ? "Auto-matched" : humanize(c.match_review_status)}
+            {conf !== null && ` · ${Math.round(conf * 100)}% weakest match`}
+          </span>
+        </motion.div>
+          </HoverCard.Trigger>
+          <HoverCard.Content side="left" className="k-pop" style={{ maxWidth: 320 }}>
+            <div className="k-conv-tip">
+              <span className="k-eyebrow">Golden ID</span>
+              <b>One customer across every system</b>
+              <code>{c.golden_customer_id}</code>
+              <p>Unifies {n} records:</p>
+              <ul>
+                {keys.map((k) => (
+                  <li key={`${k.system}-${k.key}`}>
+                    <span>{label(k.system)}</span> <code>{k.key}</code>
+                  </li>
+                ))}
+              </ul>
+              <p>Cases, contacts, promises and consent are read through this ID, so every screen sees the same person.</p>
+            </div>
+          </HoverCard.Content>
+        </HoverCard.Root>
+      </div>
+      <div className="k-conv-steps">
+        <div>
+          <b>{n} source records</b>
+          <span>Each product system keeps its own customer key.</span>
+        </div>
+        <div>
+          <b>{[...shared.values()].filter((v) => v.length > 1).length} exact links</b>
+          <span>Records sharing a key are linked before any scoring.</span>
+        </div>
+        <div>
+          <b>{conf !== null ? `${Math.round(conf * 100)}%` : "—"} weakest match</b>
+          <span>Uncertain pairs go to a data steward for review.</span>
+        </div>
+      </div>
+    </div>
   );
 }

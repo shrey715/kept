@@ -8,7 +8,7 @@ import { Donut, spring } from "./motion";
 
 export const SYSTEM_COLOR = { crm: "ruby", card: "iris", loan: "cyan", deposit: "grass", collections: "amber", bureau: "gray" } as const;
 /** The studio tint each source system wears in the panel. */
-const SYSTEM_TINT: Record<string, string> = { crm: "rose", card: "lilac", loan: "ice", deposit: "mint", collections: "butter", bureau: "" };
+export const SYSTEM_TINT: Record<string, string> = { crm: "rose", card: "lilac", loan: "ice", deposit: "mint", collections: "butter", bureau: "" };
 const CHANNELS = ["call", "sms", "email", "push"] as const;
 const CHANNEL_LABEL: Record<(typeof CHANNELS)[number], string> = { call: "Call", sms: "SMS", email: "Email", push: "Push" };
 
