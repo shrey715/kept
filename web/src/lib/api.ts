@@ -175,6 +175,8 @@ export const money = (v: string | number, cents = false) =>
   });
 
 export const pct = (p: number) => `${Math.round(p * 100)}%`;
+/** A record-link score: links are made only at 95% or above, so whole percentages would read 100% for nearly all. */
+export const matchPct = (p: number) => (p >= 0.999 ? "≥ 99.9%" : `${(Math.floor(p * 1000) / 10).toFixed(1)}%`);
 
 export const when = (iso: string | null | undefined, opts: Intl.DateTimeFormatOptions = {}) =>
   iso

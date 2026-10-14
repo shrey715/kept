@@ -28,7 +28,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 | Dating a promise to just after payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases | [`docs/reports/evidence.md`](docs/reports/evidence.md) §2 | `uv run python scripts/evidence_report.py` |
 | The bank's own A/B cells can't tell its strategies apart | evidence §1 | same |
 | Kept's contact policy, off-policy: **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** on the same decisions | evidence §4 | same |
-| A leaky feature found and removed (promise AUC 0.92 → 0.63), and the leak-free model combined with the bank's score beats the bank's alone (0.728 vs 0.702) | evidence §3, §6 | same |
+| A leaky feature found and removed (promise AUC 0.92 → 0.63), and the leak-free model combined with the bank's score beats the bank's alone (0.728 vs 0.702, +2.5 AUC points, 95% CI 1.9–3.3) | evidence §3, §6 | same |
 | Every extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00** | [`docs/reports/extraction_gate.md`](docs/reports/extraction_gate.md) | `uv run python scripts/eval_extraction.py --source transcripts --split holdout` |
 | Whisper on 2,000 calls: **9.4%** word error rate vs the bank's speech-to-text at 12.4%, even across noise and accents | [`docs/reports/voice_wer.md`](docs/reports/voice_wer.md) | `uv run python scripts/voice_wer.py --report-only` |
 | One person per customer: precision **99.3%** (300 links by hand), recall **99%** (198 of 200 planted duplicates, no wrong merges) | [`QUALITY_REPORT.pdf`](QUALITY_REPORT.pdf), [`docs/reports/identity_recall.md`](docs/reports/identity_recall.md) | `uv run python scripts/identity_injection.py` |
@@ -50,3 +50,11 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 - **The uplift signal is small** (call Qini 0.0073). Payroll features added to training didn't beat the champion.
 - **Three fairness flags remain** (calls by gender and by marital status, hardship reviews by marital status), all on
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
+- **Kept's shipped promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). A wider model on the same kinds
+  of inputs as the bank's closes most of that gap (0.688, and not distinguishable from the bank's on promises it scored
+  before the due date; evidence §8), but it is not wired into the cards yet. It is used where the bank's can't be:
+  the bank's score arrives about 9 days after a promise is made, and Kept's proposes the due date at the moment of the
+  promise. Combined, the two beat the bank's alone (evidence §6, §7).
+- **Sign-in is a demo persona picker.** The API enforces every role rule itself (case scope, aggregates only for
+  analysts, masking for everyone but compliance), but it takes the caller's role from the request. In production the
+  API sits behind the bank's single sign-on (OIDC) and reads the user and role from the signed token.

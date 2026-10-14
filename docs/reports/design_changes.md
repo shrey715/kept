@@ -10,7 +10,7 @@ evidence that decided it.
 | Ask speed | Under 5 s | Median about 6 s on the local model | Local inference on one GPU; the hosted model was faster but is out of scope |
 | Text extraction | LLM with quoted evidence, F1 ≥ 0.80 gate, SetFit backfill | As planned; replies decoded to the JSON schema; a rule against cease false alarms | Malformed replies 152 to 0 on 1,172 calls; cease F1 1.00 on the holdout (`extraction_gate.md`) |
 | Voice | Whisper on calls | Whisper large-v3-turbo on every call recording | Word error rate 9.4% against the bank's 12.4% (`voice_wer.md`) |
-| Promise model | Not in the design | LightGBM, isotonic-calibrated, alongside the bank's own score | Combined with the bank's score: AUC 0.728 against 0.702. A first version scored 0.92 through a leaking feature, which was removed (`model_card.md`, `evidence.md` §3) |
+| Promise model | Not in the design | LightGBM, isotonic-calibrated, alongside the bank's own score | Combined with the bank's score: AUC 0.728 against 0.702, +2.5 points [1.9, 3.3]. A first version scored 0.92 through a leaking feature, which was removed (`model_card.md`, `evidence.md` §3) |
 | Uplift model | LightGBM T-learner, checked with Qini | As planned; the champion is kept behind a challenger gate | A 40-candidate tuning search lost to the champion on held-out decisions (`tuning.md`) |
 | Payroll features | Inputs to the uplift model | Used for promise dating and sizing, not as model inputs | They did not beat the champion beyond the noise (`tuning.md`) |
 | Larger model | Not planned | Gemma 4 26B tried and rejected | 24 s a note and runaway replies on a 16 GB GPU, no gain on held-out notes |
