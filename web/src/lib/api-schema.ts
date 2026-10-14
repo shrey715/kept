@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_cases__case_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/customer": {
         parameters: {
             query?: never;
@@ -585,6 +602,23 @@ export interface components {
             transcript: string;
             extraction: components["schemas"]["TextExtraction"] | null;
         };
+        /** CaseHistory */
+        CaseHistory: {
+            /** Events */
+            events: components["schemas"]["TimelineEvent"][];
+            /** Months */
+            months: components["schemas"]["MonthPoint"][];
+            /** Promises Kept */
+            promises_kept: number;
+            /** Promises Broken */
+            promises_broken: number;
+            /** Promises Open */
+            promises_open: number;
+            /** Contacts */
+            contacts: number;
+            /** Right Party Rate */
+            right_party_rate: number | null;
+        };
         /**
          * Channel
          * @enum {string}
@@ -755,6 +789,20 @@ export interface components {
          * @enum {string}
          */
         DpdBucket: "current" | "1-30" | "31-60" | "61-90" | "91-120" | "121+";
+        /**
+         * Driver
+         * @description One feature's push on the recommended action (TreeSHAP), for the full "why" chart; either sign.
+         */
+        Driver: {
+            /** Feature */
+            feature: string;
+            /** Label */
+            label: string;
+            /** Value */
+            value: string | null;
+            /** Pts */
+            pts: number;
+        };
         /**
          * Evidence
          * @description The quote that supports an extracted value. Must be a substring of the redacted input.
@@ -1005,6 +1053,22 @@ export interface components {
          * @enum {string}
          */
         MatchReviewStatus: "auto" | "steward_approved" | "unlinked";
+        /** MonthPoint */
+        MonthPoint: {
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
+            /** Balance */
+            balance: string;
+            /** Paid */
+            paid: string;
+            /** Dpd */
+            dpd: number;
+            /** Salary */
+            salary?: string | null;
+        };
         /**
          * NBACard
          * @description What the agent sees (architecture page, bottom panel).
@@ -1031,6 +1095,11 @@ export interface components {
              * @default []
              */
             reasons: components["schemas"]["Reason"][];
+            /**
+             * Drivers
+             * @default []
+             */
+            drivers: components["schemas"]["Driver"][];
             /** Sizing Text */
             sizing_text?: string | null;
             /** Similar Cases Text */
@@ -1417,6 +1486,31 @@ export interface components {
             /** Confirmed By Agent Id */
             confirmed_by_agent_id?: string | null;
         };
+        /** TimelineEvent */
+        TimelineEvent: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "contact" | "promise";
+            /** Title */
+            title: string;
+            /** Detail */
+            detail?: string | null;
+            /** Amount */
+            amount?: string | null;
+            /**
+             * Tone
+             * @default neutral
+             * @enum {string}
+             */
+            tone: "good" | "bad" | "neutral";
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1513,6 +1607,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NBACard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_cases__case_id__history_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseHistory"];
                 };
             };
             /** @description Validation Error */

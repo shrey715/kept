@@ -3,8 +3,9 @@
 // What the system read from each agent note, with the exact words it relied on highlighted.
 // The agent confirms it as is, or edits a value; edited values carry the agent's word (confidence 1)
 // and flow back into the case (a confirmed hardship signal makes hardship CONFIRMED).
+import { SectionTitle } from "./page-header";
 import { CheckCircledIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Card, Flex, Heading, Select, Switch, Text, TextField, Tooltip } from "@radix-ui/themes";
+import { Badge, Box, Button, Card, Flex, Select, Switch, Text, TextField, Tooltip } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { api, humanize, type NoteExtraction, type TextExtraction } from "@/lib/api";
@@ -146,7 +147,7 @@ export function ExtractionPanel({ items, agentId, demo, onSaved }: { items: Note
   if (!items.length) return null;
   return (
     <Card size="3">
-      <Heading size="4">From the notes</Heading>
+      <SectionTitle eyebrow="Text · local model, quoted" title="From the notes" mb="1" />
       <Text as="p" size="2" color="gray" mt="1" mb="4">
         What was read from each note, with the words it rests on highlighted. Confirm it, or correct it: a confirmed hardship
         signal makes hardship confirmed, and a stop request becomes a hard stop.

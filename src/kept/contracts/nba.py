@@ -9,7 +9,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from kept.config import CALLING_HOURS_END, CALLING_HOURS_START, CONTACT_CAP_7D, TOP_REASONS
+from kept.config import CALLING_HOURS_END, CALLING_HOURS_START, CONTACT_CAP_7D, MAX_DRIVERS, TOP_REASONS
 from kept.contracts.enums import (
     Action,
     Channel,
@@ -149,6 +149,15 @@ class Reason(_Frozen):
     contribution_pts: float  # percentage points toward the recommended action
 
 
+class Driver(_Frozen):
+    """One feature's push on the recommended action (TreeSHAP), for the full "why" chart; either sign."""
+
+    feature: str
+    label: str  # short, fixed label (never LLM text)
+    value: str | None  # the case's value, formatted; None when the case has none
+    pts: float  # percentage points toward (+) or away from (-) the recommended action, over waiting
+
+
 class ProposalStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
@@ -208,6 +217,7 @@ class NBACard(_Frozen):
     proposal: Proposal | None  # None means "no action"
     probabilities: tuple[Alternative, ...]  # recommended first, includes WAIT
     reasons: tuple[Reason, ...] = Field(default=(), max_length=TOP_REASONS)
+    drivers: tuple[Driver, ...] = Field(default=(), max_length=MAX_DRIVERS)  # the full "why", both signs
     sizing_text: str | None = None
     similar_cases_text: str | None = None  # "(descriptive, not causal)"
     legacy_text: str | None = None  # the bank's current strategy for this case, next to ours

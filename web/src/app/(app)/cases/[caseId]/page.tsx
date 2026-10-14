@@ -1,7 +1,8 @@
 "use client";
 
+import { SectionTitle } from "@/components/page-header";
 import { ArrowLeftIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Card, Flex, Grid, Heading, IconButton, Skeleton, Tabs, Text, TextArea, Tooltip } from "@radix-ui/themes";
+import { Box, Button, Callout, Card, Flex, Grid, Skeleton, Tabs, Text, TextArea, Tooltip } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
@@ -9,7 +10,9 @@ import { CustomerPanel } from "@/components/customer-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
-import { ApiError, api, type AuditEvent, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
+import { TierBadge } from "@/components/bits";
+import { HistoryPanel, WhyChart } from "@/components/case-insights";
+import { ApiError, api, money, type AuditEvent, type CaseHistory, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
 import { invalidate, keys, load, peek, set } from "@/lib/live";
 import { useSession } from "@/lib/session";
@@ -36,6 +39,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   const [tab, setTab] = useState("review");
   const [notes, setNotes] = useState<NoteExtraction[]>([]);
   const [calls, setCalls] = useState<CallOut[]>([]);
+  const [history, setHistory] = useState<CaseHistory | null>(() => (me ? (peek<CaseHistory>(keys.history(caseId, me.userId)) ?? null) : null));
 
   const loadAudit = useCallback(() => {
     if (me) api.audit(me, { caseId }).then(setEvents, () => {});
@@ -75,6 +79,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         loadAudit();
         loadNotes();
         if (!demo) api.calls(caseId, me).then(setCalls, () => setCalls([])); // no recordings here: no panel
+        if (!demo) load(keys.history(caseId, me.userId), () => api.history(caseId, me)).then(setHistory, () => setHistory(null));
       },
       (e: Error) => {
         if (!live) return;
@@ -108,22 +113,25 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   if (!me) return null;
   return (
     <Box>
-      <Flex align="center" gap="3" mb="5">
+      <Flex align="end" gap="4" mb="5" wrap="wrap">
         <Tooltip content="Back to the queue">
-          <IconButton variant="ghost" color="gray" asChild>
-            <Link href="/queue" aria-label="Back to the queue">
-              <ArrowLeftIcon />
-            </Link>
-          </IconButton>
+          <Link href="/queue" className="k-round-btn" aria-label="Back to the queue">
+            <ArrowLeftIcon />
+          </Link>
         </Tooltip>
-        <Box>
-          <Heading size="6">{customer?.display_name ?? (error ? "Case" : <Skeleton>Customer name</Skeleton>)}</Heading>
-          <Text size="1" color="gray" className="tabular">{caseId}</Text>
+        <Box style={{ minWidth: 0 }}>
+          <Flex gap="2" align="center" wrap="wrap" mb="2">
+            <span className="k-badge tabular">{caseId}</span>
+            {customer && <span className="k-badge">{customer.max_dpd} days past due</span>}
+            {customer && <span className="k-badge">{money(customer.total_overdue, true)} overdue</span>}
+            {card?.proposal && <TierBadge tier={card.proposal.tier} long={false} />}
+          </Flex>
+          <h1 className="k-display">{customer?.display_name ?? (error ? "Case" : <Skeleton>Customer name</Skeleton>)}</h1>
         </Box>
         <Tooltip content="Recommend again on fresh data">
-          <IconButton ml="auto" variant="soft" color="gray" onClick={() => setNonce((n) => n + 1)} aria-label="Refresh">
+          <button className="k-round-btn" style={{ marginLeft: "auto" }} onClick={() => setNonce((n) => n + 1)} aria-label="Refresh">
             <ReloadIcon />
-          </IconButton>
+          </button>
         </Tooltip>
       </Flex>
 
@@ -142,6 +150,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         <Grid columns={{ initial: "1", md: "3fr 2fr" }} gap="4" align="start">
           <Flex direction="column" gap="4">
             <NbaCard card={card} balance={customer ? Number(customer.total_overdue) : undefined} />
+            <WhyChart card={card} />
             {card.proposal?.sizing && customer && (
               <SizingWhatIf
                 key={card.proposal.proposal_id}
@@ -177,10 +186,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
             )}
             {health && (
               <Card size="3">
-                <Flex align="center" gap="2" mb="2">
-                  <ChatBubbleIcon />
-                  <Heading size="4">Add an agent note</Heading>
-                </Flex>
+                <SectionTitle eyebrow="Agent" title="Add an agent note" icon={<ChatBubbleIcon />} mb="2" />
                 <Text as="p" size="2" color="gray" mb="3">
                   {demo ? (
                     <>
@@ -201,6 +207,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
             )}
             <ExtractionPanel items={notes} agentId={me.userId} demo={demo} onSaved={() => setNonce((n) => n + 1)} />
             <CallsPanel calls={calls} who={me} />
+            {history && <HistoryPanel h={history} />}
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>
@@ -228,7 +235,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                     )}
                     {card.checks.length > 0 && (
                       <Box>
-                        <Text as="div" size="1" weight="medium" color="gray" mb="2">SAFETY CHECKS AT THE PROPOSED TIME</Text>
+                        <Text as="div" className="k-eyebrow" mb="2">Safety checks at the proposed time</Text>
                         <Checks card={card} />
                       </Box>
                     )}
