@@ -8,6 +8,7 @@ No number in kept.tex is typed by hand: rerun this after a report changes and th
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import duckdb
@@ -84,6 +85,28 @@ def main() -> None:
         + ",".join(f"{f['share'] * 100:.0f}/{{{esc(f['label'])}}}" for f in card["promise"]["importance"])
         + "}"
     )
+    # benchmarks: graded right of graded, per suite (the latest bench_run outputs)
+    for suite, name in (("released", "Released"), ("stress", "Stress"), ("drill", "Drill")):
+        rows = json.loads((REPORTS / f"{suite}_answers.json").read_text())
+        graded = [r for r in rows if r.get("correct") is not None]
+        lines.append(f"\\newcommand{{\\K{name}}}{{{sum(r['correct'] is True for r in graded)}/{len(graded)}}}")
+    # tuning: champion and tuned challenger on the test decisions (docs/reports/tuning.md)
+    tune = {m[0]: m[1:] for m in re.findall(r"\| (Champion \(live\)|Tuned challenger) \| ([-\d.]+) \| ([-\d.]+) \| ([-\d.]+) \| ([-\d.]+) \|", (REPO / "docs/reports/tuning.md").read_text())}
+    for key, name in (("Champion (live)", "Champ"), ("Tuned challenger", "Tuned")):
+        call, noise, anyc, _ = tune[key]
+        lines.append(f"\\newcommand{{\\Kq{name}}}{{{call}/{noise}/{anyc}}}")
+    lines.append(
+        "\\newcommand{\\Ktunerows}{"
+        + " ".join(f"{label} & {tune[key][0]} & {tune[key][1]} & {tune[key][2]} \\\\" for key, label in (("Champion (live)", "Champion (live)"), ("Tuned challenger", "Tuned challenger")))
+        + "}"
+    )
+    n_trials = len(re.findall(r"^\| \d+ \| [-\d.]+ \|", (REPO / "docs/reports/tuning.md").read_text(), flags=re.M))
+    lines.append(f"\\newcommand{{\\Ktrials}}{{{n_trials}}}")
+    # drift: the six largest PSIs; fairness: the flagged attribute/outcome pairs
+    top = sorted(drift["rows"], key=lambda r: -r["psi"])[:6]
+    lines.append("\\newcommand{\\Kdrift}{" + ",".join(f"{min(r['psi'], 9.99):.2f}/{{{esc(r['feature'].replace('_', ' '))}}}/{r['status']}" for r in top) + "}")
+    flags = [(a, o, c["ratio"]) for a, v in fair["attributes"].items() for o, c in v["outcomes"].items() if c["flagged"]]
+    lines.append("\\newcommand{\\Kflags}{" + "; ".join(f"{esc(a.replace('_', ' '))}, {esc(o)}: {r:.2f}" for a, o, r in flags) + "}")
     out = Path(__file__).with_name("numbers.tex")
     out.write_text("% written by build_numbers.py from data/exports/reports and the warehouse: don't edit by hand\n" + "\n".join(lines) + "\n")
     print(f"{len(lines)} macros -> {out}")

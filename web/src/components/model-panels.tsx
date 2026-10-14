@@ -66,7 +66,7 @@ function PromiseCard({ p }: { p: Card["promise"] }) {
       </Grid>
       <Grid columns={{ initial: "1", sm: "1fr 1fr" }} gap="4" align="start">
         <Box>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} role="img" aria-label="Reliability diagram">
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 360, height: "auto", display: "block" }} role="img" aria-label="Reliability diagram">
             {[0, 0.25, 0.5, 0.75, 1].map((t) => (
               <g key={t}>
                 <line x1={x(0)} x2={x(1)} y1={y(t)} y2={y(t)} stroke="var(--k-line)" />
@@ -153,7 +153,7 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
         <Stat label="Held-out decisions" value={u.rows_test.toLocaleString("en-CA")} note={`after ${u.cutoff}`} />
         <Stat label="Gate" value="Champion kept" note="a worse model can't go live" />
       </Grid>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }} role="img" aria-label="Qini curve">
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 420, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Qini curve">
         <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(0)} stroke="var(--k-line)" />
         <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(u.random_end)} stroke="var(--gray-9)" strokeDasharray="4 4" />
         <motion.polyline
