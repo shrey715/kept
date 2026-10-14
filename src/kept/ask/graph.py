@@ -21,7 +21,7 @@ from kept.ask.metrics import compile_metric
 from kept.ask.router import route
 from kept.ask.scope import check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import guard_sql
-from kept.ask.templates import date_hints
+from kept.ask.templates import date_hints, resolve_dates
 from kept.config import SQL_CANDIDATES
 from kept.contracts import AskRequest, AskResponse, IntentKind, RedactedText, RefusalReason
 from kept.contracts.ask import GuardResult, Intent
@@ -87,6 +87,46 @@ def ground_filters(intent: Intent, values: Any) -> tuple[Intent, list[str]]:
     return intent.model_copy(update={"filters": filters}), notes
 
 
+def _closest(name: str, allowed: frozenset[str] | set[str]) -> str | None:
+    """The one allowed column a misnamed one most likely means: shared name parts ("agent_site" -> "site",
+    "product" -> "product_type" when that's the only product column). None when nothing or several fit."""
+    if name in allowed:
+        return name
+    parts = set(name.lower().split("_"))
+    scored = [(len(parts & set(a.split("_"))), a) for a in allowed]
+    best = max((s for s, _ in scored), default=0)
+    hits = [a for s, a in scored if s == best and s > 0]
+    return hits[0] if len(hits) == 1 else None
+
+
+def repair_intent(intent: Intent, q: Any) -> tuple[Intent, list[str]]:
+    """Make the router's intent fit the certified query: a date column belongs in the date range, not in the
+    filters or groups; a misnamed column maps to the one it means; what still doesn't fit is dropped. Smaller
+    local models name columns loosely; every change is written to the trace."""
+    notes: list[str] = []
+    filters: dict[str, Any] = {}
+    for col, v in intent.filters.items():
+        to = None if col == q.date_column else _closest(col, q.allowed_filters)
+        if to is None:
+            notes.append(f"Intent repair: dropped filter {col}")
+        else:
+            if to != col:
+                notes.append(f"Intent repair: filter {col} -> {to}")
+            filters[to] = v
+    groups: list[str] = []
+    for col in intent.group_by:
+        to = None if col == q.date_column else _closest(col, q.allowed_group_by)
+        if to is None:
+            notes.append(f"Intent repair: dropped grouping {col}")
+        elif to not in groups:
+            if to != col:
+                notes.append(f"Intent repair: grouping {col} -> {to}")
+            groups.append(to)
+    if not notes:
+        return intent, []
+    return intent.model_copy(update={"filters": filters, "group_by": groups}), notes
+
+
 class AskState(TypedDict, total=False):
     request: AskRequest
     question: RedactedText
@@ -96,6 +136,7 @@ class AskState(TypedDict, total=False):
     intent: Intent
     guarded: GuardResult
     ran: tuple[tuple[str, ...], Any] | None
+    reroute: bool
     response: AskResponse
     trace: Annotated[list[str], operator.add]  # each node appends; LangGraph concatenates
 
@@ -148,6 +189,15 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "trace": ["Route: failed"],
             }
         s["seen"]["intent"] = intent.kind.value
+        spans = resolve_dates(q.text, as_of)
+        filled = (
+            intent.kind is IntentKind.METRIC
+            and intent.date_from is None
+            and intent.date_to is None
+            and len(spans) == 1
+        )
+        if filled:  # the question names one period and the router left the range empty: fill it
+            intent = intent.model_copy(update={"date_from": spans[0][1], "date_to": spans[0][2]})
         out: AskState = {"fresh": fresh, "as_of": as_of, "intent": intent}
         label = f"Route: {intent.kind.value}" + (f" {intent.metric_id}" if intent.metric_id else "")
         if needs_clarification(router_confidence=intent.confidence, candidates_agree=None):
@@ -155,7 +205,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "response": ask._unsure(r, "I'm not sure what you mean.", intent),
                 "trace": [f"{label} (confidence {intent.confidence:.2f}: too low)"],
             }
-        return out | {"trace": [f"{label} (confidence {intent.confidence:.2f})"]}
+        dates = [f"Date check: {spans[0][0]!r} -> {spans[0][1]} to {spans[0][2]}"] if filled else []
+        return out | {"trace": [f"{label} (confidence {intent.confidence:.2f})", *dates]}
 
     def policy(s: AskState) -> AskState:
         resp = ask._policy(s["request"], s["question"], s["intent"], s["as_of"])
@@ -164,18 +215,18 @@ def build_graph(ask: CollectionsAsk) -> Any:
 
     def metric(s: AskState) -> AskState:
         query = ask._queries.get(s["intent"].metric_id or "")
-        intent, note = check_channel(
-            s["request"].question, s["intent"], query.allowed_filters if query else set()
-        )
+        if query is None:  # the router named a metric we don't certify: a lookup can still answer
+            return {"reroute": True, "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"]}
+        intent, repaired = repair_intent(s["intent"], query)
+        intent, note = check_channel(s["request"].question, intent, query.allowed_filters)
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
-        notes = [note] if note else []
-        notes += grounded
+        notes = [*repaired, *([note] if note else []), *grounded]
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
-        except ValueError as e:
+        except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
             return {
-                "response": ask._unsure(s["request"], f"I can't compute that as asked ({e}).", intent),
-                "trace": [*notes, "Certified metric: can't compile"],
+                "reroute": True,
+                "trace": [*notes, f"Certified metric: can't compile ({e}); trying a lookup"],
             }
         guarded = guard_sql(sql, ask._sql_policy())
         if not guarded.allowed:
@@ -274,7 +325,11 @@ def build_graph(ask: CollectionsAsk) -> Any:
     g.add_conditional_edges("scope", after("route"), ["route", END])
     g.add_conditional_edges("route", by_intent, ["policy", "metric", "lookup", END])
     g.add_edge("policy", END)
-    g.add_conditional_edges("metric", after("finish"), ["finish", END])
+    g.add_conditional_edges(
+        "metric",
+        lambda s: END if "response" in s else "lookup" if s.get("reroute") else "finish",
+        ["finish", "lookup", END],
+    )
     g.add_conditional_edges("lookup", after("finish"), ["finish", END])
     g.add_edge("finish", END)
     return g.compile()

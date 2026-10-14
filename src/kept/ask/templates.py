@@ -162,6 +162,9 @@ def resolve_dates(question: str, as_of: date | None) -> list[tuple[str, date, da
     for m in re.finditer(rf"(?<![\d-] ){_M} (\d{{4}})", q):
         y, mo = int(m[2]), _MONTHS[m[1]]
         add(m, date(y, mo, 1), _month_end(y, mo))
+    for m in re.finditer(r"\b(?:in|during|for) (20\d\d)\b", q):  # a bare year: "opened in 2026"
+        y = int(m[1])
+        add(m, date(y, 1, 1), date(y, 12, 31))
     for m in re.finditer(r"the (\d+) days before", q):  # the window just before the last range found
         if out:
             first = min(s for _, s, _ in out)

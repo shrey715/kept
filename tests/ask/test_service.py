@@ -486,3 +486,28 @@ def test_ground_filters_maps_near_misses_and_drops_unknown_values() -> None:
     assert "ptp_type" not in gone.filters  # matches nothing: the comparison covers every group
     same, n = ground_filters(i.model_copy(update={"filters": {"ptp_type": "single"}}), known.get)
     assert same.filters == {"ptp_type": "single"} and n == []
+
+
+def test_repair_intent_fits_loose_column_names_to_the_certified_query() -> None:
+    from types import SimpleNamespace
+
+    from kept.ask.graph import repair_intent
+    from kept.contracts.ask import Intent, IntentKind
+
+    q = SimpleNamespace(
+        date_column="ptp_due_date",
+        allowed_filters=frozenset({"site", "product", "ptp_type"}),
+        allowed_group_by=frozenset({"site", "product", "ptp_type"}),
+    )
+    i = Intent(
+        kind=IntentKind.METRIC,
+        metric_id="broken_promise_rate",
+        filters={"ptp_due_date": "2026-07", "is_open": True},
+        group_by=["agent_site", "ptp_due_date"],
+        confidence=0.9,
+    )
+    fixed, notes = repair_intent(i, q)
+    assert fixed.filters == {} and fixed.group_by == ["site"]
+    assert "Intent repair: grouping agent_site -> site" in notes and len(notes) == 4
+    ok = i.model_copy(update={"filters": {"site": "Halifax"}, "group_by": ["product"]})
+    assert repair_intent(ok, q) == (ok, [])
