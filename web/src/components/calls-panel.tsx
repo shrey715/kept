@@ -40,7 +40,7 @@ export function CallsPanel({ calls, who }: { calls: CallOut[]; who: Who }) {
   if (!calls.length) return null;
   return (
     <Card size="3">
-      <SectionTitle eyebrow="Voice · Whisper on this machine" title="Calls" icon={<SpeakerLoudIcon />} mb="2" />
+      <SectionTitle eyebrow="Calls" title="Call recordings" icon={<SpeakerLoudIcon />} mb="2" />
       <Text as="p" size="2" color="gray" mb="4">
         Transcribed from the recording on this machine (nothing leaves it), then read like a note. For reference: the
         card reads the same call from the bank&apos;s transcript.

@@ -1,8 +1,7 @@
 "use client";
 
-import { SectionTitle } from "@/components/page-header";
-import { ArrowLeftIcon, ChatBubbleIcon, ReloadIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Card, Flex, Grid, Skeleton, Tabs, Text, TextArea, Tooltip } from "@radix-ui/themes";
+import { ArrowLeftIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { Box, Button, Callout, Card, Flex, Grid, Skeleton, Tabs, Text, Tooltip } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -13,6 +12,7 @@ import { ReviewPanel } from "@/components/review-panel";
 import { SizingWhatIf } from "@/components/sizing-whatif";
 import { TierBadge } from "@/components/bits";
 import { BriefCard } from "@/components/brief-card";
+import { NoteComposer } from "@/components/note-composer";
 import { HistoryPanel, WhyChart } from "@/components/case-insights";
 import { ApiError, api, money, type AuditEvent, type CaseHistory, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
@@ -165,7 +165,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
       {card && (
         <Grid columns={{ initial: "1", md: "3fr 2fr" }} gap="4" align="start">
           <Flex direction="column" gap="4">
-            <BriefCard load={loadBrief} eyebrow="Case brief · local model, every claim cited" title="Before you act" />
+            <BriefCard load={loadBrief} eyebrow="Summary" title="Key points" />
             <NbaCard card={card} balance={customer ? Number(customer.total_overdue) : undefined} />
             <WhyChart card={card} />
             {card.proposal?.sizing && customer && (
@@ -201,27 +201,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                 </Callout.Text>
               </Callout.Root>
             )}
-            {health && (
-              <Card size="3">
-                <SectionTitle eyebrow="Agent" title="Add an agent note" icon={<ChatBubbleIcon />} mb="2" />
-                <Text as="p" size="2" color="gray" mb="3">
-                  {demo ? (
-                    <>
-                      In production a note goes through redaction and text extraction (Track C). The demo reads it with
-                      simple rules: try &ldquo;customer says shifts were cut at the plant&rdquo;.
-                    </>
-                  ) : (
-                    <>The note is redacted, then read by the extraction model (a few seconds); the card re-checks after.</>
-                  )}
-                </Text>
-                <TextArea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did the customer say?" />
-                <Flex justify="end" mt="3">
-                  <Button loading={noting} disabled={!note.trim()} onClick={() => void addNote()}>
-                    Save note and re-check
-                  </Button>
-                </Flex>
-              </Card>
-            )}
+            {health && <NoteComposer value={note} onChange={setNote} onSave={() => void addNote()} saving={noting} demo={demo} />}
             <ExtractionPanel items={notes} agentId={me.userId} demo={demo} onSaved={() => setNonce((n) => n + 1)} />
             <CallsPanel calls={calls} who={me} />
             {history && <HistoryPanel h={history} />}

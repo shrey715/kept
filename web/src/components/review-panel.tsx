@@ -28,7 +28,7 @@ function stage(p: Proposal, me: Persona, assignedToMe: boolean): { can: boolean;
   if (p.tier === "green")
     return me.role === "team_lead"
       ? { can: true, label: "Release", note: "Green tier: normally released in the daily batch." }
-      : { can: false, label: "", note: "Green tier: the team lead releases it in the daily batch." };
+      : { can: false, label: "", note: "Green tier: released by the team lead in the daily batch." };
   return me.role === "agent" && assignedToMe
     ? { can: true, label: "Release", note: "Releasing rechecks hard stops, consent, calling hours and the weekly cap." }
     : { can: false, label: "", note: "Amber tier: the assigned agent releases it." };

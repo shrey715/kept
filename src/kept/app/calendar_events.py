@@ -268,3 +268,84 @@ def _counts(cur: duckdb.DuckDBPyConnection, start: date, end: date) -> list[Cale
         for kind, d, extra, n in sorted(rows, key=lambda r: (r[1], r[0]))
         if n >= MIN_GROUP
     ]
+
+
+# ---------------------------------------------------------------- the subscription feed (RFC 5545)
+_LABEL = {
+    "promise_due": "Promise due",
+    "contact": "Send window",
+    "approval_deadline": "Approval deadline",
+    "payday": "Payday",
+    "hardship_review": "Hardship review",
+}
+
+
+def _esc(t: str) -> str:
+    return (
+        t.replace("\\", "\\\\")
+        .replace(";", r"\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _fold(line: str) -> str:
+    """Lines are at most 75 octets (UTF-8); a continuation line starts with one space."""
+    out, cur = [], b""
+    for ch in line:
+        b = ch.encode()
+        if len(cur) + len(b) > (74 if out else 75):
+            out.append(cur.decode())
+            cur = b
+        else:
+            cur += b
+    out.append(cur.decode())
+    return "\r\n ".join(out)
+
+
+def to_ics(events: list[CalendarEvent], web: str, name: str, now: datetime) -> str:
+    """A calendar file Google, Outlook and Apple Calendar subscribe to: all-day events as dates (DTEND the
+    next day), timed ones in UTC (30 minutes when there's no end), each linking back to its case."""
+    stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Kept//Collections calendar//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_esc(name)}",
+        "X-PUBLISHED-TTL:PT1H",
+        "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+    ]
+    for e in events:
+        start = e.start.astimezone(UTC)
+        if e.all_day:
+            when = [
+                f"DTSTART;VALUE=DATE:{start:%Y%m%d}",
+                f"DTEND;VALUE=DATE:{start + timedelta(days=1):%Y%m%d}",
+            ]
+        else:
+            end = (e.end or start + timedelta(minutes=30)).astimezone(UTC)
+            when = [f"DTSTART:{start:%Y%m%dT%H%M%SZ}", f"DTEND:{end:%Y%m%dT%H%M%SZ}"]
+        who = " · ".join(x for x in (e.display_name, e.case_id) if x)
+        link = f"{web.rstrip('/')}/cases/{e.case_id}" if e.case_id else None
+        text = "\n".join(x for x in (e.detail, who, link) if x)
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{e.id}@kept",
+            f"DTSTAMP:{stamp}",
+            *when,
+            f"SUMMARY:{_esc(e.title)}",
+            *([f"DESCRIPTION:{_esc(text)}"] if text else []),
+            *([f"URL:{link}"] if link else []),
+            f"CATEGORIES:{_esc(_LABEL.get(e.kind, e.kind))}",
+            *(
+                [f"STATUS:{'CANCELLED' if e.status in ('expired', 'rejected') else 'CONFIRMED'}"]
+                if e.status
+                else []
+            ),
+            "END:VEVENT",
+        ]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(_fold(x) for x in lines) + "\r\n"

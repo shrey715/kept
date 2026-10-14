@@ -129,12 +129,11 @@ export default function BenchPage() {
       <Rise>
         <PageHeader
           icon={<BarChartIcon />}
-          eyebrow="Benchmark bench"
-          title="Questions in, answers CSV out."
+          eyebrow="Benchmark"
+          title="Benchmark run"
           sub={
             <>
-              Load the organisers&apos; questions (or any CSV in their format), watch each one go down the Ask&apos;s ladder, and export the
-              answers in their template. Each is asked exactly as <Code>kept benchmark</Code> asks it.
+              Load a question set, run each question through the Ask and export the answers in the organisers&apos; template.
             </>
           }
         />

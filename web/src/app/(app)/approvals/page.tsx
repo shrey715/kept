@@ -65,8 +65,8 @@ export default function ApprovalsPage() {
         <PageHeader
           icon={<CheckCircledIcon />}
           eyebrow="Approvals"
-          title="Nothing reaches a customer until the right person releases it."
-          sub="Each release re-runs every safety check on fresh data. Red needs a specialist and a second person."
+          title="Pending approvals"
+          sub="Each release re-runs all safety checks on current data. Red-tier actions require a hardship specialist and a second approver."
         />
       </Rise>
       {error && (

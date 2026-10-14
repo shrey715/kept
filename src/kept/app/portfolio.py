@@ -136,15 +136,15 @@ def _insights(p: Portfolio) -> list[Insight]:
         out.append(
             Insight(
                 id="ab",
-                title="The bank's strategies keep promises at the same rate"
+                title="Contact strategies keep promises at the same rate"
                 if overlap
                 else "One strategy keeps promises at a different rate",
                 body=f"Champion {champ.kept_rate:.1%} of {champ.promises:,} promises kept; {rates}. "
                 + (
-                    "Every 95% interval overlaps the champion's: channel and intensity don't move it;"
-                    " timing does."
+                    "Every 95% interval overlaps the champion's: channel and contact intensity do not"
+                    " change the rate."
                     if overlap
-                    else "At least one interval doesn't overlap the champion's."
+                    else "At least one interval does not overlap the champion's."
                 ),
                 tone="info",
                 sql=SQL_AB,
@@ -155,10 +155,9 @@ def _insights(p: Portfolio) -> list[Insight]:
         out.append(
             Insight(
                 id="red",
-                title=f"{red.balance / p.balance:.0%} of the balance at risk needs a specialist",
-                body=f"{red.cases:,} Red cases hold ${red.balance:,.0f}: hardship or vulnerability, so each"
-                " needs a "
-                "hardship specialist and a second person before anything reaches the customer.",
+                title=f"{red.balance / p.balance:.0%} of the balance at risk requires specialist review",
+                body=f"{red.cases:,} Red cases hold ${red.balance:,.0f}. Each involves hardship or"
+                " vulnerability and requires a hardship specialist and a second approver before any contact.",
                 tone="warn",
                 sql=SQL_SLICES.format(col="tier"),
             )
@@ -168,9 +167,10 @@ def _insights(p: Portfolio) -> list[Insight]:
         out.append(
             Insight(
                 id="bucket",
-                title=f"Most of tonight's expected recovery is in the {top.key} bucket",
+                title=f"The largest share of expected recovery is in the {top.key} bucket",
                 body=f"${top.expected:,.0f} of ${p.expected:,.0f} ({top.expected / p.expected:.0%}) across "
-                f"{top.cases:,} cases: expected recovery is uplift over waiting times the balance.",
+                f"{top.cases:,} cases. Expected recovery is the uplift over no contact"
+                " multiplied by the balance.",
                 tone="good",
                 sql=SQL_SLICES.format(col="current_bucket"),
             )
@@ -179,8 +179,9 @@ def _insights(p: Portfolio) -> list[Insight]:
         out.append(
             Insight(
                 id="stops",
-                title=f"{p.hard_stops:,} cases get no contact at all",
-                body="Cease requests, insolvency holds and deceased flags stop contact before a model runs.",
+                title=f"{p.hard_stops:,} cases are excluded from contact",
+                body="Cease requests, insolvency holds and deceased flags block contact"
+                " before any model runs.",
                 tone="info",
                 sql="select count(*) from nba.cards where hard_stop",
             )

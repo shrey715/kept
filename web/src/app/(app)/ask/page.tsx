@@ -105,8 +105,8 @@ export default function AskPage() {
         <PageHeader
           icon={<ChatBubbleIcon />}
           eyebrow="Collections Ask"
-          title="Ask in plain English. See where every number comes from."
-          sub="Answers are grounded: the SQL and tables behind a number, or the policy section behind a rule, one click from the original."
+          title="Ask a question"
+          sub="Answers cite their source: the query and tables behind each figure, or the policy section behind each rule."
         />
       </Rise>
 
@@ -307,7 +307,7 @@ export default function AskPage() {
         <Flex direction="column" gap="3">
           <Rise>
             <div className="k-card">
-              <SectionTitle eyebrow="Grounding" title="How an answer is grounded" mb="3" />
+              <SectionTitle eyebrow="Method" title="How answers are sourced" mb="3" />
               <Flex direction="column" gap="3">
                 {LADDER.map((s, i) => (
                   <Flex key={s.title} gap="3" align="start">
@@ -330,7 +330,7 @@ export default function AskPage() {
           {history.length > 0 && (
             <Rise>
               <div className="k-card">
-                <SectionTitle eyebrow="History" title="This session" icon={<CounterClockwiseClockIcon />} mb="2" />
+                <SectionTitle eyebrow="History" title="Recent questions" icon={<CounterClockwiseClockIcon />} mb="2" />
                 <Flex direction="column" gap="1">
                   {history.map((h) => (
                     <button key={h} className="k-link" onClick={() => void ask(h)} style={{ border: 0, background: "none", textAlign: "left", padding: "8px 10px", borderRadius: 12, cursor: "pointer", font: "inherit", color: "inherit" }}>

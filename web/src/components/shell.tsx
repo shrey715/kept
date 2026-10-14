@@ -29,14 +29,14 @@ import { NotificationCenter } from "./notifications";
 
 export const NAV = [
   { href: "/queue", tint: "ice" as const, label: "Queue", icon: LayersIcon, blurb: "Today's cases, ranked by expected recovery", show: can.queue },
-  { href: "/portfolio", tint: "butter" as const, label: "Portfolio", icon: DashboardIcon, blurb: "Tonight's book: where the money is, what works", show: can.portfolio },
-  { href: "/approvals", tint: "rose" as const, label: "Approvals", icon: CheckCircledIcon, blurb: "Cards waiting for a person to release them", show: can.approvals },
-  { href: "/calendar", tint: "butter" as const, label: "Calendar", icon: CalendarIcon, blurb: "Promises, send windows, deadlines and paydays coming up", show: () => true },
-  { href: "/audit", tint: "mint" as const, label: "Audit", icon: ReaderIcon, blurb: "Every recommendation, release and override", show: can.audit },
-  { href: "/ask", tint: "lilac" as const, label: "Ask", icon: ChatBubbleIcon, blurb: "Questions in plain English, certified metrics", show: () => true },
-  { href: "/bench", tint: "ice" as const, label: "Bench", icon: BarChartIcon, blurb: "The evidence: benchmark, model and fairness", show: () => true },
+  { href: "/portfolio", tint: "butter" as const, label: "Portfolio", icon: DashboardIcon, blurb: "Portfolio balances, outcomes and model monitoring", show: can.portfolio },
+  { href: "/approvals", tint: "rose" as const, label: "Approvals", icon: CheckCircledIcon, blurb: "Recommended actions awaiting release", show: can.approvals },
+  { href: "/calendar", tint: "butter" as const, label: "Calendar", icon: CalendarIcon, blurb: "Promises, contact windows, deadlines and paydays", show: () => true },
+  { href: "/audit", tint: "mint" as const, label: "Audit", icon: ReaderIcon, blurb: "Recommendations, releases and overrides", show: can.audit },
+  { href: "/ask", tint: "lilac" as const, label: "Ask", icon: ChatBubbleIcon, blurb: "Questions answered from certified metrics and policy", show: () => true },
+  { href: "/bench", tint: "ice" as const, label: "Bench", icon: BarChartIcon, blurb: "Benchmark questions and results", show: () => true },
   { href: "/steward", tint: "ice" as const, label: "Steward", icon: MixerHorizontalIcon, blurb: "Uncertain customer matches to review", show: can.steward },
-  { href: "/demo", tint: "butter" as const, label: "Guided demo", icon: PlayIcon, blurb: "One case, start to finish, in six steps", show: () => true },
+  { href: "/demo", tint: "butter" as const, label: "Guided demo", icon: PlayIcon, blurb: "One case from start to finish, in six steps", show: () => true },
 ];
 
 // phones get the bottom tab bar (globals.css, max-width 767px): menus open above it, not beside it

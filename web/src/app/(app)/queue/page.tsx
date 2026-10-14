@@ -159,7 +159,7 @@ export default function QueuePage() {
                 <div aria-hidden style={{ position: "absolute", inset: 0, background: "linear-gradient(100deg, #1c1917 38%, rgba(28,25,23,.55) 70%, rgba(28,25,23,.1))" }} />
                 <Box style={{ position: "relative", maxWidth: 220 }}>
                   <Text as="div" size="6" style={{ letterSpacing: "-0.03em", lineHeight: 1.1 }}>
-                    {items ? review : "–"} need a specialist and a second person
+                    {items ? review : "–"} require a hardship specialist and a second approver
                   </Text>
                 </Box>
                 <Box mt="auto" pt="4" style={{ position: "relative" }}>

@@ -147,7 +147,7 @@ export function ExtractionPanel({ items, agentId, demo, onSaved }: { items: Note
   if (!items.length) return null;
   return (
     <Card size="3">
-      <SectionTitle eyebrow="Text · local model, quoted" title="From the notes" mb="1" />
+      <SectionTitle eyebrow="Notes" title="Extracted from notes" mb="1" />
       <Text as="p" size="2" color="gray" mt="1" mb="4">
         What was read from each note, with the words it rests on highlighted. Confirm it, or correct it: a confirmed hardship
         signal makes hardship confirmed, and a stop request becomes a hard stop.

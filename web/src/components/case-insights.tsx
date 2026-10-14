@@ -22,7 +22,7 @@ export function WhyChart({ card }: { card: NBACard }) {
     <div className="k-card" style={{ padding: 22 }}>
       <SectionTitle
         eyebrow={`Explainability · ${action}`}
-        title="Every factor, both ways"
+        title="Feature contributions"
         mb="1"
         aside={
           <Flex gap="4">
@@ -32,7 +32,7 @@ export function WhyChart({ card }: { card: NBACard }) {
         }
       />
       <Text as="p" size="1" color="gray" mb="4">
-        Percentage points of paid-in-14-days over waiting, per feature (TreeSHAP on the model that scored it). Fixed labels; no LLM text.
+        Contribution of each feature to the probability of payment within 14 days, in percentage points.
       </Text>
       <Grid columns={{ initial: "1", lg: "minmax(0, 1fr) 260px" }} gap="5" align="center">
         <div role="list" aria-label="Feature contributions">
@@ -79,19 +79,20 @@ export function DriverRadar({ drivers }: { drivers: Driver[] }) {
   const max = Math.max(...fam.map((f) => f.weight), 0.1);
   const top = fam.reduce((a, f) => (f.weight > a.weight ? f : a), fam[0]);
   const [hover, setHover] = useState<string | null>(null);
-  const shown = fam.find((f) => f.name === hover) ?? top;
+  const shown = fam.find((f) => f.name === hover) ?? null; // the pill only answers a hover
   const C = 130;
-  const R = 76;
+  const R = 70;
+  const PAD = 34; // room either side for the axis labels, inside the card
   const at = (i: number, r: number): [number, number] => {
     const a = -Math.PI / 2 + (i * 2 * Math.PI) / fam.length;
     return [C + r * Math.cos(a), C + r * Math.sin(a)];
   };
   const pts = fam.map((f, i) => at(i, 14 + (f.weight / max) * (R - 14)));
-  const ti = fam.indexOf(shown);
-  const [tx, ty] = pts[ti];
+  const ti = shown ? fam.indexOf(shown) : -1;
+  const [tx, ty] = ti >= 0 ? pts[ti] : [C, C];
   return (
     <div className="k-radar t-lilac" aria-label="How hard each family of inputs pushes">
-      <svg viewBox="0 0 260 260" role="img">
+      <svg viewBox={`${-PAD} 0 ${260 + 2 * PAD} 260`} role="img">
         {[0.33, 0.66, 1].map((k) => (
           <polygon key={k} points={fam.map((_, i) => at(i, R * k).join(",")).join(" ")} fill="none" stroke="var(--k-dash)" strokeWidth={k === 1 ? 1.2 : 0.8} />
         ))}
@@ -119,7 +120,7 @@ export function DriverRadar({ drivers }: { drivers: Driver[] }) {
               textAnchor={Math.abs(x - C) < 8 ? "middle" : x > C ? "start" : "end"}
               dominantBaseline="middle"
               className="k-radar-axis"
-              data-on={f.name === shown.name}
+              data-on={f.name === shown?.name}
               onMouseEnter={() => setHover(f.name)}
               onMouseLeave={() => setHover(null)}
             >
@@ -131,16 +132,20 @@ export function DriverRadar({ drivers }: { drivers: Driver[] }) {
           <circle key={i} cx={x} cy={y} r={i === ti ? 4.5 : 3} fill="var(--k-frame)" stroke="var(--t-ink)" strokeWidth={1.5} onMouseEnter={() => setHover(fam[i].name)} onMouseLeave={() => setHover(null)} />
         ))}
       </svg>
-      {shown.weight > 0 && (
+      {shown && shown.weight > 0 && (
         <span
           className="k-pill-tip"
           data-below={ty < C}
-          style={{ left: `${Math.min(74, Math.max(26, (tx / 260) * 100))}%`, top: `${(ty / 260) * 100}%` }}
+          style={{ left: `${Math.min(78, Math.max(22, ((tx + PAD) / (260 + 2 * PAD)) * 100))}%`, top: `${(ty / 260) * 100}%` }}
         >
-          net {shown.net >= 0 ? "+" : "−"}
+          {shown.name}: {shown.net >= 0 ? "+" : "−"}
           {Math.abs(shown.net).toFixed(1)} pts
         </span>
       )}
+      <p className="k-radar-note">
+        Strongest influence: <b>{top.name}</b> ({top.net >= 0 ? "+" : "−"}
+        {Math.abs(top.net).toFixed(1)} pts)
+      </p>
     </div>
   );
 }
@@ -207,7 +212,7 @@ export function HistoryPanel({ h }: { h: CaseHistory }) {
   const shown = all ? h.events : h.events.slice(0, 10);
   return (
     <div className="k-card" style={{ padding: 22 }}>
-      <SectionTitle eyebrow="From the warehouse" title="History" />
+      <SectionTitle eyebrow="History" title="Contacts, promises and balances" />
       <Grid columns={{ initial: "2", sm: "4" }} gap="2" mb="4">
         <Tile label="Contacts" value={String(h.contacts)} />
         <Tile label="Reached the customer" value={h.right_party_rate == null ? "—" : `${Math.round(h.right_party_rate * 100)}%`} />

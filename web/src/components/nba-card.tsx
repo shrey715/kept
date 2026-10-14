@@ -111,7 +111,7 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
       {card.reasons.length > 0 && (
         <motion.div layout transition={spring}>
           <Card size="3">
-            <SectionTitle eyebrow="Top reasons · TreeSHAP" title="Why this action" />
+            <SectionTitle eyebrow="Drivers" title="Why this action" />
             <Flex direction="column" gap="4">
               {card.reasons.map((r, i) => (
                 <motion.div key={r.feature} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...spring, delay: 0.1 + i * 0.08 }}>
@@ -132,10 +132,10 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
       {card.probabilities.length > 0 && (
         <motion.div layout transition={spring}>
           <Card size="3">
-            <SectionTitle eyebrow="Uplift model" title="Chance of a payment within 14 days" mb="0" />
+            <SectionTitle eyebrow="Expected outcome" title="Probability of payment within 14 days" mb="0" />
             {wait !== undefined && (
               <Text as="p" size="2" color="gray" mt="1" mb="4">
-                The tick marks doing nothing ({pct(wait)}). Hover a bar for detail; click two to compare.
+                Tick marks show the outcome with no contact ({pct(wait)}). Hover a bar for detail; select two to compare.
               </Text>
             )}
             <Flex direction="column" gap="1">
