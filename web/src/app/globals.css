@@ -1404,39 +1404,97 @@ html {
 }
 
 /* the Ask's path through the graph */
-.k-trace {
+/* the Ask's path as a flow: tinted tiles on a dotted canvas, joined by connectors */
+.k-flow-card {
+  padding: 16px 18px 18px;
+  background-color: var(--k-card);
+  background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px);
+  background-size: 16px 16px;
+}
+.k-flow {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 8px 0 0;
+  align-items: stretch;
+  row-gap: 14px;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
-.k-trace li {
-  display: inline-flex;
+.k-flow li {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px 6px 6px;
+  flex: 1 1 118px;
+  min-width: 0;
+  max-width: 190px;
+}
+.k-flow-link {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 2px;
+  background: var(--k-dash);
+}
+.k-flow-link::after {
+  /* the connector's round handle, as on the studio's canvas */
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 999px;
   background: var(--k-chip);
-  font-size: 12.5px;
+  box-shadow: 0 0 0 1.5px var(--k-dash);
 }
-.k-trace li b {
-  font-weight: 600;
-}
-.k-trace-n {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 999px;
-  background: var(--k-strong);
-  color: var(--k-on-strong);
-  font: 700 10px/1 var(--default-font-family);
-}
-.k-trace li[data-bad="true"] .k-trace-n {
+.k-flow li[data-bad="true"] .k-flow-link {
   background: var(--k-red);
-  color: #fff;
+}
+.k-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 92px;
+  min-height: 112px;
+  padding: 12px 10px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  text-align: center;
+  color: var(--gray-12);
+}
+.k-node .k-chip {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 4px;
+}
+.k-node b {
+  font: 600 12.5px/1.25 var(--default-font-family);
+}
+.k-node .sub {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--gray-11);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.k-flow-key {
+  width: 10px;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--t-2);
+}
+@media (max-width: 767px) {
+  .k-flow li {
+    flex-basis: 104px;
+  }
+  .k-flow-link {
+    width: 14px;
+  }
 }
 
 /* ---------------------------------------------------------------- cited briefs */
