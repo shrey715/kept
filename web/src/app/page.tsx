@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowDownIcon, ArrowRightIcon, CheckIcon, MoonIcon, SunIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Button, Container, Flex, Grid, Heading, IconButton, Text, Theme, Tooltip } from "@radix-ui/themes";
+import { ArrowDownIcon, ArrowRightIcon, CheckIcon, LockClosedIcon, MoonIcon, ReaderIcon, SunIcon } from "@radix-ui/react-icons";
+import { Box, Container, Flex, Grid, Heading, Text, Theme, Tooltip } from "@radix-ui/themes";
 import {
   motion,
   useInView,
@@ -16,7 +16,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useRef, useState } from "react";
-import { Wordmark } from "@/components/bits";
+import { LogoMark, MapleMark, Wordmark } from "@/components/bits";
 import { Marquee, Paper, SplitText, Stamp } from "@/components/ledger";
 import { CountUp } from "@/components/motion";
 import { BACKGROUND, SYSTEMS } from "@/components/landing/story-scene";
@@ -63,8 +63,7 @@ export default function Landing() {
   const story = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: story, offset: ["start start", "end end"] });
   const p = useSpring(scrollYProgress, { stiffness: 140, damping: 32, mass: 0.6 });
-  const { scrollYProgress: page, scrollY } = useScroll(); // whole page: the reading-progress line
-  const barOpacity = useTransform(scrollY, [20, 120], [0, 1]);
+  const { scrollYProgress: page } = useScroll(); // whole page: the reading-progress line
 
   const heroOpacity = useTransform(p, [0, 0.09], [1, 0]);
   const l1 = useTransform(p, [0, 0.1], [0, -140]);
@@ -88,7 +87,7 @@ export default function Landing() {
   };
 
   return (
-    <Theme appearance={light ? "light" : "dark"} accentColor="ruby" grayColor="sand" radius="medium" hasBackground={false}>
+    <Theme appearance={light ? "light" : "dark"} accentColor="ruby" grayColor="sand" radius="full" hasBackground={false}>
       <Box style={{ background: bg, color: "var(--gray-12)", transition: "background 300ms" }}>
         <motion.div
           aria-hidden
@@ -97,36 +96,30 @@ export default function Landing() {
         />
         {/* ------------------------------------------------ top bar */}
         <Box position="fixed" top="0" left="0" right="0" style={{ zIndex: 30 }}>
-          {/* frosted bar fades in once the page moves, so nothing scrolls under bare buttons */}
-          <motion.div
-            aria-hidden
-            className="glass"
-            style={{ position: "absolute", inset: 0, opacity: barOpacity, background: `${bg}c7`, borderBottom: "1px solid var(--gray-a4)" }}
-          />
           <Grid columns="1fr auto 1fr" align="center" gap="4" px={{ initial: "4", md: "6" }} style={{ height: 64, position: "relative" }}>
-            <Flex align="center" gap="3">
+            <Flex align="center" gap="3" className="k-navpill glass" style={{ width: "fit-content", padding: "6px 16px 6px 6px", gap: 12 }}>
               <Wordmark />
               <Box display={{ initial: "none", md: "block" }}>
                 <Text size="1" style={{ color: "var(--gray-10)", letterSpacing: "0.02em" }}>Promises customers can keep</Text>
               </Box>
             </Flex>
-            <Flex gap="1" align="center" display={{ initial: "none", md: "flex" }} asChild>
-              <nav aria-label="Sections">
-                <Button size="2" variant="ghost" color="gray" onClick={() => jump(0.2)}>The story</Button>
-                <Button size="2" variant="ghost" color="gray" onClick={() => document.getElementById("numbers")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>The numbers</Button>
-                <Button size="2" variant="ghost" color="gray" onClick={() => document.getElementById("safety")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>Safety</Button>
-                <Button size="2" variant="ghost" color="gray" onClick={demo}>Guided demo</Button>
+            <Flex align="center" display={{ initial: "none", md: "flex" }} asChild>
+              <nav aria-label="Sections" className="k-navpill glass">
+                <button className="k-tab" onClick={() => jump(0.2)}>The story</button>
+                <button className="k-tab" onClick={() => document.getElementById("numbers")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>The numbers</button>
+                <button className="k-tab" onClick={() => document.getElementById("safety")?.scrollIntoView({ behavior: still ? "auto" : "smooth" })}>Safety</button>
+                <button className="k-tab" onClick={demo}>Guided demo</button>
               </nav>
             </Flex>
             <Flex gap="3" align="center" justify="end">
               <Tooltip content={light ? "Dark mode" : "Light mode"}>
-                <IconButton size="2" variant="ghost" color="gray" aria-label="Toggle colour mode" onClick={() => setTheme(light ? "dark" : "light")}>
+                <button className="k-round-btn" aria-label="Toggle colour mode" onClick={() => setTheme(light ? "dark" : "light")}>
                   {light ? <MoonIcon /> : <SunIcon />}
-                </IconButton>
+                </button>
               </Tooltip>
-              <Button size="2" variant="solid" radius="full" onClick={enter}>
+              <button className="k-strong-btn" onClick={enter}>
                 {ready && me ? `Continue as ${me.name.split(" ")[0]}` : "Sign in"} <ArrowRightIcon />
-              </Button>
+              </button>
             </Flex>
           </Grid>
         </Box>
@@ -146,12 +139,18 @@ export default function Landing() {
             {/* hero */}
             <motion.div style={{ opacity: heroOpacity, position: "absolute", inset: 0, pointerEvents: "none" }}>
               <Flex direction="column" justify="center" px="5" style={{ height: "100%", maxWidth: 1320, margin: "0 auto" }}>
-                <Badge size="2" radius="full" variant="surface" style={{ width: "fit-content" }}>
-                  CIBC Collections Hackathon · Team Sharpe Shooters
-                </Badge>
-                <Heading as="h1" mt="5" style={{ fontSize: "clamp(48px, 9vw, 128px)", lineHeight: 0.92, letterSpacing: "-0.035em" }}>
+                <span className="k-badge" style={{ width: "fit-content", height: 36, padding: "0 14px 0 6px", borderRadius: 999, fontSize: 12, fontWeight: 500, gap: 8 }}>
+                  <LogoMark size={24} /> CIBC Collections Hackathon · Team Sharpe Shooters
+                </span>
+                <Heading as="h1" mt="5" style={{ fontSize: "clamp(48px, 9vw, 128px)", fontWeight: 400, lineHeight: 0.94, letterSpacing: "-0.05em" }}>
                   <motion.span style={{ display: "block", x: l1 }}><SplitText text="Promises" delay={0.3} /></motion.span>
-                  <motion.span style={{ display: "block", x: l2 }}><SplitText text="customers" delay={0.45} /></motion.span>
+                  <motion.span style={{ display: "block", x: l2 }}>
+                    <SplitText text="customers" delay={0.45} />
+                    <motion.span className="k-inline-chip hi" aria-hidden initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1, type: "spring", stiffness: 300, damping: 18 }}
+                      style={{ width: "0.95em", height: "0.52em", marginLeft: "0.16em", verticalAlign: "0.14em" }}>
+                      <MapleMark size={36} />
+                    </motion.span>
+                  </motion.span>
                   <motion.span style={{ display: "block", x: l3, color: "var(--accent-10)" }}>
                     <SplitText text="can keep." delay={0.6} />
                   </motion.span>
@@ -162,8 +161,10 @@ export default function Landing() {
                     released by a person.
                   </Text>
                   <Flex gap="3" mt="6" wrap="wrap">
-                    <Button size="4" onClick={demo}>Run the guided demo <ArrowRightIcon /></Button>
-                    <Button size="4" variant="surface" color="gray" onClick={() => jump(0.2)}>Scroll the story <ArrowDownIcon /></Button>
+                    <button className="k-strong-btn" style={{ height: 52, padding: "0 26px", fontSize: 16 }} onClick={demo}>Run the guided demo <ArrowRightIcon /></button>
+                    <button className="k-strong-btn" style={{ height: 52, padding: "0 26px", fontSize: 16, background: "var(--k-chip)", color: "var(--gray-12)" }} onClick={() => jump(0.2)}>
+                      Scroll the story <ArrowDownIcon />
+                    </button>
                   </Flex>
                 </motion.div>
               </Flex>
@@ -207,18 +208,21 @@ export default function Landing() {
         </Box>
 
         {/* ------------------------------------------------ the ledger: numbers as entries */}
-        <Container id="numbers" size="3" px="5" py="9" style={{ scrollMarginTop: 72 }}>
-          <Heading size="9" className="serif" style={{ lineHeight: 1 }}>
-            <SplitText text="The books, as we found them." />
-          </Heading>
-          <Ledger />
+        <Container id="numbers" size="4" px="5" py="9" style={{ scrollMarginTop: 72 }}>
+          <div className="k-card" style={{ padding: "clamp(24px, 4vw, 48px)", borderRadius: 32 }}>
+            <SectionChip icon={<ReaderIcon />} label="The data" />
+            <Heading size="9" mt="4" style={{ lineHeight: 1 }}>
+              <SplitText text="The books, as we found them." />
+            </Heading>
+            <Ledger />
+          </div>
         </Container>
 
         {/* ------------------------------------------------ safe by construction, as a receipt */}
         <Container id="safety" size="4" px="5" pb="9" style={{ scrollMarginTop: 72 }}>
-          <Grid columns={{ initial: "1", md: "1fr 380px" }} gap="8" align="center">
+          <Grid className="k-card" columns={{ initial: "1", md: "1fr 380px" }} gap="8" align="center" style={{ padding: "clamp(24px, 4vw, 48px)", borderRadius: 32 }}>
             <Box>
-              <Text size="2" weight="bold" style={{ color: "var(--accent-10)", letterSpacing: "0.12em" }}>SAFE BY CONSTRUCTION</Text>
+              <SectionChip icon={<LockClosedIcon />} label="Safe by construction" />
               <Heading size="8" mt="3" style={{ lineHeight: 1.05 }}>
                 <SplitText text="Rules run before the model and again at release. The model never sends anything." stagger={0.03} />
               </Heading>
@@ -243,13 +247,24 @@ export default function Landing() {
   );
 }
 
+function SectionChip({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <Flex align="center" gap="3">
+      <span className="k-chip">{icon}</span>
+      <Text size="2" weight="medium">{label}</Text>
+    </Flex>
+  );
+}
+
 function Chapter({ p, from, to, chapter }: { p: MotionValue<number>; from: number; to: number; chapter: (typeof CHAPTERS)[number] }) {
   const opacity = useBand(p, from, to);
   const y = useTransform(p, [from - 0.04, from, to - 0.04, to], [40, 0, 0, -40]);
   return (
     <motion.div style={{ opacity, y, position: "absolute", left: "max(20px, 6vw)", bottom: "14vh", maxWidth: 520, pointerEvents: "none" }}>
-      <Text className="serif" style={{ fontSize: 72, lineHeight: 1, color: "var(--accent-a8)" }}>{chapter.n}</Text>
-      <Heading size="8" mt="2" style={{ lineHeight: 1.05 }}>{chapter.title}</Heading>
+      <span className="k-badge" style={{ height: 32, padding: "0 12px", borderRadius: 999, background: "var(--k-hi)", color: "var(--k-hi-ink)", fontSize: 12 }}>
+        Chapter {chapter.n}
+      </span>
+      <Heading size="8" mt="3" style={{ lineHeight: 1.05 }}>{chapter.title}</Heading>
       <Text as="p" size="4" mt="3" style={{ color: "var(--gray-11)" }}>{chapter.body}</Text>
     </motion.div>
   );
@@ -380,8 +395,10 @@ function PromiseNote({ onDemo, onEnter }: { onDemo: () => void; onEnter: () => v
         </Paper>
       </motion.div>
       <Flex gap="3" justify="center" mt="7" wrap="wrap">
-        <Button size="4" onClick={onDemo}>Run the guided demo <ArrowRightIcon /></Button>
-        <Button size="4" variant="surface" color="gray" onClick={onEnter}>Open the workspace</Button>
+        <button className="k-strong-btn" style={{ height: 52, padding: "0 26px", fontSize: 16 }} onClick={onDemo}>Run the guided demo <ArrowRightIcon /></button>
+        <button className="k-strong-btn" style={{ height: 52, padding: "0 26px", fontSize: 16, background: "var(--k-chip)", color: "var(--gray-12)" }} onClick={onEnter}>
+          Open the workspace
+        </button>
       </Flex>
     </div>
   );
