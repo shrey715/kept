@@ -133,6 +133,15 @@ body {
   width: 18px;
   height: 18px;
 }
+.k-rail-avatar {
+  display: grid;
+  place-items: center;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
 .k-rail-active {
   position: absolute;
   inset: 0;
@@ -188,6 +197,11 @@ body {
   .k-rail .rt-AvatarRoot {
     width: 36px;
     height: 36px;
+  }
+  .k-rail-avatar {
+    margin: 0;
+    width: 42px;
+    height: 42px;
   }
   .k-main {
     padding: 0;

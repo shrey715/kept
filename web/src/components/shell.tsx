@@ -91,7 +91,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </Tooltip>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger>
-            <button aria-label={`Account: ${me.name}`} style={{ background: "none", border: 0, padding: 0, marginTop: 6, cursor: "pointer" }}>
+            <button aria-label={`Account: ${me.name}`} className="k-rail-avatar">
               <Avatar size="3" fallback={initials(me.name)} radius="full" color="ruby" variant="solid" />
             </button>
           </DropdownMenu.Trigger>
