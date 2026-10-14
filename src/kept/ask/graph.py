@@ -10,6 +10,7 @@ the graph calls the same functions the hand-written pipeline did (kept.ask.servi
 from __future__ import annotations
 
 import operator
+import re
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
@@ -27,6 +28,63 @@ from kept.contracts.ask import GuardResult, Intent
 
 if TYPE_CHECKING:
     from kept.ask.service import CollectionsAsk
+
+
+# words that name one contact channel; the router is told to filter on them, the check makes sure it did
+_CHANNEL_WORDS = {
+    "call": re.compile(r"\b(calls?|phone)\b", re.I),
+    "sms": re.compile(r"\b(sms|texts?|text messages?)\b", re.I),
+    "email": re.compile(r"\be-?mails?\b", re.I),
+}
+
+
+def check_channel(
+    question: str, intent: Intent, allowed: frozenset[str] | set[str]
+) -> tuple[Intent, str | None]:
+    """A metric question that names exactly one channel gets that channel filter if the router left it out
+    (the LLM sometimes keeps "outbound" and drops "calls"). Returns the intent and a trace note, or None."""
+    if "channel" not in allowed or "channel" in intent.filters:
+        return intent, None
+    named = [c for c, w in _CHANNEL_WORDS.items() if w.search(question)]
+    if len(named) != 1:
+        return intent, None
+    fixed = intent.model_copy(update={"filters": {**intent.filters, "channel": named[0]}})
+    return fixed, f"Intent check: added channel = {named[0]} (the question names it)"
+
+
+def ground_filters(intent: Intent, values: Any) -> tuple[Intent, list[str]]:
+    """Check each text filter value against the column's real values (`values(col)`: a list, or None when
+    unknown). A near miss maps to what's stored ("instalment" -> "instalment_1_of_n"); a value matching
+    nothing is dropped, and a filter left empty goes (the question then covers every group, which a
+    comparison wants)."""
+    filters: dict[str, Any] = dict(intent.filters)
+    notes: list[str] = []
+    for col, v in intent.filters.items():
+        vals: list[Any] = list(v) if isinstance(v, list) else [v]
+        if not all(isinstance(x, str) for x in vals):
+            continue
+        known = values(col)
+        if not known:
+            continue
+        lower = {str(k).lower(): k for k in known}
+        out: list[Any] = []
+        for x in vals:
+            if x.lower() in lower:
+                out.append(lower[x.lower()])
+                continue
+            near = [k for low, k in lower.items() if low.startswith(x.lower()) or x.lower() in low]
+            out += near
+            notes.append(
+                f"Value check: {col} '{x}' -> {', '.join(map(str, near)) or 'no such value, dropped'}"
+            )
+        out = list(dict.fromkeys(out))
+        if not out:
+            filters.pop(col)
+        else:
+            filters[col] = out if isinstance(v, list) or len(out) > 1 else out[0]
+    if filters == intent.filters:
+        return intent, []
+    return intent.model_copy(update={"filters": filters}), notes
 
 
 class AskState(TypedDict, total=False):
@@ -105,12 +163,19 @@ def build_graph(ask: CollectionsAsk) -> Any:
         return {"response": resp, "trace": [f"Policy search: {n} section(s) cited, narrated from their text"]}
 
     def metric(s: AskState) -> AskState:
+        query = ask._queries.get(s["intent"].metric_id or "")
+        intent, note = check_channel(
+            s["request"].question, s["intent"], query.allowed_filters if query else set()
+        )
+        intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
+        notes = [note] if note else []
+        notes += grounded
         try:
-            sql, params = compile_metric(s["intent"], ask._metrics, ask._queries)
+            sql, params = compile_metric(intent, ask._metrics, ask._queries)
         except ValueError as e:
             return {
-                "response": ask._unsure(s["request"], f"I can't compute that as asked ({e}).", s["intent"]),
-                "trace": ["Certified metric: can't compile"],
+                "response": ask._unsure(s["request"], f"I can't compute that as asked ({e}).", intent),
+                "trace": [*notes, "Certified metric: can't compile"],
             }
         guarded = guard_sql(sql, ask._sql_policy())
         if not guarded.allowed:
@@ -118,13 +183,36 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "response": svc._refuse(
                     RefusalReason.SQL_GUARD, guarded.reason or "The query is not allowed."
                 ),
-                "trace": ["SQL guard: blocked"],
+                "trace": [*notes, "SQL guard: blocked"],
             }
         return {
+            "intent": intent,
             "guarded": guarded,
             "ran": ask._run(guarded, params),
-            "trace": [f"Certified metric: {s['intent'].metric_id}", "SQL guard: allowed"],
+            "trace": [*notes, f"Certified metric: {intent.metric_id}", "SQL guard: allowed"],
         }
+
+    seen_values: dict[tuple[str, str], list[Any] | None] = {}
+
+    def column_values(metric_id: str, col: str) -> list[Any] | None:
+        """The values a certified metric's column takes (the metric grouped by it), cached; None: unknown."""
+        key = (metric_id, col)
+        if key not in seen_values:
+            seen_values[key] = None
+            q = ask._queries.get(metric_id)
+            if q is not None and col in q.allowed_group_by:
+                try:
+                    probe = Intent(
+                        kind=IntentKind.METRIC, metric_id=metric_id, group_by=[col], confidence=1.0
+                    )
+                    sql, params = compile_metric(probe, ask._metrics, ask._queries)
+                    guarded = guard_sql(sql, ask._sql_policy())
+                    ran = ask._run(guarded, params) if guarded.allowed else None
+                    if ran is not None and len(ran[1]) <= 200:
+                        seen_values[key] = [r[0] for r in ran[1] if r[0] is not None]
+                except Exception:  # unknown values: the filter is left as the router wrote it
+                    pass
+        return seen_values[key]
 
     def lookup(s: AskState) -> AskState:
         outcome = ask._lookup(s["request"], s["question"], s["intent"], s["as_of"])

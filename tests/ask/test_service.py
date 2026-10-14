@@ -446,3 +446,43 @@ def test_every_answer_carries_the_path_the_graph_took(build) -> None:  # type: i
     assert "SQL guard: allowed" in a.trace and a.trace[-1].startswith("Narration")
     refused = svc.ask(_req("promise kept rate by gender"))
     assert refused.kind == "refusal" and refused.trace[-1].startswith("Safety rules: refused")
+
+
+def test_check_channel_adds_the_channel_the_question_names() -> None:
+    from kept.ask.graph import check_channel
+    from kept.contracts.ask import Intent, IntentKind
+
+    i = Intent(
+        kind=IntentKind.METRIC, metric_id="cost_per_rpc", filters={"direction": "outbound"}, confidence=1.0
+    )
+    fixed, note = check_channel(
+        "cost per right-party contact on outbound calls last week", i, {"channel", "direction"}
+    )
+    assert fixed.filters == {"direction": "outbound", "channel": "call"} and note
+    assert (
+        check_channel("cost per contact by calls and emails", i, {"channel"})[1] is None
+    )  # two channels: ask
+    assert check_channel("cost per right-party contact on calls", i, {"direction"})[1] is None  # not allowed
+    set_ = i.model_copy(update={"filters": {"channel": "sms"}})
+    assert check_channel("outbound calls", set_, {"channel"})[0] is set_  # the router's choice stands
+
+
+def test_ground_filters_maps_near_misses_and_drops_unknown_values() -> None:
+    from kept.ask.graph import ground_filters
+    from kept.contracts.ask import Intent, IntentKind
+
+    known = {"ptp_type": ["single", "instalment_1_of_n"], "is_open": [True, False]}
+    i = Intent(
+        kind=IntentKind.METRIC,
+        metric_id="promise_kept_rate",
+        filters={"ptp_type": ["single", "instalment"], "is_open": True},
+        group_by=["ptp_type"],
+        confidence=0.9,
+    )
+    fixed, notes = ground_filters(i, known.get)
+    assert fixed.filters == {"ptp_type": ["single", "instalment_1_of_n"], "is_open": True}
+    assert notes == ["Value check: ptp_type 'instalment' -> instalment_1_of_n"]
+    gone, _ = ground_filters(i.model_copy(update={"filters": {"ptp_type": "weekly"}}), known.get)
+    assert "ptp_type" not in gone.filters  # matches nothing: the comparison covers every group
+    same, n = ground_filters(i.model_copy(update={"filters": {"ptp_type": "single"}}), known.get)
+    assert same.filters == {"ptp_type": "single"} and n == []
