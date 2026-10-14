@@ -486,8 +486,63 @@ select p.ptp_id, p.ptp_channel, p.ptp_type, p.product, p.payment_method_promised
        tx.debt30, tx.since_pay, tx.in30 - tx.out30 net30, p.overdue / nullif(tx.in30, 0) od_in
 from p left join ch using (ptp_id) left join sn using (ptp_id) left join cu using (ptp_id) left join bu using (ptp_id)
 left join tx using (ptp_id)"""
+SQL_HISTORY = """
+with p as (select ptp_id, account_id, crm_customer_id, ptp_created_ts c, cast(ptp_created_ts as date) cd,
+                  cast(ptp_created_ts as date) - 100 cd100
+           from silver.promises_to_pay where ptp_status in ('kept','partially_kept','broken')),
+cs as (select p.ptp_id, count(*) c_n,
+          avg(s.min_paid_flag::int) filter (where s.due_date >= p.cd - 190) c_min6, avg(s.min_paid_flag::int) c_min12,
+          avg(s.paid_in_full_flag::int) filter (where s.due_date >= p.cd - 190) c_full6,
+          avg(least(coalesce(s.amount_paid_by_due, 0) / nullif(s.minimum_due, 0), 3)) filter (where s.due_date >= p.cd - 190) c_paycov6,
+          max(s.cycles_delinquent_at_statement) c_maxdel12,
+          arg_max(s.closing_balance / nullif(s.credit_limit_at_statement, 0), s.statement_date) c_util,
+          arg_max(s.closing_balance, s.statement_date) / nullif(arg_min(s.closing_balance, s.statement_date), 0) c_baltrend,
+          sum(s.cash_advances_amount) filter (where s.due_date >= p.cd - 190) c_cash6,
+          sum(s.purchases_amount) filter (where s.due_date >= p.cd - 100) c_purch3,
+          avg(s.days_late) filter (where s.due_date < p.cd - 35) c_late12
+       from p join silver.card_statements s on s.card_account_id = p.account_id
+        and s.due_date < p.cd and s.due_date >= p.cd - 370 group by 1),
+li as (select p.ptp_id, count(*) l_n,
+          avg((i.paid_date is not null and i.paid_date <= i.due_date)::int) l_ontime12,
+          avg((i.paid_date is null or i.paid_date >= p.cd)::int) l_unpaid12,
+          count(*) filter (where i.pad_result = 'nsf' and i.pad_attempt_date < p.cd and i.pad_attempt_date >= p.cd - 92) l_nsf3,
+          count(*) filter (where i.pad_result = 'nsf' and i.pad_attempt_date < p.cd) l_nsf12,
+          avg(case when i.paid_date < p.cd then date_diff('day', i.due_date, i.paid_date) end) l_late,
+          max(i.restructured_flag::int) l_restr, max(i.deferred_flag::int) l_defer
+       from p join silver.loan_instalments i on i.loan_id = p.account_id
+        and i.due_date < p.cd and i.due_date >= p.cd - 370 group by 1),
+sn as (select p.ptp_id, regr_slope(s.dpd, epoch(s.month_end_date) / 86400 / 30) s_dpd_slope,
+          avg(least(s.payment_made / nullif(s.minimum_due, 0), 3)) s_paycov6,
+          regr_slope(s.balance, epoch(s.month_end_date) / 86400 / 30) s_bal_slope,
+          count(distinct s.account_id) s_accts, sum((s.dpd > 0)::int) s_delinq_months
+       from p join silver.account_monthly_snapshot s on s.crm_customer_id = p.crm_customer_id
+        and s.month_end_date < p.cd and s.month_end_date >= p.cd - 190 group by 1),
+pp as (select a.ptp_id, count(*) p_all, count(*) filter (where b.ptp_status = 'cancelled') p_cancel,
+          count(*) filter (where b.ptp_status = 'partially_kept') p_part,
+          date_diff('day', max(b.ptp_created_ts), any_value(a.c)) p_since_last
+       from p a join silver.promises_to_pay b on b.crm_customer_id = a.crm_customer_id and b.ptp_created_ts < a.c
+        and (b.status_ts < a.c or b.ptp_status = 'open') group by 1),
+sal as (select p.ptp_id, h.first_credit_date, h.last_credit_date, h.credit_count, h.credit_amount_total::double amt,
+               h.gap_flag, h.employer_flag, p.cd, p.cd100
+        from p join silver.salary_credit_history h on h.crm_customer_id = p.crm_customer_id
+         and h.last_credit_date < p.cd and h.last_credit_date >= p.cd - 200),
+py as (select ptp_id, date_diff('day', max(last_credit_date), any_value(cd)) pay_days_since,
+          date_diff('day', max(last_credit_date), any_value(cd))
+            - avg(date_diff('day', first_credit_date, last_credit_date) / greatest(credit_count - 1, 1)) pay_delay,
+          sum(gap_flag::int) filter (where last_credit_date >= cd100) pay_gaps3,
+          arg_max(amt, last_credit_date) / nullif(avg(amt), 0) pay_change, avg(credit_count) pay_count,
+          max((employer_flag = 'Y')::int) pay_employer
+       from sal group by 1)
+select p.ptp_id, cs.* exclude (ptp_id), li.* exclude (ptp_id), sn.* exclude (ptp_id), pp.* exclude (ptp_id),
+       py.* exclude (ptp_id), extract(month from p.c) mon, extract(dow from p.c) wd
+from p left join cs using (ptp_id) left join li using (ptp_id) left join sn using (ptp_id) left join pp using (ptp_id)
+left join py using (ptp_id)"""
 CATEGORIES = ("ptp_channel", "ptp_type", "product", "payment_method_promised", "emp")
-RECENT_DAYS = 90  # the kept rate fell from ~63% to ~35% in mid-2026: the last 90 days before the cut rank best
+# the kept rate fell from ~63% to ~35% in mid-2026, so recent promises count more: weight 0.5 ** (age / HALF_LIFE_DAYS).
+# The half-life and tree settings were chosen on the 45 days before the cut (validation), then the test was scored once.
+HALF_LIFE_DAYS = 30
+GBM_WIDE = dict(n_estimators=1500, num_leaves=31, min_child_samples=300, learning_rate=0.01, subsample=0.8,
+                subsample_freq=1, colsample_bytree=0.8, verbose=-1, deterministic=True, force_row_wise=True)
 
 
 def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
@@ -496,7 +551,7 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
     from scipy.stats import rankdata
     from sklearn.ensemble import RandomForestClassifier
 
-    w = con.execute(SQL_WIDE).df()
+    w = con.execute(SQL_WIDE).df().merge(con.execute(SQL_HISTORY).df(), on="ptp_id")
     r = rows.drop(columns=["amount_ratio"], errors="ignore").merge(w, on="ptp_id")
     for c in CATEGORIES:
         r[c] = r[c].astype("category")
@@ -510,11 +565,9 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
     h = h[pd.to_datetime(h.score_date) < pd.to_datetime(h.od)].reset_index(drop=True)  # as §6
     cut = h.created.quantile(0.5)
     test = h[h.created >= cut].reset_index(drop=True)
-    fit = ((r.created < cut) & (r.created >= cut - pd.Timedelta(days=RECENT_DAYS))).to_numpy()
-    gbm = LGBMClassifier(
-        n_estimators=1500, num_leaves=63, min_child_samples=100, learning_rate=0.01, subsample=0.8, subsample_freq=1,
-        colsample_bytree=0.8, verbose=-1, deterministic=True, force_row_wise=True,
-    ).fit(r.loc[fit, feats], r.kept[fit])
+    fit = (r.created < cut).to_numpy()
+    wt = 0.5 ** ((cut - r.created).dt.days.to_numpy() / HALF_LIFE_DAYS)
+    gbm = LGBMClassifier(**GBM_WIDE).fit(r.loc[fit, feats], r.kept[fit], sample_weight=wt[fit])
 
     def codes(df: pd.DataFrame) -> pd.DataFrame:
         x = df[feats].copy()
@@ -523,7 +576,7 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
         return x.astype(float).fillna(-999)
 
     forest = RandomForestClassifier(500, min_samples_leaf=50, max_features=0.3, n_jobs=-1, random_state=0).fit(
-        codes(r[fit]), r.kept[fit]
+        codes(r[fit]), r.kept[fit], sample_weight=wt[fit]
     )
     p_gbm = gbm.predict_proba(test[feats])[:, 1]
     p_cons = (rankdata(p_gbm) + rankdata(forest.predict_proba(codes(test))[:, 1])) / 2
@@ -533,6 +586,8 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
                          deterministic=True, force_row_wise=True).fit(
         h.loc[h.created < cut, list(pm.FEATURES)].astype(float), h.kept[h.created < cut])
     preds["Kept, 6 features (as shipped)"] = six.predict_proba(test[list(pm.FEATURES)].astype(float))[:, 1]
+    # nothing fitted on the test: an equal-weight average of the two rankings
+    preds["Kept's wide model and the bank's score, averaged ranks"] = rankdata(p_cons) + rankdata(-test.score.to_numpy())
     y = test.kept.to_numpy()
     before_due = (pd.to_datetime(test.score_date) < pd.to_datetime(test.due)).to_numpy()
     rng = np.random.default_rng(0)
@@ -554,7 +609,10 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
             d = roc_auc_score(yy, pp) - roc_auc_score(yy, bb)
             cells.append(f"{100 * d:+.1f} [{100 * np.percentile(gap, 2.5):+.1f}, {100 * np.percentile(gap, 97.5):+.1f}]")
         out.append(f"| {name} | " + " | ".join(cells) + " |")
-    return "\n".join(out) + f"\n\n{len(feats)} inputs, trained on the {fit.sum():,} promises made in the {RECENT_DAYS} days before the cut."
+    return "\n".join(out) + (
+        f"\n\n{len(feats)} inputs, trained on the {fit.sum():,} promises made before the cut, recent ones weighted more "
+        f"(half-life {HALF_LIFE_DAYS} days)."
+    )
 
 
 def ratio_table(con: duckdb.DuckDBPyConnection) -> str:
@@ -688,19 +746,25 @@ leaves out promises that were resolved quickly.
 
 ## 8. A standalone model with the bank's kinds of inputs
 
-The bank's reason codes name what its score uses: balances and utilisation, bureau score changes, contact history,
-payroll delay, tenure. Kept has the same kinds of data. This model takes the inputs below, each dated before the promise:
-the promise's own details (channel, product, type), the last month-end balances and payments, the customer record,
-the latest bureau pull, contacts in the 30 days before, and the deposit account's cash flow in the 45 days before.
+The bank's reason codes name what its score uses: returned payments, utilisation, bureau score changes, contact history,
+payroll delay, tenure. Kept has the same kinds of data. This model takes the inputs below, each dated before the
+promise: the promise's own details (channel, product, type); the customer's repayment record (card statements over the
+last 12 cycles, loan instalments paid late, returned pre-authorised debits); month-end balances and their 6-month
+trend; the customer record; the latest bureau pull; contacts in the 30 days before; the deposit account's cash flow;
+and payroll (days since the last pay against the usual interval, gaps, pay against its average). The kept rate fell
+from about 63% to 35% in mid-2026, so recent promises are weighted more. The weighting and the tree settings were chosen
+on the 45 days before the cut; the test promises were scored once.
 
 {wide_md:s}
 
-The wide model closes most of the gap: from 7.8 AUC points behind the bank's score to about 1.5. On the promises the
-bank scored before their due date, where neither model can see whether the due date was met, the two are not
-distinguishable (the interval includes zero). Kept's model scores at the moment the promise is made, about 9 days
-before the bank's. We tried and dropped: random forest, extra trees and logistic regression alone, one model per
-product or channel, the agent's past kept rate, call audio measures and the note text (none added beyond the noise);
-features dated after the promise score 0.79 but only by seeing contacts after a missed due date, so they are excluded.
+**Matched, not beaten.** On its own, the wide model ranks promises as well as the bank's score: the gap is a fraction
+of a point and its interval includes zero, both on all promises and on those the bank scored before the due date.
+That is up from 7.8 points behind for the shipped six-feature model. **Together, the two are far better than either:**
+an equal-weight average of the two rankings, with nothing fitted on the test, gains about 6 AUC points over the bank's
+score alone, so most of what Kept's model knows, the bank's doesn't. We tried and dropped: random forest, extra trees
+and logistic regression alone, a spline GLM stacked with the trees, one model per product or channel, the agent's past
+kept rate, call audio measures and the note text (none added beyond the noise). Features dated after the promise score
+0.79, but only by seeing contacts after a missed due date, so they are excluded.
 
 ## 9. Uplift where the bank randomised
 
