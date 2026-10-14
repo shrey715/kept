@@ -238,7 +238,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                     )}
                     {card.checks.length > 0 && (
                       <Box>
-                        <Text as="div" className="k-eyebrow" mb="2">Safety checks at the proposed time</Text>
+                        <Text as="div" className="k-eyebrow" mb="3">Safety checks at the proposed time</Text>
                         <Checks card={card} />
                       </Box>
                     )}

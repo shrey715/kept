@@ -3563,3 +3563,59 @@ html {
   height: 38px;
   font-size: 14.5px;
 }
+
+/* safety checks on the review tab: a stacked list, a round badge per check */
+.k-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.k-checks li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 2px;
+}
+.k-checks li + li {
+  border-top: 1px solid var(--k-line);
+}
+.k-checks li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.k-checks-dot {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--k-mint-2);
+  color: var(--k-mint-ink);
+}
+.k-checks li[data-ok="false"] .k-checks-dot {
+  background: var(--k-rose-2);
+  color: var(--k-rose-ink);
+}
+.k-checks-dot svg {
+  width: 15px;
+  height: 15px;
+}
+.k-checks-name {
+  flex: 0 0 132px;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.k-checks-detail {
+  flex: 1 1 180px;
+  font-size: 14px;
+  color: var(--gray-11);
+}
