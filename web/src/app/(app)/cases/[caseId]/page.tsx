@@ -2,10 +2,11 @@
 
 import { ArrowLeftIcon, ReloadIcon } from "@radix-ui/react-icons";
 import { Box, Button, Callout, Card, Flex, Grid, Skeleton, Tabs, Text, Tooltip } from "@radix-ui/themes";
+import { motion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CustomerPanel } from "@/components/customer-panel";
 import { Checks, NbaCard } from "@/components/nba-card";
 import { ReviewPanel } from "@/components/review-panel";
@@ -210,13 +211,16 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
             <Tabs.Root value={tab} onValueChange={setTab}>
-              <Tabs.List>
-                <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-                <Tabs.Trigger value="review">Review</Tabs.Trigger>
-                <Tabs.Trigger value="activity">Activity</Tabs.Trigger>
-              </Tabs.List>
+              <GlideTabs tab={tab}>
+                <Tabs.List className="k-glide-tabs">
+                  <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+                  <Tabs.Trigger value="review">Review</Tabs.Trigger>
+                  <Tabs.Trigger value="activity">Activity</Tabs.Trigger>
+                </Tabs.List>
+              </GlideTabs>
               <Box pt="4">
                 <Tabs.Content value="review">
+                  <TabFade>
                   <Flex direction="column" gap="5">
                     {card.proposal ? (
                       <ReviewPanel
@@ -243,10 +247,15 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
                       {new Date(card.features_as_of).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}
                     </Text>
                   </Flex>
+                  </TabFade>
                 </Tabs.Content>
-                <Tabs.Content value="overview">{customer ? <CustomerPanel c={customer} /> : <Skeleton height="320px" />}</Tabs.Content>
+                <Tabs.Content value="overview">
+                  <TabFade>{customer ? <CustomerPanel c={customer} /> : <Skeleton height="320px" />}</TabFade>
+                </Tabs.Content>
                 <Tabs.Content value="activity">
-                  <AuditTimeline events={events} />
+                  <TabFade>
+                    <AuditTimeline events={events} />
+                  </TabFade>
                 </Tabs.Content>
               </Box>
             </Tabs.Root>
@@ -254,5 +263,46 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         </Grid>
       )}
     </Box>
+  );
+}
+
+/** A tab's content rises in softly when the tab opens. */
+function TabFade({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}>
+      {children}
+    </motion.div>
+  );
+}
+
+/** One underline under the tab list that glides to the active tab (measured, so it fits each label's width). */
+function GlideTabs({ tab, children }: { tab: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [bar, setBar] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const box = ref.current;
+      const on = box?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+      if (!box || !on) return;
+      const a = box.getBoundingClientRect();
+      const b = on.getBoundingClientRect();
+      setBar({ left: b.left - a.left + 8, width: b.width - 16 });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [tab]);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      {children}
+      {bar && (
+        <motion.span
+          className="k-glide-bar"
+          initial={false}
+          animate={{ left: bar.left, width: bar.width }}
+          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+        />
+      )}
+    </div>
   );
 }
