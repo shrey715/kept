@@ -2,6 +2,7 @@
 
 import {
   BarChartIcon,
+  CalendarIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
   DashboardIcon,
@@ -30,6 +31,7 @@ export const NAV = [
   { href: "/queue", tint: "ice" as const, label: "Queue", icon: LayersIcon, blurb: "Today's cases, ranked by expected recovery", show: can.queue },
   { href: "/portfolio", tint: "butter" as const, label: "Portfolio", icon: DashboardIcon, blurb: "Tonight's book: where the money is, what works", show: can.portfolio },
   { href: "/approvals", tint: "rose" as const, label: "Approvals", icon: CheckCircledIcon, blurb: "Cards waiting for a person to release them", show: can.approvals },
+  { href: "/calendar", tint: "butter" as const, label: "Calendar", icon: CalendarIcon, blurb: "Promises, send windows, deadlines and paydays coming up", show: () => true },
   { href: "/audit", tint: "mint" as const, label: "Audit", icon: ReaderIcon, blurb: "Every recommendation, release and override", show: can.audit },
   { href: "/ask", tint: "lilac" as const, label: "Ask", icon: ChatBubbleIcon, blurb: "Questions in plain English, certified metrics", show: () => true },
   { href: "/bench", tint: "ice" as const, label: "Bench", icon: BarChartIcon, blurb: "The evidence: benchmark, model and fairness", show: () => true },
