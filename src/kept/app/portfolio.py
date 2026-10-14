@@ -180,7 +180,8 @@ def _insights(p: Portfolio) -> list[Insight]:
             Insight(
                 id="stops",
                 title=f"{p.hard_stops:,} cases are excluded from contact",
-                body="Cease requests, insolvency holds and deceased flags block contact before any model runs.",
+                body="Cease requests, insolvency holds and deceased flags block contact"
+                " before any model runs.",
                 tone="info",
                 sql="select count(*) from nba.cards where hard_stop",
             )
