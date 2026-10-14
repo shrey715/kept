@@ -149,9 +149,9 @@ Build, one-off & 300,000 & 300,000 & 300,000 \\
 \end{table}
 
 \paragraph{Why it's cheap to run} One nightly batch scores the whole book in about seven minutes on a single
-machine. Text runs on a local open model (no per-call fees, and notes never leave the bank); a hosted model is only used
-for the Ask. DuckDB and dbt replace a cluster. The \$150K is mostly one operations engineer (\$120K) plus about \$30K of
-compute and hosted-model use at production volume. The \$300K build is four engineers for three months.
+machine. Every language-model call, the Ask included, runs on a local open model on one GPU: no per-call fees, and customer
+text never leaves the bank. DuckDB and dbt replace a cluster. The \$150K is mostly one operations engineer (\$120K) plus
+about \$30K of GPU server and warehouse compute. The \$300K build is four engineers for three months.
 
 \section{What moves the number}
 
@@ -178,6 +178,26 @@ Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
 \end{tabularx}
 \caption{The assumptions in the model, with the measured payday effect's interval. Everything else is measured.}
 \end{table}
+
+\section{Break-even, and the chance of paying back}
+
+\textbf{Break-even.} The year-one cost is \$450K (build plus a year's running). At base, the contact mix, wrap-up time and
+QA time alone bring in \$0.93M, so \textbf{Kept pays back in year one even if dating promises to payday adds nothing}.
+With every one of those at its low end as well, it needs a payday effect of \textbf{0.2 points}; the measured effect is
+2.7 points [0.1, 6.1] (evidence §2).
+
+\textbf{The chance of paying back.} Instead of three scenarios, draw every assumption at once, 20,000 times: each from a
+triangular distribution over its low, base and high values, and the payday effect from a normal distribution on its
+measured interval (so a zero or negative effect is possible).
+
+\fig[0.9\linewidth]{bc_simulation.png}{Annual benefit across 20,000 draws of every assumption. The line is the year-one
+cost, build plus run.}
+
+\textbf{What the chart says.} The median annual benefit is \$1.77M, and 19 draws in 20 fall between \$1.13M and
+\$2.50M. \textbf{99.97\% of draws pay back build and run within year one.} The draws treat the assumptions as independent,
+which narrows the spread. The strictest check runs the same draws with every assumption moving together (all high or all
+low at once): 19 in 20 then fall between \$0.64M and \$3.45M, and \textbf{98.5\% still pay back within year one}. The
+low scenario (\$0.44M) is the corner where every assumption is at its worst at the same time.
 
 \section{Risks, costs we're honest about, and how we'll know}
 

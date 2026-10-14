@@ -77,7 +77,7 @@ def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
                (p.ptp_status = 'kept')::int as kept
         from pr p left join prior r using (ptp_id) left join lst l using (ptp_id)
         left join nxt n using (ptp_id)
-        order by p.created""").df()
+        order by p.created, p.ptp_id""").df()
 
 
 class PromiseModel:

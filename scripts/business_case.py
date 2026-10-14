@@ -15,8 +15,11 @@ from __future__ import annotations
 import glob
 import os
 from collections import Counter
+from collections.abc import Callable
+from typing import Any
 
 import duckdb
+import numpy as np
 from reportlib import AQUA, BLUE, INK, KEPT, MUTED, ORANGE, REPO, plt, save, style, tidy
 
 from kept.nba.legacy import legacy_to_action
@@ -54,7 +57,8 @@ ROLL_POINTS = (
 QA_MANUAL_SHARE, QA_MINUTES = 0.02, 12  # today's manual QA sample and minutes per reviewed call
 QA_TIME_SAVED = (0.5, 0.25, 0.75)  # share of QA reviewer time saved by pre-scoring every call
 BUILD_COST = 300_000  # one-off: productionising (4 engineers x 3 months)
-RUN_COST = 150_000  # a year: 1 ops FTE (~$120k) + GPU server, warehouse compute, hosted LLM at production volume (~$30k)
+RUN_COST = 150_000  # a year: 1 ops FTE (~$120k) + GPU server and warehouse compute (~$30k); the LLM is local
+DRAWS = 20_000  # simulation draws: each assumption triangular over (low, base, high); the payday effect normal on its CI
 
 
 def q(con: duckdb.DuckDBPyConnection, sql: str) -> list[tuple]:  # type: ignore[type-arg]
@@ -163,8 +167,10 @@ def contact_cost(mix: dict[str, int], cost: dict[str, float]) -> float:
     return sum(n * per.get(a, 0.0) for a, n in mix.items())
 
 
-def model(d: dict, i: int) -> dict[str, float]:  # type: ignore[type-arg]
-    """Annual benefit by component for scenario i (0 base, 1 low, 2 high)."""
+def model(d: dict, i: int | Callable[[tuple], Any]) -> dict[str, Any]:  # type: ignore[type-arg]
+    """Annual benefit by component for scenario i (0 base, 1 low, 2 high), or with each assumption picked by a
+    function of its (base, low, high) tuple: numpy arrays in, arrays out, for the simulation."""
+    pick = (lambda t: t[i]) if isinstance(i, int) else i
     g = {t: (n, kept, paid, amt, amt_y) for t, n, kept, paid, amt, amt_y in d["payday"]}
     seen = sum(g[t][3] for t in ("0-2", "3-7", "8+"))
     promised_year = sum((v[4] or 0) for v in g.values())
@@ -173,14 +179,14 @@ def model(d: dict, i: int) -> dict[str, float]:  # type: ignore[type-arg]
     rolled_per_pt = d["inflow"][0] * 0.01 * d["co_rolled"][0] * d["co_rolled"][1]
     qa_hours = d["calls"] * QA_MANUAL_SHARE * QA_MINUTES / 60
     return {
-        "Promises dated to payday": promised_year * POLICY_VALUE_PTS[i] / 100 * PAYDAY_COVERAGE[i],
-        "Cheaper contact mix": per_pass * BOOK_PASSES_PER_YEAR[i],
+        "Promises dated to payday": promised_year * pick(POLICY_VALUE_PTS) / 100 * pick(PAYDAY_COVERAGE),
+        "Cheaper contact mix": per_pass * pick(BOOK_PASSES_PER_YEAR),
         "Agent wrap-up time (call summaries)": d["calls"]
-        * WRAPUP_SECONDS_SAVED[i]
+        * pick(WRAPUP_SECONDS_SAVED)
         / 3600
-        * AGENT_COST_PER_HOUR[i],
-        "QA reviewer time": qa_hours * QA_TIME_SAVED[i] * AGENT_COST_PER_HOUR[i],
-        "Roll-rate cut: charge-offs avoided": rolled_per_pt * ROLL_POINTS[i] / 1.0 if ROLL_POINTS[i] else 0.0,
+        * pick(AGENT_COST_PER_HOUR),
+        "QA reviewer time": qa_hours * pick(QA_TIME_SAVED) * pick(AGENT_COST_PER_HOUR),
+        "Roll-rate cut: charge-offs avoided": rolled_per_pt * pick(ROLL_POINTS),
     } | {
         "_gap": gap,
         "_promised_year": promised_year,
@@ -310,6 +316,57 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
     tidy(ax)
     save(fig, "bc_sensitivity")
 
+    # 6. break-even and the chance of paying back: every assumption drawn at once
+    from scipy.stats import norm
+
+    rng = np.random.default_rng(0)
+    shared = rng.random(DRAWS)
+
+    def drawer(together: bool) -> Callable[[tuple], np.ndarray]:  # type: ignore[type-arg]
+        cache: dict[int, np.ndarray] = {}
+
+        def draw(t: tuple) -> np.ndarray:  # type: ignore[type-arg]
+            if id(t) not in cache:
+                u = shared if together else rng.random(DRAWS)
+                c, a, b_ = (float(v) for v in t)  # base, low, high
+                if t is POLICY_VALUE_PTS:  # measured: normal on the 95% interval, negative effects allowed
+                    cache[id(t)] = norm.ppf(u, c, (b_ - a) / 3.92)
+                elif b_ > a:  # triangular(low, base, high) by its inverse CDF
+                    f = (c - a) / (b_ - a)
+                    cache[id(t)] = np.where(
+                        u < f, a + np.sqrt(u * (b_ - a) * (c - a)), b_ - np.sqrt((1 - u) * (b_ - a) * (b_ - c))
+                    )
+                else:
+                    cache[id(t)] = np.full(DRAWS, c)
+            return cache[id(t)]
+
+        return draw
+
+    def simulate(together: bool) -> np.ndarray:
+        m = model(d, drawer(together))
+        return np.asarray(sum(v for k, v in m.items() if not k.startswith("_")))
+
+    sim_total, sim_together = simulate(False), simulate(True)
+    p_year1 = float((sim_total >= RUN_COST + BUILD_COST).mean())
+    p_year1_together = float((sim_together >= RUN_COST + BUILD_COST).mean())
+    p_run = float((sim_total >= RUN_COST).mean())
+    pct = {q: float(np.percentile(sim_total, q)) for q in (5, 50, 95)}
+    others = base_total - b["Promises dated to payday"]
+    others_low = total["Low"] - scen["Low"]["Promises dated to payday"]
+    breakeven = {  # payday effect, in points, at which year-one benefit covers build and run
+        "base": (RUN_COST + BUILD_COST - others) / (b["Promises dated to payday"] / POLICY_VALUE_PTS[0]),
+        "low": (RUN_COST + BUILD_COST - others_low) / (b["_promised_year"] * PAYDAY_COVERAGE[1] / 100),
+    }
+    fig, ax = plt.subplots(figsize=(7.2, 2.3))
+    ax.hist(sim_total / 1e6, bins=60, color=BLUE)
+    ax.axvline((RUN_COST + BUILD_COST) / 1e6, color=INK, linewidth=1)
+    ax.text((RUN_COST + BUILD_COST) / 1e6, ax.get_ylim()[1] * 0.9, "  build + run, year one", fontsize=8)
+    ax.set_xlabel("annual benefit, $M CAD")
+    ax.set_yticks([])
+    ax.set_title(f"{DRAWS:,} draws over every assumption: {p_year1:.2%} pay back build and run in year one", loc="left")
+    tidy(ax)
+    save(fig, "bc_simulation")
+
     year1 = {s: (total[s] - RUN_COST - BUILD_COST) / (RUN_COST + BUILD_COST) for s in names}
     payback = {s: 12 * BUILD_COST / max(total[s] - RUN_COST, 1) for s in names}
     calls_ours = sum(d["ours"].get(a, 0) for a in CALL_ACTIONS)
@@ -325,6 +382,9 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
         "total": {k: round(v) for k, v in total.items()},
         "year1_roi": year1,
         "payback_months": payback,
+        "simulation": {"draws": DRAWS, "p_payback_year1": p_year1, "p_covers_run": p_run, "p_payback_year1_together": p_year1_together,
+                       "percentiles_together": {q: float(np.percentile(sim_together, q)) for q in (5, 50, 95)}, "percentiles": pct},
+        "breakeven_payday_pts": breakeven,
         "calls": {"kept": calls_ours, "legacy": calls_legacy},
         "mix": {"kept": d["ours"], "legacy": d["legacy"]},
         "cost": d["cost"],

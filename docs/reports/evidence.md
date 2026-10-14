@@ -24,7 +24,7 @@ intensity) doesn't move outcomes; Kept changes something else: when the promise 
 | 3-7 days after payday | 3,084 | 52.9% | 61.2% |
 | 8+ days after payday | 6,405 | 46.7% | 50.9% |
 
-- **Kept in full:** +4.6 pts [+2.5, +6.6] when due 0–2 days after payday rather than 8+, within days-past-due bands.
+- **Kept in full:** +4.6 pts [+2.4, +6.6] when due 0–2 days after payday rather than 8+, within days-past-due bands.
 - **Promised money paid (the primary metric):** +6.1 pts [+2.8, +10.6].
 - **Policy value:** dating every promise 0–2 days after payday would raise promised money paid by +2.7 pts [+0.1, +6.1] over what these 12,808 promises achieved (direct estimate, per days-past-due band).
 
@@ -63,6 +63,8 @@ leak-free model**. Kept's promise model drops this feature (phase 2).
 | Kept's model: the action it scores best | 37.2% [36.8, 37.6] | 39.7% [38.2, 41.1] |
 | Wait: contact nobody | 22.4% [21.2, 23.4] | 22.4% [22.0, 22.8] |
 
+Paired on the same decisions, Kept's choice against the bank's: **+61 customers paying within 14 days per 1,000 decisions** [+55, +67] (doubly robust).
+
 Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
 uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
 They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
@@ -83,15 +85,83 @@ make worse:
 
 ## 6. Against the bank's own model
 
-| Model (trained on scored promises before 31 Jul, tested on the 12,820 after) | AUC |
-|---|---:|
-| Bank's ptp_break v2.1 | 0.702 |
-| Kept, leak-free (6 features) | 0.625 |
-| Kept, leak-free + the bank's score | 0.728 |
+| Model (trained on scored promises before 31 Jul, tested on the 12,820 after) | AUC [95% CI] | Against the bank's, AUC points [95% CI] |
+|---|---:|---:|
+| Bank's ptp_break v2.1 | 0.702 [0.691, 0.714] | — |
+| Kept, leak-free (6 features) | 0.625 [0.614, 0.636] | -7.8 [-9.4, -6.1] |
+| Kept, leak-free + the bank's score | 0.728 [0.717, 0.739] | +2.5 [+1.9, +3.3] |
 
 Only promises the bank scored **before their outcome** are compared: the bank's score is dated 9 days after the promise on average, and 22% of its scores are dated on or after the outcome, which could know it.
 
 On its own our leak-free model is weaker than the bank's `ptp_break` score. Used together, it adds what the bank's model
-doesn't see (payday timing and the customer's own promise history) and beats it. Because the bank's score only arrives
+doesn't see (payday timing and the customer's own promise history) and beats it; the interval on that gain excludes zero
+(paired bootstrap, the same resampled promises for every model). Because the bank's score only arrives
 days after a promise is made, the combination is for **re-scoring promises already made** (who needs a reminder before
 the due date); the due date itself is proposed with Kept's own model.
+
+## 7. Where each model is stronger
+
+The same held-out promises as §6. Calibration gap: the average distance between predicted and observed kept rates
+across ten score bins, weighted by promises.
+
+| Model | Brier | Calibration gap, pts | AUC, due 0–7 days after payday (1,081, 16% kept) | AUC, 8+ days after (1,720, 29% kept) | AUC, payday unknown (10,019, 22% kept) |
+|---|---:|---:|---:|---:|---:|
+| Bank's ptp_break, read as 1 − score | 0.229 | 23.9 | 0.720 | 0.705 | 0.701 |
+| Bank's ptp_break, recalibrated on the training half | 0.157 | 1.4 | 0.718 | 0.704 | 0.699 |
+| Kept, leak-free (6 features) | 0.167 | 2.0 | 0.543 | 0.622 | 0.641 |
+| Kept, leak-free + the bank's score | 0.152 | 1.3 | 0.706 | 0.735 | 0.731 |
+
+Read as published, the bank's score overstates the kept rate by about 24 points, and Kept's states it within 2. But
+recalibrated on the same training half, the bank's score is as well calibrated, so calibration alone is not an edge
+Kept can claim. **Kept's own model is not better than the bank's on any measure here.** Its value is in two other
+places. It exists when the promise is made, about 9 days before the bank's score, which is when the due date is chosen.
+And it carries information the bank's score lacks: **the combination is best overall on all three measures** (Brier,
+calibration and AUC), and best on promises due 8+ days after payday and on those with no known payday. On the 1,081
+promises due within a week of payday, the bank's score alone ranks slightly better.
+
+Kept rates in this table are not comparable with §2: it holds only promises the bank scored before their outcome, which
+leaves out promises that were resolved quickly.
+
+## 8. A standalone model with the bank's kinds of inputs
+
+The bank's reason codes name what its score uses: balances and utilisation, bureau score changes, contact history,
+payroll delay, tenure. Kept has the same kinds of data. This model takes the inputs below, each dated before the promise:
+the promise's own details (channel, product, type), the last month-end balances and payments, the customer record,
+the latest bureau pull, contacts in the 30 days before, and the deposit account's cash flow in the 45 days before.
+
+| Model | AUC, all 12,820 | Against the bank's [95% CI] | AUC, the 9,090 the bank scored before the due date | Against the bank's [95% CI] |
+|---|---:|---:|---:|---:|
+| Bank's ptp_break v2.1 | 0.702 | — | 0.695 | — |
+| Kept, 6 features (as shipped) | 0.625 | -7.8 [-9.4, -6.1] | 0.601 | -9.4 [-11.0, -7.8] |
+| Kept, wide: LightGBM | 0.686 | -1.6 [-3.3, +0.0] | 0.681 | -1.4 [-3.0, +0.2] |
+| Kept, wide: LightGBM + random forest, averaged ranks | 0.688 | -1.5 [-2.9, -0.0] | 0.685 | -1.1 [-2.7, +0.6] |
+
+43 inputs, trained on the 36,265 promises made in the 90 days before the cut.
+
+The wide model closes most of the gap: from 7.8 AUC points behind the bank's score to about 1.5. On the promises the
+bank scored before their due date, where neither model can see whether the due date was met, the two are not
+distinguishable (the interval includes zero). Kept's model scores at the moment the promise is made, about 9 days
+before the bank's. We tried and dropped: random forest, extra trees and logistic regression alone, one model per
+product or channel, the agent's past kept rate, call audio measures and the note text (none added beyond the noise);
+features dated after the promise score 0.79 but only by seeing contacts after a missed due date, so they are excluded.
+
+## 9. Uplift where the bank randomised
+
+The live uplift model learns from randomly assigned cases, but within them the action each day was the strategy's
+choice, not random. The one thing the bank did randomise is the cell: a case was either worked by a strategy or held
+out. This model uses only that: one LightGBM for worked cases and one for held-out cases, on what is known when the
+case opens, with overdue dollars cured within 30 days as the outcome. Because the arms were randomised, the difference
+inside any group of cases is an unbiased estimate of what working them added.
+
+| Cases worked (held-out 32,465 cases, 1,569 of them held out) | Overdue dollars cured in 30 days, worked minus held out, per 1,000 cases [95% CI] |
+|---|---:|
+| Everyone (what the bank does) | $+17,909 [$-9,403, $+42,488] |
+| The top 50% by the model's uplift | $+20,510 [$-22,638, $+63,011] |
+| The top 30% by the model's uplift | $+29,147 [$-39,116, $+102,675] |
+| The top 10% by the model's uplift | $+41,969 [$-138,853, $+222,080] |
+
+The estimates rise as the model's top cases are taken first, which is what a working uplift ranking looks like, but
+**every interval includes zero**: the held-out arm in this window is small and was mostly contacted anyway (§1). So on
+the bank's randomisation alone, targeting by uplift is promising and unproven. That matches §1: contact intensity barely
+changes outcomes, which is why Kept's main lever is the due date (§2), and why the uplift model only replaces the
+bank's strategy behind a gate (`docs/reports/tuning.md`).
