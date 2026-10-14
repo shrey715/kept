@@ -92,7 +92,7 @@ export default function PortfolioPage() {
                   {k.label}
                 </Text>
               </Flex>
-              <div className="k-big" style={{ fontSize: 34, marginTop: 14 }}>
+              <div className="k-big" style={{ fontSize: "clamp(22px, 5.6vw, 34px)", marginTop: 14, whiteSpace: "nowrap" }}>
                 {k.v === undefined ? <Skeleton>000,000</Skeleton> : <CountUp value={k.v} format={k.f} />}
               </div>
             </div>

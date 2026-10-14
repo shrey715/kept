@@ -98,7 +98,7 @@ export default function QueuePage() {
             </span>
             recovery
           </h1>
-          <Text size="1" color="gray" mb="2">
+          <Text size="1" color="gray" mb="2" className="k-desktop-only">
             <Kbd>j</Kbd> <Kbd>k</Kbd> to move · <Kbd>Enter</Kbd> to open
           </Text>
         </Flex>
