@@ -19,7 +19,7 @@ REASON_TEMPLATES: Mapping[str, str] = {
     "days_in_bucket": "{value} days in the current delinquency bucket",
     "broken_promises_90d": "{value} broken promises in the last 90 days",
     "kept_promise_ratio": "Kept {value} of past promises",
-    "days_to_next_payroll": "Pay lands in {value} days",
+    "days_to_next_payroll": "{value}",
     "pay_frequency": "Paid {value}",
     "payroll_delay_days": "Pay is {value} days late",
     "pay_change_vs_3m_avg": "Latest pay is {value} against the 3-month average",
@@ -48,6 +48,12 @@ def _fmt(feature: str, v: object) -> str:
         return f"{v:.0%}"
     if feature == "pay_change_vs_3m_avg" and isinstance(v, (int, float)):
         return f"{'down' if v < 0 else 'up'} {abs(v):.0%}"
+    if feature == "days_to_next_payroll" and isinstance(v, int):  # negative: the expected pay date has passed
+        n = abs(v)
+        days = f"{n} day{'' if n == 1 else 's'}"
+        if v == 0:
+            return "Pay lands today"
+        return f"Pay lands in {days}" if v > 0 else f"Expected pay date passed {days} ago"
     if feature in _TRENDS and isinstance(v, (int, float)):
         return "down" if v < 0 else "up" if v > 0 else "flat"
     return str(getattr(v, "value", v))
