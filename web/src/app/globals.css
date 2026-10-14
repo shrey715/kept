@@ -5,7 +5,7 @@
    (green=grass, amber=amber, red=plum). Display headings are light sans; .serif keeps paper and stamps editorial. */
 .radix-themes {
   --default-font-family: var(--font-sans), system-ui, sans-serif;
-  --heading-font-family: var(--font-sans), system-ui, sans-serif;
+  --heading-font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
   --code-font-family: var(--font-mono), ui-monospace, monospace;
   --em-font-family: var(--font-serif), Georgia, serif;
   --quote-font-family: var(--font-serif), Georgia, serif;
@@ -168,6 +168,46 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------- page transitions (React ViewTransition)
+   The rail stays put; the old page lifts and fades, the new one rises in. */
+::view-transition-group(root) {
+  animation: none;
+}
+::view-transition-group(k-rail) {
+  animation: none;
+  z-index: 50;
+}
+::view-transition-old(k-rail) {
+  display: none;
+}
+::view-transition-new(k-rail) {
+  animation: none;
+}
+::view-transition-old(.k-page-out) {
+  animation: 140ms cubic-bezier(0.4, 0, 1, 1) both k-out;
+}
+::view-transition-new(.k-page-in) {
+  animation: 320ms cubic-bezier(0.16, 1, 0.3, 1) 90ms both k-in;
+}
+@keyframes k-out {
+  to {
+    opacity: 0;
+    translate: 0 -10px;
+  }
+}
+@keyframes k-in {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(.k-page-out),
+  ::view-transition-new(.k-page-in) {
+    animation: none;
+  }
+}
+
 /* ---------------------------------------------------------------- pieces */
 .k-chip {
   display: inline-grid;
@@ -306,6 +346,7 @@ body {
   transform: translate(2px, -2px);
 }
 .k-display {
+  font-family: var(--heading-font-family);
   font-size: clamp(34px, 4.2vw, 56px);
   font-weight: 400;
   letter-spacing: -0.045em;
@@ -313,6 +354,7 @@ body {
   margin: 0;
 }
 .k-big {
+  font-family: var(--heading-font-family);
   font-size: 48px;
   font-weight: 400;
   letter-spacing: -0.04em;
@@ -608,4 +650,115 @@ html {
   --viz-2: #d95926;
   --viz-3: #199e70;
   --viz-4: #c98500;
+}
+
+/* small inline spinner */
+.k-spin {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: k-rot 700ms linear infinite;
+}
+@keyframes k-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* GSAP SplitText line masks: room for descenders */
+.k-line-mask {
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+/* ---------------------------------------------------------------- notifications */
+.k-bell-badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--k-red);
+  color: #fff;
+  font: 700 10px/18px var(--default-font-family);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--k-frame);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.k-pop.rt-PopoverContent {
+  border-radius: 22px;
+  background: var(--k-frame);
+  box-shadow: 0 0 0 1px var(--k-line), 0 30px 60px -20px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.k-text-btn {
+  border: 0;
+  background: none;
+  color: var(--gray-11);
+  font: 500 12px/1 var(--default-font-family);
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.k-text-btn:hover:not(:disabled) {
+  background: var(--k-card);
+  color: var(--gray-12);
+}
+.k-text-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.k-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 14px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.k-note:hover {
+  background: var(--k-card);
+}
+.k-note[data-unread="true"] {
+  background: color-mix(in srgb, var(--k-hi) 35%, transparent);
+}
+.k-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--k-red);
+  flex: none;
+}
+.k-toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(380px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.k-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--k-frame);
+  box-shadow: 0 0 0 1px var(--k-line), 0 24px 50px -18px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
 }

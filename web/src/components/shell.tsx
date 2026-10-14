@@ -23,6 +23,7 @@ import { useServerClock } from "@/lib/clock";
 import { PERSONAS, can, useSession } from "@/lib/session";
 import { useHydrated } from "@/lib/stored";
 import { LogoMark, initials } from "./bits";
+import { NotificationCenter } from "./notifications";
 
 export const NAV = [
   { href: "/queue", label: "Queue", icon: LayersIcon, blurb: "Today's cases, ranked by expected recovery", show: can.queue },
@@ -46,10 +47,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (ready && !me) router.replace("/signin");
   }, [ready, me, router]);
   if (!ready || !me) {
+    // the frame and rail draw at once, so nothing jumps while the session loads
     return (
-      <Flex height="100vh" align="center" justify="center">
-        <Spinner size="3" />
-      </Flex>
+      <div className="k-frame">
+        <nav className="k-rail" aria-label="Main" style={{ viewTransitionName: "k-rail" }}>
+          <LogoMark size={44} />
+        </nav>
+        <main className="k-main">
+          <Flex height="60vh" align="center" justify="center">
+            <Spinner size="3" />
+          </Flex>
+        </main>
+      </div>
     );
   }
   const items = NAV.filter((n) => n.show(me.role));
@@ -58,8 +67,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="k-frame">
-      <nav className="k-rail" aria-label="Main">
-        <Link href={me.home} aria-label="Kept home" style={{ marginBottom: 14 }}>
+      <nav className="k-rail" aria-label="Main" style={{ viewTransitionName: "k-rail" }}>
+        <Link href="/" aria-label="Kept: back to the landing page" style={{ marginBottom: 14 }}>
           <LogoMark size={44} />
         </Link>
         {items.map((n) => (
@@ -127,6 +136,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Text>
           </Box>
           <Flex align="center" gap="2">
+            <NotificationCenter me={me} />
             {health?.demo && now && (
               <Tooltip content="Demo mode runs on a business-hours clock so releases can pass the real calling-hours check.">
                 <span className="k-badge" style={{ height: 44, padding: "0 16px", borderRadius: 999, fontWeight: 500, fontSize: 13 }}>

@@ -4,6 +4,8 @@ import type { components } from "./api-schema";
 
 type S = components["schemas"];
 export type NBACard = S["NBACard"];
+export type Notification = S["Notification"];
+export type NotificationFeed = S["NotificationFeed"];
 export type Proposal = S["Proposal"];
 export type ReleaseDecision = S["ReleaseDecision"];
 export type ReleaseResult = S["ReleaseResult"];
@@ -67,6 +69,8 @@ const post = (body: unknown): RequestInit => ({ method: "POST", body: JSON.strin
 export const api = {
   health: () => call<Health>("/health"),
   queue: (w: Who) => call<QueueItem[]>(`/queue?${q(w)}`),
+  notifications: (w: Who) => call<NotificationFeed>(`/notifications?${q(w)}`),
+  markRead: (userId: string, upto: string) => call<{ status: string }>("/notifications/read", post({ user_id: userId, upto })),
   card: (caseId: string, w: Who) => call<NBACard>(`/cases/${encodeURIComponent(caseId)}/nba?${q(w)}`),
   customer: (caseId: string, w: Who) => call<Customer>(`/cases/${encodeURIComponent(caseId)}/customer?${q(w)}`),
   approvals: (w: Who) => call<ApprovalItem[]>(`/approvals?${q(w)}`),
