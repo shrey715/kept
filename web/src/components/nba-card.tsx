@@ -2,7 +2,7 @@
 
 import { SectionTitle } from "./page-header";
 import { CheckIcon, Cross2Icon, ExclamationTriangleIcon, LockClosedIcon } from "@radix-ui/react-icons";
-import { Badge, Box, Callout, Card, DataList, Flex, Grid, Heading, Text, Tooltip } from "@radix-ui/themes";
+import { Badge, Box, Callout, Card, Flex, Grid, Heading, Text, Tooltip } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { ACTION_LABEL, money, pct, when, type Action, type NBACard } from "@/lib/api";
@@ -232,29 +232,35 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 export function Checks({ card }: { card: NBACard }) {
   if (!card.checks.length) return null;
   return (
-    <DataList.Root size="2" orientation={{ initial: "vertical", sm: "horizontal" }}>
+    <ul className="k-checks">
       {card.checks.map((c, i) => (
-        <DataList.Item key={c.check}>
-          <DataList.Label minWidth="120px">
-            <Flex align="center" gap="2">
-              <motion.span
-                initial={{ scale: 0, rotate: -45 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ ...spring, delay: 0.2 + i * 0.1 }}
-                style={{ color: c.passed ? "var(--grass-11)" : "var(--red-11)", display: "inline-flex" }}
-                aria-hidden
-              >
-                {c.passed ? <CheckIcon width={16} height={16} /> : <Cross2Icon width={16} height={16} />}
-              </motion.span>
-              <span style={{ textTransform: "capitalize" }}>{c.check.replaceAll("_", " ")}</span>
+        <motion.li
+          key={c.check}
+          data-ok={c.passed}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...spring, delay: 0.1 + i * 0.06 }}
+        >
+          <motion.span
+            className="k-checks-dot"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ ...spring, delay: 0.2 + i * 0.08 }}
+            aria-hidden
+          >
+            {c.passed ? <CheckIcon /> : <Cross2Icon />}
+          </motion.span>
+          <div>
+            <div className="k-checks-name">
+              {c.check.replaceAll("_", " ")}
               <span className="rt-sr-only" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
-                {c.passed ? "passed" : "failed"}
+                {c.passed ? " passed" : " failed"}
               </span>
-            </Flex>
-          </DataList.Label>
-          <DataList.Value>{c.detail}</DataList.Value>
-        </DataList.Item>
+            </div>
+            <div className="k-checks-detail">{c.detail}</div>
+          </div>
+        </motion.li>
       ))}
-    </DataList.Root>
+    </ul>
   );
 }
