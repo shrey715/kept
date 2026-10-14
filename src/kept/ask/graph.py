@@ -142,6 +142,11 @@ def ground_filters(intent: Intent, values: Any) -> tuple[Intent, list[str]]:
             filters.pop(col)
         else:
             filters[col] = out if isinstance(v, list) or len(out) > 1 else out[0]
+    for col in intent.group_by:  # grouped and filtered to one value: the question compares, keep every group
+        v = filters.get(col)
+        if v is not None and (not isinstance(v, list) or len(v) == 1):
+            filters.pop(col)
+            notes.append(f"Value check: dropped the one-value filter on {col} (the answer groups by it)")
     if filters == intent.filters:
         return intent, []
     return intent.model_copy(update={"filters": filters}), notes

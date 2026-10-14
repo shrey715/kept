@@ -484,8 +484,10 @@ def test_ground_filters_maps_near_misses_and_drops_unknown_values() -> None:
     assert notes == ["Value check: ptp_type 'instalment' -> instalment_1_of_n"]
     gone, _ = ground_filters(i.model_copy(update={"filters": {"ptp_type": "weekly"}}), known.get)
     assert "ptp_type" not in gone.filters  # matches nothing: the comparison covers every group
-    same, n = ground_filters(i.model_copy(update={"filters": {"ptp_type": "single"}}), known.get)
+    same, n = ground_filters(i.model_copy(update={"filters": {"ptp_type": "single"}, "group_by": ()}), known.get)
     assert same.filters == {"ptp_type": "single"} and n == []
+    one, _ = ground_filters(i.model_copy(update={"filters": {"ptp_type": "instalment"}}), known.get)
+    assert "ptp_type" not in one.filters  # grouped by it: the question compares, so every group stays
 
 
 def test_repair_intent_fits_loose_column_names_to_the_certified_query() -> None:
