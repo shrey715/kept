@@ -1,0 +1,460 @@
+% Kept: the next-round deck. Build: uv run python docs/deck/build_numbers.py && cd docs/deck && xelatex kept && xelatex kept
+\documentclass[aspectratio=169,10pt]{beamer}
+\usepackage{kept-slides}
+\input{numbers.tex}
+
+\title{Kept}
+\subtitle{Promises customers can keep}
+\author{Team Sharpe Shooters}
+\date{CIBC Collections Hackathon · 16 October 2026}
+
+\tikzset{
+  layer/.style={fill=card, rounded corners=7pt, minimum height=2.1cm, text width=2.55cm, align=center, inner sep=6pt, font=\scriptsize},
+  node box/.style={fill=chip, draw=line, rounded corners=5pt, align=center, font=\scriptsize, inner sep=4pt, minimum height=0.7cm},
+  hot/.style={fill=ink, text=white, draw=ink},
+  red box/.style={fill=rose, draw=maple},
+  flow/.style={-{Stealth[length=5pt]}, thick, color=ink!70},
+  person/.style={fill=maple, text=white, rounded corners=6pt, font=\tiny\bfseries, inner sep=2.5pt},
+}
+
+\begin{document}
+
+% ---------------------------------------------------------------- title
+\begin{frame}[plain]
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[ink] (current page.north west) rectangle ([xshift=-0.42\paperwidth]current page.south east);
+    \node[anchor=north west, text=white, font=\displayfont\fontsize{40}{44}\selectfont] at ([xshift=1.4cm, yshift=-2.2cm]current page.north west) {Kept};
+    \node[anchor=north west, text=white!85, text width=6.5cm, font=\large] at ([xshift=1.4cm, yshift=-3.6cm]current page.north west)
+      {Promises customers can keep: one guarded action, dated after payday, released by a person.};
+    \node[anchor=south west, text=white!70, font=\scriptsize, text width=6.2cm] at ([xshift=1.4cm, yshift=1.1cm]current page.south west) {Team Sharpe Shooters\\CIBC Collections Hackathon · 16 October 2026};
+    \node[anchor=center, scale=1.25] at ([xshift=-0.21\paperwidth]current page.east) {%
+      \begin{tikzpicture}[scale=0.9]
+        \draw[ink, thick, rounded corners=3pt] (0,0) rectangle (3.4,3.0);
+        \draw[ink] (0,2.45) -- (3.4,2.45);
+        \node[font=\small\bfseries] at (1.7,2.72) {OCT};
+        \foreach \x in {0.68,1.36,2.04,2.72} \draw[ink!40] (\x,0) -- (\x,2.45);
+        \foreach \y in {0.61,1.22,1.84} \draw[ink!40] (0,\y) -- (3.4,\y);
+        \draw[maple, very thick] (1.70,1.53) circle (0.28);
+        \node[font=\small] at (1.70,1.53) {2};
+        \draw[maple, very thick, -{Stealth}] (2.05,1.53) -- (2.55,1.53);
+        \draw[maple, very thick] (2.62,1.48) -- (2.75,1.33) -- (2.98,1.72);
+        \node[font=\tiny, ink!70, anchor=north] at (1.70,1.18) {payday};
+      \end{tikzpicture}};
+  \end{tikzpicture}
+\end{frame}
+
+% ---------------------------------------------------------------- the problem
+\begin{frame}
+  \kicker{The problem}\frametitle{Collections today asks for money on the wrong day}
+  \source{evidence.md §1--2; tonight's nba.cards}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{itemize}\setlength\itemsep{0.3em}\small
+        \item \textbf{Five systems, five keys per person.} Each files the same customer differently, so nobody sees
+          the whole person.
+        \item \textbf{Promises are dated by the calendar, not by pay.} A promise due before payday breaks; the bank's own
+          data shows promised money paid is \textbf{+6.1 pts} higher when the due date falls just after payday.
+        \item \textbf{More contact doesn't help.} The bank's randomised champion, two challengers and a hold-out keep
+          promises at the same rate.
+        \item \textbf{Hardship gets missed} in notes and calls, so vulnerable customers are pushed like anyone.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \kcard{\bignum{\KopenCases}{open cases tonight}\\[0.6em]\bignum{\KbalanceAtRisk}{balance at risk}\\[0.6em]\bignum{\KredCases}{need a hardship specialist}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Jane
+\begin{frame}
+  \kicker{One customer}\frametitle{Meet Jane: her last promise fell due before payday, and broke}
+  \source{the guided demo (case CS-2026-118204)}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}\setlength\itemsep{0.5em}
+        \item Pay lands in 3 days and is down 27\% on her average.
+        \item She answers calls after 18:00, not in the morning slot the strategy uses.
+        \item Her notes say her shifts were cut: a hardship signal nobody acted on.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \kcard{\cardtitle{Kept's card for Jane}
+        Call, Tue 18:00--20:00\\
+        \$140 a month × 3, due the day after payday, inside \textasciitilde\$160 spare cash\\[0.3em]
+        {\color{muted}\scriptsize Why: pay lands in 3 days (+9 pts) · pay down 27\% (+6) · answers after 18:00 (+4)}\\[0.3em]
+        \pill{Red} {\scriptsize hardship: a specialist and a second person release it}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- system design
+\begin{frame}
+  \kicker{System design}\frametitle{Four layers, one guarded decision}
+  \source{src/kept/cli.py (nightly), docs/design/SharpeShooters\_SystemDesign.pdf}
+  \centering
+  \begin{tikzpicture}[node distance=0.35cm]
+    \node[layer] (d) {\textbf{1 · Data and identity}\\[0.3em] 31 source tables\\ dbt silver and gold\\ exact links, then Splink\\ one golden ID};
+    \node[layer, right=of d] (a) {\textbf{2 · Ask}\\[0.3em] LangGraph pipeline\\ certified metrics\\ SQL guard, vote\\ policy search, cited};
+    \node[layer, right=of a] (t) {\textbf{3 · Text and voice}\\[0.3em] redaction first\\ local Gemma 3 12B\\ Whisper on the GPU\\ every value quoted};
+    \node[layer, right=of t] (n) {\textbf{4 · Decide and release}\\[0.3em] point-in-time features\\ uplift per action\\ payday sizing\\ tiers, two people};
+    \draw[flow] (d) -- node[above, font=\tiny]{golden ID} (a);
+    \draw[flow] (a) -- node[above, font=\tiny]{questions} (t);
+    \draw[flow] (t) -- node[above, font=\tiny]{signals} (n);
+    \draw[flow, rounded corners] (d.south) -- ++(0,-0.55) -| node[pos=0.25, below, font=\tiny]{feature vector} (n.south);
+    \node[person, above=0.12cm of n] {person releases};
+    \node[person, above=0.12cm of d] {steward reviews};
+    \node[person, above=0.12cm of t] {agent confirms a cease};
+    \node[below=0.95cm of a, font=\scriptsize, text=muted, xshift=1.4cm] {Nightly: dbt build $\to$ features $\to$ score 96,000 cards (\textasciitilde85 s). Live: the API rechecks every release on fresh data.};
+  \end{tikzpicture}
+\end{frame}
+
+% ---------------------------------------------------------------- data and identity
+\begin{frame}
+  \kicker{Layer 1 · Data and identity}\frametitle{Five keys become one person, and a steward checks the doubtful ones}
+  \source{docs/reports/identity\_recall.md, QUALITY\_REPORT.pdf}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \begin{itemize}\setlength\itemsep{0.45em}
+        \item \textbf{Exact links first} (shared account and customer numbers), \textbf{then probabilistic matching} (Splink,
+          names, dates of birth, addresses) for the rest.
+        \item \textbf{Uncertain pairs go to a person}: 36,279 wait in the steward queue, oldest first, before two
+          records ever merge.
+        \item \textbf{Data quality is a contract}: 31 tables checked on load (types, ranges, duplicates), issues reported, not hidden.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \kcard{\bignum{99\%}{of 200 injected duplicates found}\\[0.5em]\bignum{0}{wrong merges}\\[0.5em]\bignum{36,279}{pairs for a steward, paged}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- Ask as a graph
+\begin{frame}
+  \kicker{Layer 2 · The Ask, as a LangGraph}\frametitle{Every answer walks a graph, and shows the path it took}
+  \source{src/kept/ask/graph.py, docs/reports/ask\_accuracy.md}
+  \centering
+  \begin{tikzpicture}[node distance=0.32cm and 0.32cm]
+    \node[node box] (r) {Safety rules\\{\tiny protected, bulk, write}};
+    \node[node box, right=of r] (s) {Scope\\{\tiny rules + classifier}};
+    \node[node box, right=of s] (ro) {Route\\{\tiny LLM $\to$ intent}};
+    \node[node box, right=1.1cm of ro, yshift=1.0cm] (p) {Policy search\\{\tiny BM25 + embeddings, RRF}};
+    \node[node box, right=1.1cm of ro] (m) {Certified metric\\{\tiny + intent and value checks}};
+    \node[node box, right=1.1cm of ro, yshift=-1.0cm] (l) {Lookup\\{\tiny 3 SQL drafts, vote}};
+    \node[node box, hot, right=1.0cm of m] (f) {Grounded\\narration};
+    \node[node box, red box, below=0.55cm of s] (no) {Refuse with a\\safer question};
+    \draw[flow] (r) -- (s); \draw[flow] (s) -- (ro);
+    \draw[flow] (ro) -- (p); \draw[flow] (ro) -- (m); \draw[flow] (ro) -- (l);
+    \draw[flow] (p) -| (f); \draw[flow] (m) -- node[above, font=\tiny]{SQL guard} (f); \draw[flow] (l) -| (f);
+    \draw[flow, maple] (r) |- (no); \draw[flow, maple] (s) -- (no);
+  \end{tikzpicture}\\[0.6em]
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}\scriptsize
+      Every number in an answer must appear in the rows it came from; the SQL guard allows read-only queries on
+      approved tables and columns only; the trace (\textit{Route: metric · SQL guard: allowed · 1 row}) shows under
+      each answer.
+    \end{column}
+    \begin{column}{0.48\textwidth}\scriptsize
+      \textbf{Released benchmark 21/21} · stress suite 35/42 · unseen drill 26/30 (the gate a change must hold).
+      Two deterministic checks fix what the router can slip on: a channel the question names, a value the warehouse stores differently.
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- text and voice
+\begin{frame}
+  \kicker{Layer 3 · Text and voice}\frametitle{Hardship heard the first time, without the words leaving the machine}
+  \source{docs/reports/extraction\_gate.md, voice\_wer.md}
+  \begin{columns}[T]
+    \begin{column}{0.56\textwidth}
+      \begin{tikzpicture}[node distance=0.3cm]
+        \node[node box] (in) {Note or call\\{\tiny Whisper large-v3-turbo}};
+        \node[node box, right=of in] (red) {Redaction\\{\tiny Presidio}};
+        \node[node box, hot, right=of red] (llm) {Local Gemma 3 12B\\{\tiny JSON schema, quoted}};
+        \node[node box, below=0.5cm of llm] (card) {Card and\\hardship flag};
+        \draw[flow] (in) -- (red); \draw[flow] (red) -- (llm); \draw[flow] (llm) -- (card);
+        \draw[maple, dashed, rounded corners] ($(red.north west)+(-0.12,0.18)$) rectangle ($(card.south east)+(0.12,-0.12)$);
+        \node[font=\tiny, maple, anchor=north west] at ($(red.south west)+(-0.05,-0.25)$) {on this machine};
+      \end{tikzpicture}
+      \vspace{0.4em}
+      \begin{itemize}\setlength\itemsep{0.3em}\scriptsize
+        \item Every extracted value carries the exact quote it rests on; agents confirm a cease before it stops contact.
+        \item Replies are decoded to the JSON schema: malformed replies went from 152 of 1,172 calls to 0.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \kcard{\bignum{1.00}{hardship recall, notes and calls}\\[0.5em]\bignum{9.4\%}{word errors (bank's speech-to-text: 12.4\%)}\\[0.5em]\bignum{≥ 0.80}{F1 on every extracted field}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- decide
+\begin{frame}
+  \kicker{Layer 4 · Decide and release}\frametitle{From a feature vector to a released action, in seven checked steps}
+  \source{src/kept/nba/engine.py, src/kept/nba/release.py}
+  \centering
+  \begin{tikzpicture}[node distance=0.22cm]
+    \node[node box] (a) {Features\\{\tiny point in time}};
+    \node[node box, right=of a] (b) {Hard stops\\{\tiny cease, insolvency}};
+    \node[node box, right=of b] (c) {Uplift\\{\tiny per action}};
+    \node[node box, right=of c] (d) {Payday sizing\\{\tiny within spare cash}};
+    \node[node box, right=of d] (e) {Permissions\\{\tiny consent, hours, cap}};
+    \node[node box, right=of e] (f) {Tier\\{\tiny Green · Amber · Red}};
+    \node[node box, hot, right=of f] (g) {Release\\{\tiny rechecked}};
+    \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f,f/g} \draw[flow] (\x) -- (\y);
+  \end{tikzpicture}\\[0.8em]
+  \begin{columns}[T]
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Uplift, not propensity}LightGBM T-learner: one model per action against waiting. Contact whoever a contact changes, not whoever pays anyway.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Dated after payday}Next payday rolled forward from deposits or asked on the pay page; the promise falls due 1--2 days after, inside spare cash.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{People release}Green in a sampled team-lead batch; Amber by the agent; Red by a hardship specialist and a second person. Every release rechecks on fresh data.}\end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- explainability
+\begin{frame}
+  \kicker{Explainability}\frametitle{Every card says why, and the models say how far to trust them}
+  \source{data/exports/reports/model\_card.json (scripts/model\_card.py)}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \textbf{\small Promise model: is a 60\% promise kept 60\% of the time?}\\[0.3em]
+      \begin{tikzpicture}[x=0.052cm, y=0.034cm]
+        \draw[line] (0,0) rectangle (80,80);
+        \foreach \t in {0,20,40,60,80} {\draw[line] (\t,0) -- (\t,80); \node[font=\tiny, text=muted, below] at (\t,0) {\t\%}; \node[font=\tiny, text=muted, left] at (0,\t) {\t\%};}
+        \draw[muted, dashed] (0,0) -- (80,80);
+        \draw[maple, very thick] plot coordinates {\Kreliability};
+        \foreach \px/\py in \Kreldots \fill[maple] (\px,\py) circle (1.4);
+        \node[font=\tiny, text=muted] at (40,-11) {predicted chance kept};
+      \end{tikzpicture}\\
+      {\scriptsize AUC \KpromiseAuc, Brier \KpromiseBrier\ on \KpromiseRows\ promises it never saw (isotonic calibration). Dashed: perfect.}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \textbf{\small What drives it (share of |TreeSHAP|)}\\[0.4em]
+      \begin{tikzpicture}[x=0.06cm]
+        \foreach \v/\l [count=\i] in \Kimportance {
+          \node[anchor=east, font=\tiny] at (0,-\i*0.42) {\l};
+          \fill[ink] (1,-\i*0.42-0.12) rectangle (1+\v,-\i*0.42+0.12);
+          \node[anchor=west, font=\tiny] at (2+\v,-\i*0.42) {\v\%};
+        }
+      \end{tikzpicture}\\[0.6em]
+      {\scriptsize Per card: the 12 largest TreeSHAP contributions, both directions, on the case page. Uplift model: Qini \KqiniAny\ ± \KqiniNoise\ on \KupliftRows\ held-out decisions.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- safety and governance
+\begin{frame}
+  \kicker{Safe by construction}\frametitle{Checked every night, not promised once}
+  \source{docs/reports/fairness\_report.pdf, separated\_review.md, drift\_report.pdf; kept audit-verify}
+  \begin{columns}[T]
+    \begin{column}{0.24\textwidth}\kcard{\bignum[17]{\KinvarianceDiffer\,/\,\KinvarianceCards}{cards change when every protected attribute is scrambled and the book rescored}}\end{column}
+    \begin{column}{0.24\textwidth}\kcard{\bignum[17]{0.87--1.00}{contact ratio across \KfairnessAttributes\ protected attributes; a minimum-events rule}}\end{column}
+    \begin{column}{0.24\textwidth}\kcard{\bignum[17]{1 chain}{every recommendation, release and override hash-chained; one edit breaks it}}\end{column}
+    \begin{column}{0.24\textwidth}\kcard{\bignum[17]{1 switch}{reverts everyone to the bank's strategy; a worse model can't go live}}\end{column}
+  \end{columns}
+  \vspace{0.8em}
+  \begin{itemize}\setlength\itemsep{0.3em}\scriptsize
+    \item \textbf{Roles:} agents see their own cases; analysts see aggregates only (groups under 10 suppressed, no single case); names masked for every role but compliance.
+    \item \textbf{Drift:} \KdriftHeadline\ Drift on a model input pauses promotion until a retrain is checked.
+    \item \textbf{Voice biometrics, accent and pitch are never inputs}; accent is used only to check Whisper works equally well (9.1--10.1\% across regions).
+  \end{itemize}
+\end{frame}
+
+% ---------------------------------------------------------------- architecture
+\begin{frame}
+  \kicker{Architecture}\frametitle{A small stack that maps onto a bank's}
+  \source{README.md, pyproject.toml, web/package.json}
+  \footnotesize
+  \begin{tabular}{@{}L{3.0cm}L{5.6cm}L{4.6cm}@{}}
+    \toprule
+    \textbf{Piece} & \textbf{Here} & \textbf{At the bank} \\ \midrule
+    Warehouse & DuckDB file, dbt silver/gold, Feast online store & the bank's lakehouse; dbt models carry over \\
+    Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify} & WORM storage, same chain \\
+    Models & LightGBM uplift + promise, MLflow, champion/challenger gate & model risk management sign-off \\
+    Local language models & Gemma 3 12B (Ollama or llama.cpp), Whisper, bge-m3 on one GPU & an on-prem inference cluster \\
+    Hosted model & Gemini free tier, analyst questions only & the bank's approved model \\
+    API and app & FastAPI; Next.js workspace; personas & SSO, the bank's design system \\
+    \bottomrule
+  \end{tabular}\\[0.7em]
+  {\scriptsize Speed: 96,000 cards in \textasciitilde85 s; portfolio overview \textasciitilde40 ms; audit page 7.9 s $\to$ 0.04 s after moving filters into SQL. 1,322 tests; every change through CI.}
+\end{frame}
+
+% ---------------------------------------------------------------- decisions
+\begin{frame}
+  \kicker{Decisions, and the alternative we rejected}\frametitle{Why it's built this way}
+  \source{docs/reports/evidence.md, extraction\_gate.md; the portfolio's A/B panel}
+  \scriptsize
+  \begin{tabular}{@{}L{3.3cm}L{4.0cm}L{6.0cm}@{}}
+    \toprule
+    \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
+    Uplift per action & a propensity-to-pay score & propensity contacts people who'd pay anyway; uplift finds who a contact changes \\
+    Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds +6.1 pts \\
+    Local model for customer text & a hosted model for everything & customer words never leave the bank; no per-call cost; no quota mid-demo \\
+    Certified metrics first & free-form SQL from a model & reviewed definitions answer most questions with no model-written SQL \\
+    A graph with checks (LangGraph) & one prompt & each step is testable, traced, and fixable without retuning a prompt \\
+    Two people for Red & one approver or the model & hardship decisions are never one person's or a model's \\
+    Schema-constrained decoding & parse-and-retry & malformed replies 152 $\to$ 0 of 1,172 calls \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+% ---------------------------------------------------------------- what didn't ship
+\begin{frame}
+  \kicker{Rigour}\frametitle{What we tried, measured, and didn't ship}
+  \source{docs/reports/tuning.md, evidence.md §3, PR \#169}
+  \begin{columns}[T]
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Gemma 3 stays.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). The gate kept the champion.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. Ours plus the bank's score: 0.728 vs 0.702.}\end{column}
+  \end{columns}
+  \vspace{0.8em}
+  {\small The rule: a change ships only if it beats what's live by more than the noise, on data it never saw.}
+\end{frame}
+
+% ---------------------------------------------------------------- evidence
+\begin{frame}
+  \kicker{Measured impact}\frametitle{The bank's own randomised test: strategy doesn't move promises, timing does}
+  \source{silver.collections\_cases (closed, randomised); evidence.md §1--2, §4}
+  \begin{columns}[T]
+    \begin{column}{0.52\textwidth}
+      \textbf{\small Promise-kept rate by strategy (95\% Wilson interval)}\\[0.4em]
+      \begin{tikzpicture}[x=1.6cm]
+        \foreach \r/\lo/\hi/\n/\c [count=\i] in \Kab {
+          \node[anchor=east, font=\tiny] at (64.6,-\i*0.5) {\n};
+          \draw[muted, line width=1.6pt] (\lo,-\i*0.5) -- (\hi,-\i*0.5);
+          \fill[maple] (\r,-\i*0.5) circle (2.2pt);
+        }
+        \foreach \t in {65,66,67,68} {\draw[line] (\t,-0.2) -- (\t,-2.3); \node[font=\tiny, text=muted] at (\t,-2.5) {\t\%};}
+        \draw[ink, dashed] (66.36,-0.2) -- (66.36,-2.3);
+      \end{tikzpicture}\\
+      {\scriptsize Every interval overlaps the champion's (dashed).}
+    \end{column}
+    \begin{column}{0.44\textwidth}
+      \kcard{\bignum{+6.1 pts}{promised money paid when due 0--2 days after payday (95\% CI 2.8--10.6)}\\[0.5em]
+        \bignum{38.6--42.0\%}{paid in 14 days under Kept's policy vs 32.4--32.5\% for the bank's (off-policy estimate; two estimators agree)}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- business value
+\begin{frame}
+  \kicker{Business value}\frametitle{\KvalueBase\ a year in the base case, and where it comes from}
+  \source{docs/reports/business\_case.pdf, data/exports/reports/business\_data.json}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \textbf{\small Base case by driver (\$k a year)}\\[0.4em]
+      \begin{tikzpicture}[x=0.0062cm]
+        \foreach \v/\l [count=\i] in \Kdrivers {
+          \node[anchor=east, font=\tiny, text width=3.3cm, align=right] at (0,-\i*0.55) {\l};
+          \fill[maple] (8,-\i*0.55-0.15) rectangle (8+\v,-\i*0.55+0.15);
+          \node[anchor=west, font=\tiny] at (14+\v,-\i*0.55) {\$\v k};
+        }
+      \end{tikzpicture}\\[0.5em]
+      {\scriptsize Payday dating: more promised money paid on the promises made each year. Contact mix: fewer calls, more payment links. Wrap-up: call summaries agents don't type. QA: reviewers check flagged calls only.}
+    \end{column}
+    \begin{column}{0.41\textwidth}
+      \kcard{\bignum[20]{\KvalueBase}{a year, base case (low \KvalueLow, high \KvalueHigh)}\\[0.5em]
+        \bignum[20]{\KroiBase×}{year-one ROI, base case}\\[0.5em]
+        \bignum[20]{\KpaybackBase\ months}{payback, base case}}\\[0.4em]
+      {\scriptsize The low case doesn't pay back in year one, and we say so: it assumes payday dating barely helps.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- customer value
+\begin{frame}
+  \kicker{Value beyond dollars}\frametitle{What the customer and the regulator get}
+  \source{evidence.md §5 (guard metrics)}
+  \small
+  \begin{tabular}{@{}L{5.0cm}L{3.2cm}L{4.0cm}@{}}
+    \toprule
+    \textbf{Guard (must not get worse)} & \textbf{Bank today} & \textbf{Kept} \\ \midrule
+    Contact-cap breaches & 0.03\% of cases & 0 (checked at release) \\
+    Contact outside calling hours & 1.4\% of cases & 0 \\
+    Hardship notes missed & not measured & recall 1.00 \\
+    Any-contact fairness ratio & not measured & 0.87 or above \\
+    Complaints & 3.1\% of cases & needs a live pilot cell \\
+    \bottomrule
+  \end{tabular}\\[0.8em]
+  {\scriptsize Every action is explained (fixed sentences, never model text), on the record, and released by a named person.}
+\end{frame}
+
+% ---------------------------------------------------------------- the workspace
+\begin{frame}
+  \kicker{The product}\frametitle{One workspace for every role}
+  \source{web/ (Next.js), live on the warehouse}
+  \begin{columns}[T]
+    \begin{column}{0.32\textwidth}\kcard{\cardtitle{Queue and case}ranked by expected recovery; a cited case brief from the local model; the full "why"; contacts, promises and month-ends from the warehouse}\end{column}
+    \begin{column}{0.32\textwidth}\kcard{\cardtitle{Portfolio}tonight's book, the A/B as a forest plot, cohorts, insights with their SQL, models, fairness and drift}\end{column}
+    \begin{column}{0.32\textwidth}\kcard{\cardtitle{Ask, approvals, audit}plain-English questions with traced paths and sources; stage-by-stage release; the hash-chained trail}\end{column}
+  \end{columns}
+  \vspace{0.6em}
+  {\scriptsize Notifications come from the audit log (nothing stored twice); the customer's pay page asks for payday when the bank doesn't know it (about 3 customers in 4).}
+\end{frame}
+
+% ---------------------------------------------------------------- pilot
+\begin{frame}
+  \kicker{Next}\frametitle{A pilot that proves it, with a rule that ends it either way}
+  \source{docs/team/NEXT\_ROUND\_PLAN.md}
+  \begin{columns}[T]
+    \begin{column}{0.48\textwidth}
+      \begin{itemize}\setlength\itemsep{0.45em}
+        \item \textbf{20\% hold-out first}, then a permanent 5\% on the bank's strategy.
+        \item \textbf{A randomised due-date cell}, so the payday effect becomes a trial, not an estimate.
+        \item \textbf{Primary metric:} promised money paid. \textbf{Guards:} complaints, caps, hours, fairness ratio.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.48\textwidth}
+      \kcard{\cardtitle{Decision rule}Stop early for harm if any guard worsens beyond its 95\% interval; scale up if promised money paid beats the hold-out's interval for two consecutive months; otherwise run to the planned size.}\\[0.5em]
+      \kcard{\cardtitle{Day one}kill switch, nightly drift and fairness checks, the audit chain, and payday asked where the bank doesn't know it.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- team
+\begin{frame}
+  \kicker{How we built it}\frametitle{Four tracks, gated, every number reproducible}
+  \source{git history; JUDGES.md}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \begin{itemize}\setlength\itemsep{0.45em}
+        \item Data · Ask · Text and GPU · Decisions, integrated at gates G0--G4.
+        \item 170+ pull requests, each through CI; 1,322 tests.
+        \item Free and local models only; nothing leaves the bank but an analyst's question.
+        \item \texttt{JUDGES.md}: every claim, its report, and the command that reproduces it.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \kcard{\cardtitle{Reproduce any number}{\ttfamily\tiny uv run kept nightly\\uv run python scripts/evidence\_report.py\\uv run python scripts/model\_card.py\\uv run python scripts/bench\_run.py ...\\bash scripts/secret\_scan.sh}}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- close
+\begin{frame}[plain]
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[ink] (current page.north west) rectangle (current page.south east);
+    \node[text=white, text width=11cm, align=center, font=\displayfont\fontsize{24}{30}\selectfont] at (current page.center)
+      {Jane's promise lands the day after payday, inside what she can spare, and her hardship was heard the first time she said it.};
+    \node[text=white!70, font=\scriptsize, anchor=south] at ([yshift=1cm]current page.south) {Kept · Team Sharpe Shooters · github.com/shrey715/kept};
+  \end{tikzpicture}
+\end{frame}
+
+% ---------------------------------------------------------------- appendix
+\appendix
+\begin{frame}
+  \kicker{Appendix}\frametitle{Who can see and do what}
+  \source{src/kept/governance/access.py, src/kept/web/src/lib/session.ts}
+  \scriptsize
+  \begin{tabular}{@{}lllll@{}}
+    \toprule
+    \textbf{Role} & \textbf{Sees} & \textbf{Names} & \textbf{Releases} & \textbf{Ask} \\ \midrule
+    Collections agent & own cases & masked & Amber on own cases & yes \\
+    Hardship specialist & every case & masked & Red, first approval & yes \\
+    Team lead & every case & masked & Red second; Green batch & yes \\
+    Compliance & every case and the full trail & unmasked & Red second & yes \\
+    Analyst & aggregates only (groups ≥ 10) & none & none & yes \\
+    Data steward & match pairs & masked & merge or split & yes \\
+    \bottomrule
+  \end{tabular}
+\end{frame}
+
+\end{document}

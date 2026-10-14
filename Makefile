@@ -1,4 +1,4 @@
-.PHONY: help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build serve serve-demo web-setup web
+.PHONY: deck help setup setup-a setup-b setup-c setup-d setup-all test test-contract test-a test-b test-c test-d progress lint fmt typecheck dbt-build serve serve-demo web-setup web
 
 help:  ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
@@ -70,3 +70,7 @@ web-setup:  ## install the Next.js frontend (web/)
 
 web:  ## run the frontend on :3000; it proxies /api to the API on :8000 (KEPT_API_URL)
 	cd web && pnpm dev
+
+deck:  ## the LaTeX deck: numbers from the reports, then XeLaTeX twice -> docs/deck/kept.pdf
+	uv run python docs/deck/build_numbers.py
+	cd docs/deck && xelatex -interaction=nonstopmode kept.tex >/dev/null && xelatex -interaction=nonstopmode kept.tex >/dev/null

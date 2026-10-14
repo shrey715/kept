@@ -95,3 +95,11 @@ brag-output/
 demo_script*.md
 benchmark_questions_extra.xlsx
 submission/*.json
+# LaTeX build files (docs/deck/kept.pdf is committed)
+docs/deck/*.aux
+docs/deck/*.log
+docs/deck/*.nav
+docs/deck/*.out
+docs/deck/*.snm
+docs/deck/*.toc
+docs/deck/*.vrb
