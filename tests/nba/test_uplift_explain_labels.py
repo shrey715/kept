@@ -10,7 +10,7 @@ import pytest
 
 from kept.contracts import Action, DpdBucket
 from kept.contracts.feature_registry import model_inputs
-from kept.nba.explain import REASON_TEMPLATES, similar_cases_text, top_reasons
+from kept.nba.explain import REASON_TEMPLATES, _fmt, similar_cases_text, top_reasons
 from kept.nba.labels import paid_within, roll_forward_rate, rolled_forward
 from kept.nba.uplift import TLearnerUplift, qini_coefficient, qini_curve
 
@@ -116,7 +116,7 @@ def test_t_learner_recovers_heterogeneous_effect_from_random_rows_only() -> None
 
 # ----------------------------------------------------------------- explanations
 TEMPLATES = {
-    "days_to_next_payroll": "Pay lands in {value} days; past promises fell due before payday and broke",
+    "days_to_next_payroll": "{value}; past promises fell due before payday and broke",
     "pay_change_vs_3m_avg": "Pay is down on the 3-month average",
     "answer_rate_after_18h": "Answers most calls after 18:00",
     "max_dpd": "Days past due is {value}",
@@ -134,7 +134,7 @@ def test_top_three_positive_reasons_in_points() -> None:
     r = top_reasons(contrib, {"days_to_next_payroll": 1}, templates=TEMPLATES)
     assert [x.feature for x in r] == ["days_to_next_payroll", "pay_change_vs_3m_avg", "answer_rate_after_18h"]
     assert [x.contribution_pts for x in r] == pytest.approx([9.0, 6.0, 4.0])
-    assert r[0].sentence.startswith("Pay lands in 1 days")
+    assert r[0].sentence.startswith("Pay lands in 1 day;")
 
 
 def test_reasons_skip_untemplated_negative_and_non_model_features() -> None:
@@ -175,6 +175,11 @@ def test_default_templates_format_values() -> None:
         "Answers 80% of calls after 18:00",
         "Pay lands in 4 days",
     ]
+
+
+def test_payday_sentence_reads_past_and_today() -> None:
+    assert _fmt("days_to_next_payroll", -12) == "Expected pay date passed 12 days ago"
+    assert _fmt("days_to_next_payroll", 0) == "Pay lands today"
 
 
 def test_reason_without_its_value_is_skipped() -> None:
