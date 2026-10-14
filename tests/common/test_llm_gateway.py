@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from types import SimpleNamespace
 from typing import Any
 
@@ -55,7 +56,25 @@ def test_json_schema_validated_and_parsed(patched: list[dict[str, Any]]) -> None
     r = gw.complete(system="s", user=_text("u"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema)
     assert r.parsed == {"ok": True} and r.call_id
     with pytest.raises(ValueError):
-        gw.complete(system="s", user=_text("u2"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema)
+        gw.complete(
+            system="s", user=_text("u2"), purpose=Purpose.ASK_ROUTE, actor_id="u1", json_schema=schema
+        )
+
+
+def test_a_local_model_decodes_to_the_schema_a_hosted_one_gets_json_mode(
+    patched: list[dict[str, Any]],
+) -> None:
+    schema = {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]}
+    for model in ("ollama/gemma3", "gemini/gemini-2.5-flash"):
+        gw = LiteLLMGateway(model=model, audit_log=InMemoryAuditLog())
+        with (
+            pytest.raises(ValueError) if model.startswith("gemini") else nullcontext()
+        ):  # 2nd fake reply isn't JSON
+            gw.complete(
+                system="s", user=_text("u"), purpose=Purpose.TEXT_EXTRACT, actor_id="x", json_schema=schema
+            )
+    assert patched[0]["response_format"]["json_schema"]["schema"] == schema
+    assert patched[1]["response_format"] == {"type": "json_object"}
 
 
 def test_every_call_logged_including_failures(patched: list[dict[str, Any]]) -> None:
@@ -67,7 +86,11 @@ def test_every_call_logged_including_failures(patched: list[dict[str, Any]]) -> 
     )
     with pytest.raises(ValueError):
         gw.complete(
-            system="s", user=_text("u2"), purpose=Purpose.TEXT_EXTRACT, actor_id="system:x", json_schema=schema
+            system="s",
+            user=_text("u2"),
+            purpose=Purpose.TEXT_EXTRACT,
+            actor_id="system:x",
+            json_schema=schema,
         )
     events = log.read(kind=AuditKind.LLM_CALL)
     assert len(events) == 2

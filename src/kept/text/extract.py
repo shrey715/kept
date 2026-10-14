@@ -54,15 +54,6 @@ Fields:
 
 Reply with JSON only."""
 
-_FIELD = {
-    "type": "object",
-    "properties": {
-        "value": {},
-        "quote": {"type": ["string", "null"]},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    },
-    "required": ["value", "quote", "confidence"],
-}
 FIELDS = (
     "hardship_signal",
     "stated_reason",
@@ -73,9 +64,30 @@ FIELDS = (
     "cease_request",
     "third_party_present",
 )
+_VALUE: dict[str, dict[str, Any]] = {  # typed, so a local model decoding to the schema can't invent shapes
+    "hardship_signal": {"enum": [s.value for s in HardshipSignal]},
+    "stated_reason": {"enum": [r.value for r in StatedReason]},
+    "promise_intent": {"type": "boolean"},
+    "promised_date": {"type": ["string", "null"]},
+    "promised_amount": {"type": ["string", "null"]},
+    "dispute": {"type": "boolean"},
+    "cease_request": {"type": "boolean"},
+    "third_party_present": {"type": "boolean"},
+}
 JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "properties": {f: _FIELD for f in FIELDS},
+    "properties": {
+        f: {
+            "type": "object",
+            "properties": {
+                "value": _VALUE[f],
+                "quote": {"type": ["string", "null"]},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+            "required": ["value", "quote", "confidence"],
+        }
+        for f in FIELDS
+    },
     "required": list(FIELDS),
 }
 
