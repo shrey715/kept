@@ -21,7 +21,7 @@ from kept.ask.metrics import compile_metric
 from kept.ask.router import route
 from kept.ask.scope import check_scope, refusal_for, rule_check
 from kept.ask.sql_guard import guard_sql
-from kept.ask.templates import date_hints, resolve_dates
+from kept.ask.templates import COMPARE, date_hints, resolve_dates
 from kept.contracts import AskRequest, AskResponse, IntentKind, RedactedText, RefusalReason
 from kept.contracts.ask import GuardResult, Intent
 
@@ -367,6 +367,9 @@ def build_graph(ask: CollectionsAsk) -> Any:
         open_note = "; ".join(n for n in (open_note, bucket_note) if n) or None
         intent, grounded = ground_filters(intent, lambda col: column_values(intent.metric_id or "", col))
         notes = [*repaired, *([note] if note else []), *([open_note] if open_note else []), *grounded]
+        spans = resolve_dates(s["request"].question, s.get("as_of"))
+        if query.date_column and len(spans) >= 2 and COMPARE.search(s["request"].question):
+            return compare_periods(intent, spans[:2], notes)
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
         except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
@@ -388,6 +391,40 @@ def build_graph(ask: CollectionsAsk) -> Any:
             "guarded": guarded,
             "ran": ask._run(guarded, params),
             "trace": [*notes, f"Certified metric: {intent.metric_id}", "SQL guard: allowed"],
+        }
+
+    def compare_periods(intent: Intent, spans: list[tuple[str, Any, Any]], notes: list[str]) -> AskState:
+        """A period compared with the days before: the reviewed query runs once per period and the rows are
+        stacked under a period column, so the comparison is exact and the model writes no SQL."""
+        cols: tuple[str, ...] = ()
+        rows: list[tuple[Any, ...]] = []
+        guarded = None
+        for _, start, end in spans:
+            try:
+                one = intent.model_copy(update={"date_from": start, "date_to": end})
+                sql, params = compile_metric(one, ask._metrics, ask._queries)
+            except ValueError as e:
+                return {
+                    "reroute": True,
+                    "intent": as_lookup(intent),
+                    "trace": [*notes, f"Certified metric: can't compile ({e}); trying a lookup"],
+                }
+            guarded = guard_sql(sql, ask._sql_policy())
+            ran = ask._run(guarded, params) if guarded.allowed else None
+            if ran is None:
+                return {"reroute": True, "intent": as_lookup(intent), "trace": [*notes, "Period run failed"]}
+            cols = ran[0]
+            label = f"{start.isoformat()} to {end.isoformat()}" if start != end else start.isoformat()
+            rows += [(label, *r) for r in ran[1]]
+        return {
+            "intent": intent,
+            "guarded": guarded,
+            "ran": (("period", *cols), tuple(rows)),
+            "trace": [
+                *notes,
+                f"Certified metric: {intent.metric_id}, run once per period ({len(spans)} periods)",
+                "SQL guard: allowed",
+            ],
         }
 
     seen_values: dict[tuple[str, str], list[Any] | None] = {}

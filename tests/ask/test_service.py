@@ -636,3 +636,28 @@ def test_lint_sql_holds_drafts_to_the_resolved_dates_and_period_rows() -> None:
         "FROM silver.contact_history WHERE d BETWEEN '2026-09-07' AND '2026-09-20' GROUP BY period"
     )
     assert lint_sql(q, right, dates) == []
+
+
+def test_new_templates_compile_to_reviewed_sql() -> None:
+    from datetime import date
+
+    from kept.ask.metrics import compile_metric
+    from kept.ask.templates import TEMPLATES
+    from kept.contracts.ask import Intent, IntentKind
+
+    defs = {k: d for k, (d, _) in TEMPLATES.items()}
+    queries = {k: q for k, (_, q) in TEMPLATES.items()}
+    i = Intent(
+        kind=IntentKind.METRIC,
+        metric_id="contact_events",
+        filters={"complaint_raised_flag": True},
+        group_by=("contact_date",),
+        date_from=date(2026, 9, 14),
+        date_to=date(2026, 9, 20),
+        confidence=0.9,
+    )
+    sql, params = compile_metric(i, defs, queries)
+    assert "silver.contact_history" in sql and "GROUP BY contact_date" in sql
+    assert params == [True, date(2026, 9, 14), date(2026, 9, 20)]
+    for mid in ("qa_score", "open_cases", "overdraft_past_due"):
+        compile_metric(Intent(kind=IntentKind.METRIC, metric_id=mid, confidence=0.9), defs, queries)
