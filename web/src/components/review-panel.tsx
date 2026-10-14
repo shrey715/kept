@@ -1,16 +1,86 @@
 "use client";
 
 import { invalidate } from "@/lib/live";
-import { Box, Button, Callout, Flex, SegmentedControl, Select, Text, TextArea, TextField } from "@radix-ui/themes";
+import { InfoCircledIcon } from "@radix-ui/react-icons";
+import { Box, Button, Callout, Flex, Select, Text, TextArea, TextField } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
-import { ACTION_LABEL, api, decision, type Action, type Proposal, type ReleaseResult } from "@/lib/api";
+import { ACTION_LABEL, api, decision, humanize, money, when, type Action, type Proposal, type ReleaseResult } from "@/lib/api";
 import { nowIso } from "@/lib/clock";
 import type { Persona } from "@/lib/session";
 import { Stamp } from "./ledger";
 import { spring } from "./motion";
 
 type Mode = "accept" | "edit" | "alternative" | "override" | "reject";
+const MODES: { v: Mode; label: string; hint: string }[] = [
+  { v: "accept", label: "Approve", hint: "Approve the action as proposed." },
+  { v: "edit", label: "Edit", hint: "Change the amount or due date, then approve." },
+  { v: "alternative", label: "Other", hint: "Approve a different permitted action instead." },
+  { v: "override", label: "Override", hint: "Replace the action and give a reason. The reason is recorded in the audit log." },
+  { v: "reject", label: "Reject", hint: "Decline the proposal. Nothing is sent to the customer." },
+];
+
+/** Why a proposal of this tier waits for a person. */
+const WHY_APPROVAL: Record<Proposal["tier"], string> = {
+  red: "This case shows hardship or vulnerability. Only protective actions are proposed, and two people must agree: a hardship specialist first, then a team lead or compliance.",
+  amber: "The recommendation needs the assigned agent's judgement before it is sent.",
+  green: "Routine contact within every rule. It is released with the team lead's daily batch.",
+  blocked: "A hard stop applies (cease request, insolvency or deceased flag). Nothing can be released.",
+};
+
+/** A labelled input that slides in after the ones before it (i) when the decision mode changes. */
+function Field({ label, i, grow, children }: { label: string; i: number; grow?: boolean; children: React.ReactNode }) {
+  return (
+    <motion.label
+      className="k-field"
+      style={grow ? { flex: "1 1 180px" } : undefined}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...spring, delay: 0.04 + i * 0.06 }}
+    >
+      <span className="k-field-h">{label}</span>
+      {children}
+    </motion.label>
+  );
+}
+
+/** What the reviewer is about to approve, and why their approval is needed, shown before any button. */
+function ApprovalBrief({ p }: { p: Proposal }) {
+  const s = p.sizing;
+  const time = (iso: string) => new Date(iso).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" });
+  const day = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { weekday: "short" });
+  const chips = [
+    p.window_start && `${day(p.window_start)} ${time(p.window_start)}${p.window_end ? `–${time(p.window_end)}` : ""}, your time`,
+    s && `${money(s.amount, true)}${s.installments > 1 ? ` × ${s.installments}` : ""}, first due ${when(s.due_date, { month: "short", day: "numeric" })}`,
+    `Expires ${when(p.expires_at)}`,
+  ].filter(Boolean) as string[];
+  const tint = { red: "rose", amber: "butter", green: "mint", blocked: "lilac" }[p.tier];
+  return (
+    <div className={`k-brief t-${tint}`}>
+      <span className="k-brief-h">You are approving</span>
+      <div className="k-brief-title">
+        {ACTION_LABEL[p.action]}
+        {p.channel && <span> by {humanize(p.channel).toLowerCase()}</span>}
+      </div>
+      <div className="k-brief-chips">
+        {chips.map((c) => (
+          <span key={c} className="tabular">
+            {c}
+          </span>
+        ))}
+      </div>
+      {s && <p className="k-brief-note">{s.rationale}</p>}
+      <div className="k-brief-why">
+        <InfoCircledIcon aria-hidden />
+        <div>
+          <b>Why it needs your approval</b>
+          <p>{WHY_APPROVAL[p.tier]}</p>
+        </div>
+      </div>
+      <p className="k-brief-note">The reasons for this action are under “Why this action”. Every rule is checked again at release.</p>
+    </div>
+  );
+}
 
 /** What this persona may do with this proposal right now (the API enforces the same rules). */
 function stage(p: Proposal, me: Persona, assignedToMe: boolean): { can: boolean; label: string; note: string } {
@@ -118,6 +188,7 @@ export function ReviewPanel({
           </motion.div>
         ) : (
           <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <ApprovalBrief p={p} />
             {!st.can ? (
               <Callout.Root color="gray" variant="soft">
                 <Callout.Text>{st.note}</Callout.Text>
@@ -125,44 +196,55 @@ export function ReviewPanel({
             ) : (
               <Flex direction="column" gap="3">
                 {!secondStep && (
-                  <SegmentedControl.Root value={mode} onValueChange={(v) => setMode(v as Mode)} size="1">
-                    <SegmentedControl.Item value="accept">Approve</SegmentedControl.Item>
-                    {p.sizing && <SegmentedControl.Item value="edit">Edit</SegmentedControl.Item>}
-                    <SegmentedControl.Item value="alternative">Other</SegmentedControl.Item>
-                    <SegmentedControl.Item value="override">Override</SegmentedControl.Item>
-                    <SegmentedControl.Item value="reject">Reject</SegmentedControl.Item>
-                  </SegmentedControl.Root>
+                  <div className="k-modes" role="tablist" aria-label="Decision">
+                    {MODES.filter((m) => m.v !== "edit" || p.sizing).map((m) => (
+                      <button key={m.v} type="button" role="tab" aria-selected={mode === m.v} data-on={mode === m.v} onClick={() => setMode(m.v)}>
+                        {mode === m.v && <motion.span layoutId={`mode-${p.proposal_id}`} className="k-modes-pill" transition={spring} />}
+                        <span>{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.div key={mode} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
                     <Flex direction="column" gap="3">
+                      {!secondStep && <p className="k-mode-hint">{MODES.find((m) => m.v === mode)?.hint}</p>}
                       {mode === "edit" && p.sizing && (
-                        <Flex gap="3">
-                          <label style={{ flex: 1 }}>
-                            <Text size="1" color="gray">Amount (max {p.sizing.spare_cash_estimate})</Text>
-                            <TextField.Root inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                          </label>
-                          <label style={{ flex: 1 }}>
-                            <Text size="1" color="gray">Due date</Text>
-                            <TextField.Root type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-                          </label>
+                        <Flex gap="3" wrap="wrap">
+                          <Field label={`Amount · at most ${money(p.sizing.spare_cash_estimate, true)}`} i={0} grow>
+                            <TextField.Root size="3" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                          </Field>
+                          <Field label="Due date" i={1} grow>
+                            <TextField.Root size="3" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+                          </Field>
                         </Flex>
                       )}
                       {(mode === "alternative" || mode === "override") && (
-                        <Select.Root value={alt || "keep"} onValueChange={(v) => setAlt(v === "keep" ? "" : (v as Action))}>
-                          <Select.Trigger placeholder="Choose an action" />
-                          <Select.Content>
-                            {mode === "override" && <Select.Item value="keep">Keep: {ACTION_LABEL[p.action]}</Select.Item>}
-                            {others.map((a) => (
-                              <Select.Item key={a} value={a}>
-                                {ACTION_LABEL[a]}
-                              </Select.Item>
-                            ))}
-                          </Select.Content>
-                        </Select.Root>
+                        <Field label={mode === "override" ? "Action to send instead" : "Permitted alternative"} i={0}>
+                          <Select.Root size="3" value={alt || "keep"} onValueChange={(v) => setAlt(v === "keep" ? "" : (v as Action))}>
+                            <Select.Trigger className="k-select" placeholder="Choose an action" />
+                            <Select.Content position="popper" sideOffset={6} className="k-select-menu">
+                              {mode === "override" && <Select.Item value="keep">Keep: {ACTION_LABEL[p.action]}</Select.Item>}
+                              {others.map((a) => (
+                                <Select.Item key={a} value={a}>
+                                  {ACTION_LABEL[a]}
+                                </Select.Item>
+                              ))}
+                            </Select.Content>
+                          </Select.Root>
+                        </Field>
                       )}
                       {mode === "override" && (
-                        <TextArea placeholder="Reason (goes in the audit log)" value={reason} onChange={(e) => setReason(e.target.value)} />
+                        <Field label="Reason · recorded in the audit log" i={1}>
+                          <TextArea
+                            size="3"
+                            rows={3}
+                            className="k-textarea"
+                            placeholder="Why the proposed action should not be sent"
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                          />
+                        </Field>
                       )}
                     </Flex>
                   </motion.div>
