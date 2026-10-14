@@ -4,11 +4,13 @@
 // that opens the full source (POST /ask/source) with the cited passage highlighted, so nobody has to
 // take the model's word for it.
 import { CheckCircledIcon, ExclamationTriangleIcon, FileTextIcon, ReaderIcon, TableIcon } from "@radix-ui/react-icons";
-import { Box, Button, Callout, Card, Code, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
+import { Box, Button, Callout, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
 import { useEffect, useRef, useState } from "react";
 import { api, type AskAnswer, type Citation, type SourceText } from "@/lib/api";
 import { useSession } from "@/lib/session";
+import { SectionTitle } from "./page-header";
 import { inline, stripMarks } from "./rich-text";
+import { SqlBlock } from "./sql-block";
 
 const day = (d?: string | null) =>
   d ? new Date(`${d.slice(0, 10)}T00:00:00`).toLocaleDateString("en-CA", { dateStyle: "medium" }) : null;
@@ -20,9 +22,9 @@ function Tag({ n, muted, onClick }: { n: number; muted?: boolean; onClick: () =>
       onClick={onClick}
       aria-label={`Source ${n}: verify`}
       style={{
-        verticalAlign: "super", fontSize: "0.6em", lineHeight: 1, marginLeft: 2, padding: "2px 5px", border: "none",
-        borderRadius: 4, cursor: "pointer", fontFamily: "var(--default-font-family)", fontWeight: 600,
-        background: muted ? "var(--gray-a3)" : "var(--accent-a4)", color: muted ? "var(--gray-11)" : "var(--accent-11)",
+        verticalAlign: "super", fontSize: "0.58em", lineHeight: 1, marginLeft: 3, padding: "3px 6px", border: "none",
+        borderRadius: 999, cursor: "pointer", fontFamily: "var(--default-font-family)", fontWeight: 700,
+        background: muted ? "var(--k-chip)" : "var(--k-red)", color: muted ? "var(--gray-11)" : "#fff",
       }}
     >
       {n}
@@ -56,7 +58,7 @@ export function CitedText({ text, citations, onOpen }: { text: string; citations
   parts.push(...inline(text.slice(at), `t${at}`));
   used.filter((c) => !c.mention).forEach((c) => parts.push(<Tag key={`end-${c.ref}`} n={c.ref ?? 0} onClick={() => onOpen(c)} />));
   return (
-    <Text as="p" size="5" className="serif" weight="medium" style={{ whiteSpace: "pre-line" }}>
+    <Text as="p" size="5" style={{ whiteSpace: "pre-line", fontFamily: "var(--heading-font-family)", letterSpacing: "-0.015em", lineHeight: 1.45 }}>
       {parts}
     </Text>
   );
@@ -65,24 +67,29 @@ export function CitedText({ text, citations, onOpen }: { text: string; citations
 function SourceCard({ c, muted, onOpen }: { c: Citation; muted?: boolean; onOpen: (c: Citation) => void }) {
   const transcript = c.kind === "transcript";
   return (
-    <Card variant="surface" mt="2" style={muted ? { opacity: 0.75 } : undefined}>
-      <Flex gap="3" align="start">
-        <Tag n={c.ref ?? 0} muted={muted} onClick={() => onOpen(c)} />
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Flex gap="2" align="center" wrap="wrap">
+    <div className="k-source" data-muted={muted}>
+      <span className="k-source-n" data-muted={muted}>
+        {c.ref ?? "·"}
+      </span>
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Flex gap="2" align="center" wrap="wrap">
+          <span className="k-badge" style={{ gap: 6 }}>
             {transcript ? <ReaderIcon /> : <FileTextIcon />}
-            <Text weight="bold" size="2">{transcript ? `Call transcript ${c.source_id ?? ""}` : `${c.document_id} ${c.section}`}</Text>
-            <Text size="1" color="gray">{transcript ? `call on ${day(c.effective_from)}` : `in force from ${day(c.effective_from)}`}</Text>
-          </Flex>
-          <Text as="p" size="2" color="gray" mt="1" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {transcript ? `Summarised from the redacted transcript: ${c.snippet}` : <>“{inline(c.snippet.replace(/^#+\s*/gm, "").replace(/\s*\n\s*/g, " "), "s")}”</>}
+            {transcript ? `Call ${c.source_id ?? ""}` : c.document_id}
+          </span>
+          {!transcript && c.section && <span className="k-badge">{c.section}</span>}
+          <Text size="1" color="gray">
+            {transcript ? `call on ${day(c.effective_from)}` : `in force from ${day(c.effective_from)}`}
           </Text>
-        </Box>
-        <Button size="1" variant="soft" color={muted ? "gray" : undefined} onClick={() => onOpen(c)}>
-          Verify
-        </Button>
-      </Flex>
-    </Card>
+        </Flex>
+        <blockquote className="k-quote">
+          {transcript ? `Summarised from the redacted transcript: ${c.snippet}` : inline(c.snippet.replace(/^#+\s*/gm, "").replace(/\s*\n\s*/g, " "), "s")}
+        </blockquote>
+      </Box>
+      <button className="k-strong-btn" style={{ height: 34, padding: "0 14px", fontSize: 12 }} onClick={() => onOpen(c)}>
+        <CheckCircledIcon /> Verify
+      </button>
+    </div>
   );
 }
 
@@ -93,28 +100,40 @@ export function Sources({ r, onOpen }: { r: AskAnswer; onOpen: (c: Citation) => 
   const others = r.citations.filter((c) => !c.used);
   if (!r.sql && r.citations.length === 0) return null;
   return (
-    <Box mt="4">
-      <Flex align="baseline" gap="2">
-        <Text size="2" weight="bold">Sources</Text>
-        <Text size="1" color="gray">
-          {r.sql ? "computed from the warehouse" : `${used.length} relied on${others.length ? ` · ${others.length} also found` : ""}`}
-        </Text>
-      </Flex>
+    <Box mt="5" pt="4" style={{ borderTop: "1px solid var(--k-line)" }}>
+      <SectionTitle
+        eyebrow="Sources"
+        title="Where this answer comes from"
+        mb="3"
+        aside={
+          <span className="k-badge" style={{ height: 28, padding: "0 10px", borderRadius: 999 }}>
+            {r.sql ? "computed from the warehouse" : `${used.length} relied on${others.length ? ` · ${others.length} also found` : ""}`}
+          </span>
+        }
+      />
       {r.sql && (
-        <Card variant="surface" mt="2">
-          <Flex gap="2" align="center" wrap="wrap">
+        <div className="k-source">
+          <span className="k-source-n">
             <TableIcon />
-            <Text weight="bold" size="2">{r.tables_used.join(", ") || "query"}</Text>
-            <Text size="1" color="gray">
-              {r.rows.length} row{r.rows.length === 1 ? "" : "s"}
-              {r.data_freshness && ` · data as of ${day(r.data_freshness)}`}
+          </span>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Flex gap="2" align="center" wrap="wrap">
+              {(r.tables_used.length ? r.tables_used : ["query"]).map((t) => (
+                <span key={t} className="k-badge" style={{ fontFamily: "var(--font-mono)", fontWeight: 500 }}>
+                  {t}
+                </span>
+              ))}
+              <span className="k-badge">
+                {r.rows.length} row{r.rows.length === 1 ? "" : "s"}
+              </span>
+              {r.data_freshness && <span className="k-badge">data as of {day(r.data_freshness)}</span>}
+            </Flex>
+            <Text as="p" size="1" color="gray" mt="2">
+              Read-only SQL, checked by the SQL guard before it ran. Every number above comes from it.
             </Text>
-          </Flex>
-          <details style={{ marginTop: 8 }}>
-            <summary style={{ cursor: "pointer" }}><Text size="2" color="gray">The SQL that produced every number above (read-only, checked by the SQL guard)</Text></summary>
-            <Code variant="soft" size="2" style={{ display: "block", whiteSpace: "pre-wrap", padding: 12, marginTop: 8 }}>{r.sql}</Code>
-          </details>
-        </Card>
+            <SqlBlock sql={r.sql} label="The query" />
+          </Box>
+        </div>
       )}
       {!r.sql && used.length === 0 && others.length > 0 && (
         <Callout.Root color="amber" size="1" mt="2">

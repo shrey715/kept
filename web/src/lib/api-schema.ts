@@ -106,6 +106,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio */
+        get: operations["get_portfolio_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Cases */
+        get: operations["get_portfolio_cases_portfolio_cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -619,6 +653,62 @@ export interface components {
             /** Right Party Rate */
             right_party_rate: number | null;
         };
+        /** CasePage */
+        CasePage: {
+            /** Rows */
+            rows: components["schemas"]["CaseRow"][];
+            /** Total */
+            total: number;
+        };
+        /** CaseRow */
+        CaseRow: {
+            /** Case Id */
+            case_id: string;
+            /** Display Name */
+            display_name: string | null;
+            /** Current Bucket */
+            current_bucket: string | null;
+            /** Max Dpd */
+            max_dpd: number;
+            /** Total Overdue */
+            total_overdue: number;
+            /** Action */
+            action: string | null;
+            /** Tier */
+            tier: string | null;
+            /** P Paid 14D */
+            p_paid_14d: number | null;
+            /** Expected Value */
+            expected_value: number;
+            /** Hardship */
+            hardship: boolean;
+            /** Hard Stop */
+            hard_stop: boolean;
+        };
+        /**
+         * Cell
+         * @description One arm of the bank's randomised test: promise-kept rate and cure rate with Wilson 95% intervals.
+         */
+        Cell: {
+            /** Test Cell */
+            test_cell: string;
+            /** Cases */
+            cases: number;
+            /** Promises */
+            promises: number;
+            /** Kept Rate */
+            kept_rate: number;
+            /** Kept Lo */
+            kept_lo: number;
+            /** Kept Hi */
+            kept_hi: number;
+            /** Cure Rate */
+            cure_rate: number;
+            /** Cure Lo */
+            cure_lo: number;
+            /** Cure Hi */
+            cure_hi: number;
+        };
         /**
          * Channel
          * @enum {string}
@@ -736,6 +826,17 @@ export interface components {
             /** Question */
             question: string;
             intent?: components["schemas"]["Intent"] | null;
+        };
+        /** CohortCell */
+        CohortCell: {
+            /** Quarter */
+            quarter: string;
+            /** Product */
+            product: string;
+            /** Promises */
+            promises: number;
+            /** Kept Rate */
+            kept_rate: number | null;
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -1018,6 +1119,22 @@ export interface components {
             /** Demo */
             demo: boolean;
         };
+        /** Insight */
+        Insight: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /**
+             * Tone
+             * @enum {string}
+             */
+            tone: "good" | "warn" | "info";
+            /** Sql */
+            sql: string;
+        };
         /**
          * Intent
          * @description Router output: shown to the user as editable chips.
@@ -1197,6 +1314,37 @@ export interface components {
          * @enum {string}
          */
         PayrollFrequency: "weekly" | "biweekly" | "semi_monthly" | "monthly" | "irregular" | "unknown";
+        /** Portfolio */
+        Portfolio: {
+            /** As Of */
+            as_of: string | null;
+            /** Cases */
+            cases: number;
+            /** Balance */
+            balance: number;
+            /** Expected */
+            expected: number;
+            /** Actionable */
+            actionable: number;
+            /** Red */
+            red: number;
+            /** Hardship */
+            hardship: number;
+            /** Hard Stops */
+            hard_stops: number;
+            /** By Tier */
+            by_tier: components["schemas"]["Slice"][];
+            /** By Action */
+            by_action: components["schemas"]["Slice"][];
+            /** By Bucket */
+            by_bucket: components["schemas"]["Slice"][];
+            /** Ab Test */
+            ab_test: components["schemas"]["Cell"][];
+            /** Cohorts */
+            cohorts: components["schemas"]["CohortCell"][];
+            /** Insights */
+            insights: components["schemas"]["Insight"][];
+        };
         /**
          * PromiseSizing
          * @description Kept sizing: plain arithmetic, no model.
@@ -1379,6 +1527,17 @@ export interface components {
          * @enum {string}
          */
         Role: "agent" | "hardship_specialist" | "team_lead" | "analyst" | "compliance" | "data_steward" | "engineer";
+        /** Slice */
+        Slice: {
+            /** Key */
+            key: string;
+            /** Cases */
+            cases: number;
+            /** Balance */
+            balance: number;
+            /** Expected */
+            expected: number;
+        };
         /** SourceIn */
         SourceIn: {
             citation: components["schemas"]["Citation"];
@@ -1707,6 +1866,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApprovalItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_portfolio_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Portfolio"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_cases_portfolio_cases_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+                offset?: number;
+                limit?: number;
+                sort?: "expected_value" | "total_overdue" | "max_dpd" | "p_paid_14d";
+                tier?: string | null;
+                action?: string | null;
+                bucket?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CasePage"];
                 };
             };
             /** @description Validation Error */

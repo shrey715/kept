@@ -57,5 +57,7 @@ export const can = {
   queue: (r: Role) => ["agent", "hardship_specialist", "team_lead", "compliance"].includes(r),
   approvals: (r: Role) => ["agent", "hardship_specialist", "team_lead", "compliance"].includes(r),
   audit: (r: Role) => ["hardship_specialist", "team_lead", "compliance"].includes(r),
+  portfolio: (r: Role) => ["analyst", "hardship_specialist", "team_lead", "compliance"].includes(r),
+  portfolioCases: (r: Role) => ["hardship_specialist", "team_lead", "compliance"].includes(r),
   steward: (r: Role) => ["data_steward", "team_lead", "engineer"].includes(r),
 };

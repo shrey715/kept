@@ -27,6 +27,7 @@ from kept import __version__
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
+from kept.app.portfolio import CasePage, Portfolio, Sort
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.config import DATA_DIR, REPO_ROOT
@@ -53,7 +54,7 @@ from kept.contracts.nba import (
     StatedPay,
 )
 from kept.data.identity.steward import StewardQueue, StewardVerdict
-from kept.governance.access import can_view_case, masked_view
+from kept.governance.access import can_view_case, mask_name, masked_view
 from kept.text.extract import confirm
 
 CASE_WIDE_ROLES = frozenset({Role.HARDSHIP_SPECIALIST, Role.TEAM_LEAD, Role.COMPLIANCE})
@@ -82,6 +83,8 @@ class Services:
     calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
     reads: ReadState | None = None  # how far each person has read the bell
     history: Callable[[str], CaseHistory] | None = None  # real: contacts, promises, months from silver
+    portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
+    portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
     demo: bool = False
 
 
@@ -213,6 +216,10 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
     GET  /cases/{case_id}/history?user_id&role    200 CaseHistory (contacts, promises, month-ends); 503 demo
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
+    GET  /portfolio?user_id&role                  200 Portfolio (KPIs, slices, A/B with Wilson CIs, cohorts,
+                                                  insights with their SQL); analysts and case-wide roles
+    GET  /portfolio/cases?user_id&role[&offset&limit&sort&tier&action&bucket&q]
+                                                  200 CasePage of nba.cards; case-wide roles, names masked
     GET  /notifications?user_id&role[&limit]      200 NotificationFeed: audit events for this person, newest
                                                   first, plus what waits at their approval stage
     POST /notifications/read                      200 {"status": "ok"}; read_upto never moves back
@@ -350,6 +357,37 @@ def create_app(services: Services) -> FastAPI:
                 who = first(p.proposal_id) if first else None
                 out.append(ApprovalItem(stage=stage, proposal=p, first_approver=who[0] if who else None))  # type: ignore[arg-type]
         return sorted(out, key=lambda a: a.proposal.expires_at)
+
+    @app.get("/portfolio", response_model=Portfolio)
+    def get_portfolio(user_id: str, role: Role) -> Portfolio:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        if services.portfolio is None:
+            raise HTTPException(503, "the portfolio needs the warehouse")
+        return services.portfolio()
+
+    @app.get("/portfolio/cases", response_model=CasePage)
+    def get_portfolio_cases(
+        user_id: str,
+        role: Role,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=200),
+        sort: Sort = "expected_value",
+        tier: str | None = None,
+        action: str | None = None,
+        bucket: str | None = None,
+        q: str | None = None,
+    ) -> CasePage:
+        if role not in CASE_WIDE_ROLES:  # analysts see aggregates, never a single case
+            raise HTTPException(403, "only specialists, team leads and compliance see single cases")
+        if services.portfolio_cases is None:
+            raise HTTPException(503, "the portfolio needs the warehouse")
+        page = services.portfolio_cases(
+            offset=offset, limit=limit, sort=sort, tier=tier, action=action, bucket=bucket, q=q
+        )
+        if role is not Role.COMPLIANCE:
+            page.rows = [r.model_copy(update={"display_name": mask_name(r.display_name)}) for r in page.rows]
+        return page
 
     @app.get("/notifications", response_model=NotificationFeed)
     def notifications(user_id: str, role: Role, limit: int = Query(30, ge=1, le=100)) -> NotificationFeed:

@@ -4,6 +4,7 @@ import {
   BarChartIcon,
   ChatBubbleIcon,
   CheckCircledIcon,
+  DashboardIcon,
   ExitIcon,
   LayersIcon,
   MixerHorizontalIcon,
@@ -27,6 +28,7 @@ import { NotificationCenter } from "./notifications";
 
 export const NAV = [
   { href: "/queue", label: "Queue", icon: LayersIcon, blurb: "Today's cases, ranked by expected recovery", show: can.queue },
+  { href: "/portfolio", label: "Portfolio", icon: DashboardIcon, blurb: "Tonight's book: where the money is, what works", show: can.portfolio },
   { href: "/approvals", label: "Approvals", icon: CheckCircledIcon, blurb: "Cards waiting for a person to release them", show: can.approvals },
   { href: "/audit", label: "Audit", icon: ReaderIcon, blurb: "Every recommendation, release and override", show: can.audit },
   { href: "/ask", label: "Ask", icon: ChatBubbleIcon, blurb: "Questions in plain English, certified metrics", show: () => true },

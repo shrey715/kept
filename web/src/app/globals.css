@@ -670,8 +670,8 @@ html {
 
 /* GSAP SplitText line masks: room for descenders */
 .k-line-mask {
-  padding-bottom: 0.14em;
-  margin-bottom: -0.14em;
+  padding-bottom: 0.24em;
+  margin-bottom: -0.24em;
 }
 
 /* ---------------------------------------------------------------- notifications */
@@ -972,4 +972,145 @@ html {
   .k-signin-sketch {
     min-height: 220px;
   }
+}
+
+/* ---------------------------------------------------------------- sources: SQL, forest plot, heatmap */
+.k-sql {
+  margin-top: 10px;
+  border-radius: 14px;
+  background: #1c1917;
+  color: #e9e3da;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.k-sql-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font: 600 10px/1 var(--default-font-family);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a8a29e;
+}
+.k-sql-head .k-text-btn {
+  color: #d6d0c6;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.k-sql-head .k-text-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.k-sql pre {
+  margin: 0;
+  padding: 12px 14px 14px;
+  overflow-x: auto;
+  font: 12.5px/1.65 var(--font-mono), ui-monospace, monospace;
+  white-space: pre;
+}
+.k-sql-kw {
+  color: #ff8a8a;
+  font-weight: 600;
+}
+.k-sql-str {
+  color: #b5e3a0;
+}
+.k-sql-num {
+  color: #ffcf87;
+}
+.k-forest {
+  position: relative;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--k-chip);
+}
+.k-forest-ci {
+  position: absolute;
+  top: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--gray-a8);
+  transform-origin: left center;
+}
+.k-forest-dot {
+  position: absolute;
+  top: 3px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--k-chip);
+}
+.k-forest-ref {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  border-left: 1.5px dashed var(--gray-11);
+}
+.k-heat {
+  display: grid;
+  gap: 3px;
+  align-items: stretch;
+}
+.k-heat-cell {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  border-radius: 6px;
+  font: 600 11px/1 var(--default-font-family);
+  font-variant-numeric: tabular-nums;
+  background: var(--k-chip);
+}
+.k-heat-cell[data-empty="true"] {
+  background: repeating-linear-gradient(135deg, var(--k-chip) 0 4px, transparent 4px 8px);
+}
+.k-heat-scale {
+  width: 120px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, color-mix(in oklab, var(--k-red) 12%, var(--k-chip)), color-mix(in oklab, var(--k-red) 92%, var(--k-chip)));
+}
+
+/* ---------------------------------------------------------------- Ask sources */
+.k-source {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--k-chip);
+}
+.k-source[data-muted="true"] {
+  opacity: 0.72;
+}
+.k-source-n {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--k-red);
+  color: #fff;
+  font: 700 12px/1 var(--default-font-family);
+}
+.k-source-n[data-muted="true"] {
+  background: var(--k-card);
+  color: var(--gray-11);
+}
+.k-quote {
+  margin: 10px 0 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--k-red);
+  color: var(--gray-11);
+  font-size: 14px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
