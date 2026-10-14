@@ -3389,3 +3389,177 @@ html {
     transform: none;
   }
 }
+
+/* review panel: what is being approved, before the buttons; tinted by the release tier */
+.k-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  border-radius: 20px;
+  background: var(--t-bg, var(--gray-a2));
+  border: 1px solid color-mix(in srgb, var(--t-2, var(--gray-a5)) 70%, transparent);
+}
+.k-brief-h {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--t-ink, var(--gray-11));
+}
+.k-brief-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-top: -4px;
+}
+.k-brief-title span {
+  font-weight: 400;
+  color: var(--gray-11);
+}
+.k-brief-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.k-brief-chips span {
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--t-2, var(--gray-a3));
+  color: var(--t-ink, var(--gray-12));
+}
+.k-brief-why {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--t-2, var(--gray-a3)) 45%, transparent);
+}
+.k-brief-why svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--t-ink, var(--gray-11));
+}
+.k-brief-why b {
+  font-size: 13.5px;
+  color: var(--t-ink, var(--gray-12));
+}
+.k-brief-why p {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.k-brief-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--gray-11);
+}
+
+/* review panel: the decision switch (approve, edit, other, override, reject) */
+.k-modes {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--gray-a3);
+}
+.k-modes button {
+  position: relative;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gray-11);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.k-modes button:hover {
+  color: var(--gray-12);
+}
+.k-modes button[data-on="true"] {
+  color: var(--gray-12);
+}
+.k-modes button span {
+  position: relative;
+}
+.k-modes button:focus-visible {
+  outline: 2px solid var(--accent-8);
+  outline-offset: 2px;
+}
+.k-modes .k-modes-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--color-panel-solid);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.08);
+}
+
+/* review panel: the fields under the decision switch */
+.k-mode-hint {
+  margin: 2px 2px 0;
+  font-size: 13.5px;
+  color: var(--gray-11);
+}
+.k-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.k-field-h {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-11);
+}
+.k-field .rt-TextFieldRoot,
+.k-field .k-select,
+.k-field .k-textarea {
+  border-radius: 14px;
+  background: var(--gray-a2);
+  box-shadow: inset 0 0 0 1px var(--gray-a5);
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.k-field .k-select {
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  font-size: 15px;
+}
+.k-field .k-select:hover,
+.k-field .rt-TextFieldRoot:hover,
+.k-field .k-textarea:hover {
+  background: var(--gray-a3);
+}
+.k-field .k-select:focus-visible,
+.k-field .rt-TextFieldRoot:focus-within,
+.k-field .k-textarea:focus-within {
+  box-shadow: inset 0 0 0 2px var(--accent-8);
+}
+.k-field .k-textarea textarea {
+  resize: vertical;
+  min-height: 92px;
+}
+.k-select-menu {
+  border-radius: 14px;
+  padding: 4px;
+  min-width: var(--radix-select-trigger-width);
+}
+.k-select-menu .rt-SelectItem {
+  border-radius: 10px;
+  height: 38px;
+  font-size: 14.5px;
+}
