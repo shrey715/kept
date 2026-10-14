@@ -4,6 +4,7 @@ import { CheckCircledIcon, LightningBoltIcon, PersonIcon, StackIcon } from "@rad
 import { Badge, Box, Button, Callout, Card, Dialog, Flex, Grid, Progress, Skeleton, Text } from "@radix-ui/themes";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TierBadge, tierTint } from "@/components/bits";
 import { CountUp, Rise, Stagger, spring } from "@/components/motion";
@@ -166,10 +167,23 @@ export default function ApprovalsPage() {
   );
 }
 
+/** One pending approval. The whole row opens the case on its review tab; the button reviews it here. */
 function ApprovalRow({ item, onOpen }: { item: ApprovalItem; onOpen: () => void }) {
   const p = item.proposal;
+  const router = useRouter();
+  const href = `/cases/${p.case_id}?tab=review`;
   return (
-    <Card size="2">
+    <Card
+      size="2"
+      className="k-row-link"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open case ${p.case_id} to review ${ACTION_LABEL[p.action].toLowerCase()}`}
+      onClick={() => router.push(href)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && e.target === e.currentTarget) router.push(href);
+      }}
+    >
       <Flex align="center" gap="4" wrap="wrap">
         <span className={`k-ava t-${tierTint(p.tier)}`} aria-hidden style={{ width: 40, height: 40 }}>
           {STAGE_ICON[item.stage]}
@@ -181,12 +195,21 @@ function ApprovalRow({ item, onOpen }: { item: ApprovalItem; onOpen: () => void 
             {p.sizing && <Text color="gray">· {money(p.sizing.amount)} × {p.sizing.installments}</Text>}
           </Flex>
           <Text as="div" size="1" color="gray" mt="1" className="tabular">
-            <Link href={`/cases/${p.case_id}?tab=review`}>{p.case_id}</Link>
+            <Link href={href} onClick={(e) => e.stopPropagation()}>
+              {p.case_id}
+            </Link>
             {p.window_start && ` · ${when(p.window_start)}`} · expires {when(p.expires_at)}
             {item.first_approver && ` · approved by ${item.first_approver}`}
           </Text>
         </Box>
-        <Button onClick={onOpen}>{item.stage === "second_person" ? "Give second approval" : "Review"}</Button>
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+        >
+          {item.stage === "second_person" ? "Give second approval" : "Review here"}
+        </Button>
       </Flex>
     </Card>
   );
