@@ -1688,3 +1688,10 @@ html {
 .k-pay .rt-RadioCardsItem {
   border-radius: 16px;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .k-donut .arc,
+  .k-pill-tip {
+    transition: none;
+  }
+}
