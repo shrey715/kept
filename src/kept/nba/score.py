@@ -157,6 +157,16 @@ class _Buffer:
             if (kind is None or e.kind is kind) and (subject_id is None or e.subject_id == subject_id)
         ]
 
+    def latest(
+        self, *, kind: AuditKind | None = None, case_id: str | None = None, limit: int = 200
+    ) -> Sequence[AuditEvent]:
+        hits = [
+            e
+            for e in self.read(kind=kind)
+            if case_id is None or case_id in (e.subject_id, e.payload.get("case_id"))
+        ]
+        return hits[::-1][:limit]
+
 
 def load(conn: duckdb.DuckDBPyConnection) -> _Bulk:
     """Every case in the latest features.case_features (the cases open at the nightly as_of)."""

@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from kept import __version__
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
+from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.config import DATA_DIR, REPO_ROOT
@@ -78,7 +79,13 @@ class Services:
     scored_queue: Callable[[str, Role], list[QueueItem]] | None = None  # real: nba.cards from kept score
     chart: Callable[[ChartRequest], ChartChoice] | None = None  # real: the LLM picks; None: the rules pick
     calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
+    reads: ReadState | None = None  # how far each person has read the bell
     demo: bool = False
+
+
+class NotificationsReadIn(BaseModel):
+    user_id: str
+    upto: datetime
 
 
 class HealthResponse(BaseModel):
@@ -203,6 +210,9 @@ def create_app(services: Services) -> FastAPI:
                                                   False; 404 unknown case
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
+    GET  /notifications?user_id&role[&limit]      200 NotificationFeed: audit events for this person, newest
+                                                  first, plus what waits at their approval stage
+    POST /notifications/read                      200 {"status": "ok"}; read_upto never moves back
     GET  /audit?user_id&role[&case_id][&kind]     200 list[AuditEvent], newest first
     POST /proposals/{proposal_id}/decision        200 ReleaseResult; 422 if body.proposal_id
                                                   differs from the path
@@ -328,6 +338,28 @@ def create_app(services: Services) -> FastAPI:
                 out.append(ApprovalItem(stage=stage, proposal=p, first_approver=who[0] if who else None))  # type: ignore[arg-type]
         return sorted(out, key=lambda a: a.proposal.expires_at)
 
+    @app.get("/notifications", response_model=NotificationFeed)
+    def notifications(user_id: str, role: Role, limit: int = Query(30, ge=1, le=100)) -> NotificationFeed:
+        since = services.clock() - timedelta(days=7)
+        events = [e for k in KINDS.get(role, ()) for e in services.audit_log.read(kind=k, since=since)]
+        my_cases = {q.case_id for q in queue(user_id, role)} if role is Role.AGENT else None
+        waiting: dict[str, tuple[int, datetime]] = {}
+        for a in approvals(user_id, role):
+            n, at = waiting.get(a.stage, (0, a.proposal.created_at))
+            waiting[a.stage] = (n + 1, max(at, a.proposal.created_at))
+        feed = build(events, user_id=user_id, role=role, my_cases=my_cases, waiting=waiting, limit=limit)
+        upto = services.reads.get(user_id) if services.reads else None
+        return NotificationFeed(
+            items=feed, unread=sum(1 for n in feed if upto is None or n.at > upto), read_upto=upto
+        )
+
+    @app.post("/notifications/read")
+    def notifications_read(body: NotificationsReadIn) -> dict[str, str]:
+        if services.reads is None:
+            raise HTTPException(503, "notification read state not configured")
+        services.reads.mark(body.user_id, body.upto)
+        return {"status": "ok"}
+
     @app.get("/audit", response_model=list[AuditEvent])
     def audit(
         user_id: str, role: Role, case_id: str | None = None, kind: AuditKind | None = None, limit: int = 200
@@ -336,10 +368,7 @@ def create_app(services: Services) -> FastAPI:
             guard_case(case_id, user_id, role)
         elif role not in CASE_WIDE_ROLES:
             raise HTTPException(403, "only specialists, team leads and compliance see the whole log")
-        events = services.audit_log.read(kind=kind)
-        if case_id is not None:
-            events = [e for e in events if e.subject_id == case_id or e.payload.get("case_id") == case_id]
-        return list(reversed(events))[:limit]
+        return list(services.audit_log.latest(kind=kind, case_id=case_id, limit=limit))
 
     @app.post("/proposals/{proposal_id}/decision", response_model=ReleaseResult)
     def decide(proposal_id: str, decision: ReleaseDecision) -> ReleaseResult:

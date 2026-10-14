@@ -16,6 +16,7 @@ from pathlib import Path
 import duckdb
 
 from kept.app.api import QueueItem, Services
+from kept.app.notifications import ReadState
 from kept.app.voice import VoiceCalls
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
@@ -121,6 +122,7 @@ def real_services(
             EXPORT_DIR / "voice" / "voice_extractions.parquet",
             Path(os.environ.get("KEPT_VOICE_DIR", RAW_DIR / "files" / "voice")),
         ),
+        reads=ReadState(warehouse.parent / "app_state.duckdb"),  # not the warehouse: kept score writes that
     )
 
 

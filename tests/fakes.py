@@ -151,6 +151,17 @@ class InMemoryAuditLog:
             and (since is None or e.at >= since)
         ]
 
+    def latest(
+        self, *, kind: AuditKind | None = None, case_id: str | None = None, limit: int = 200
+    ) -> Sequence[AuditEvent]:
+        hits = [
+            e
+            for e in self._events
+            if (kind is None or e.kind == kind)
+            and (case_id is None or e.subject_id == case_id or e.payload.get("case_id") == case_id)
+        ]
+        return list(reversed(hits))[:limit]
+
 
 @dataclass
 class DictC360Reader:

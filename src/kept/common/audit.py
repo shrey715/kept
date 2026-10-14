@@ -56,6 +56,7 @@ class DuckDBAuditLog:
     def __init__(self, path: Path | str = ":memory:") -> None:
         self._path = str(path)
         self._mem = duckdb.connect() if self._path == ":memory:" else None
+        self._write = threading.Lock()  # API requests run on threads: one append at a time keeps one chain
         with self._conn() as c:
             c.execute(_DDL)
 
@@ -79,7 +80,7 @@ class DuckDBAuditLog:
         All or none: a duplicate event_id raises ValueError and nothing is written."""
         rows = [[e.event_id, _micros(e.at), e.kind.value, e.subject_id, e.model_dump_json()] for e in events]
         try:
-            with self._conn() as c:
+            with self._write, self._conn() as c:
                 c.execute("begin")
                 try:
                     last = c.execute(
@@ -125,6 +126,32 @@ class DuckDBAuditLog:
                 f"select body from audit_events where {' and '.join(where)} order by seq", params
             )
             return [AuditEvent.model_validate_json(b) for (b,) in rows.fetchall()]
+
+    def latest(
+        self, *, kind: AuditKind | None = None, case_id: str | None = None, limit: int = 200
+    ) -> Sequence[AuditEvent]:
+        """Newest first, filtered and limited in SQL (the log holds ~a million nightly recommendations)."""
+        sql, params = _latest_sql(kind, case_id, limit)
+        with self._conn() as c:
+            return [AuditEvent.model_validate_json(b) for (b,) in c.execute(sql, params).fetchall()]
+
+
+def _latest_sql(kind: AuditKind | None, case_id: str | None, limit: int) -> tuple[str, list[object]]:
+    where: list[str] = ["true"]
+    params: list[object] = []
+    if kind is not None:
+        where.append("kind = ?")
+        params.append(kind.value)
+    if case_id is not None:  # LIKE first: it skips the JSON parse on the ~million rows about other cases
+        where.append(
+            "(subject_id = ? or (body like '%' || ? || '%'"
+            " and json_extract_string(body, '$.payload.case_id') = ?))"
+        )
+        params += [case_id] * 3
+    return f"select body from audit_events where {' and '.join(where)} order by seq desc limit ?", [
+        *params,
+        limit,
+    ]
 
 
 def verify_chain(log: DuckDBAuditLog) -> tuple[int, int, str | None]:

@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 
 from kept.app.api import ExtractionConfirmIn, NoteExtraction, Services, create_app
+from kept.app.notifications import ReadState
 from kept.common.audit import DuckDBAuditLog, new_event_id
 from kept.config import RAW_DIR
 from kept.contracts.ask import (
@@ -717,6 +718,7 @@ def demo_services() -> Services:
         open_cases=lambda: [c[0] for c in CASES],
         clock=_business_clock,
         add_note=world.add_note,
+        reads=ReadState(),
         demo=True,
     )
 
