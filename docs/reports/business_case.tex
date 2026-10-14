@@ -202,13 +202,32 @@ low scenario (\$0.44M) is the corner where every assumption is at its worst at t
 \section{Risks, costs we're honest about, and how we'll know}
 
 \begin{itemize}
-\item \textbf{Specialist workload.} 38,115 of tonight's cards (40\%) are Red: a hardship specialist reviews before anything
-is sent. That's the protection working, but it's real time. A rule for customers already on an active hardship plan would
-cut it, and it's the next thing we'd ship.
-\item \textbf{Not yet a trial.} The payday effect is measured on randomised cases, but the due dates themselves weren't
-randomised, so it is still an estimate (its interval is wide). A permanent
-\textbf{5\% hold-out} stays on the old strategy, so the real effect on promises kept, roll rate and cost is measured
-from day 30, and a \textbf{kill switch} reverts everyone if it isn't there.
+\item \textbf{Specialist workload.} 38,187 of the 96,000 cards (40\%) are Red, and every one carries a hardship
+signal: 25,914 from the case's own hardship flag, 12,273 from what notes, calls or the customer said, and 9,865 of them
+also marked vulnerable. A specialist reviews each before anything is sent. That is the protection working, but 7,367 of
+them are customers whose hardship plan is still running, where a new review repeats the last one. A rule that skips
+those until the plan ends would save about 1,200 specialist hours a pass at 10 minutes a review, and it is the next
+thing we'd ship (a policy change, so it needs the bank's sign-off).
+\item \textbf{Not yet a trial.} The payday effect is measured on randomised cases and checked three ways (evidence
+§2a), but the due dates themselves weren't randomised, so it is still an estimate. A permanent \textbf{hold-out} stays
+on the old strategy and a \textbf{kill switch} reverts everyone if the effect isn't there. How long the hold-out needs
+(80\% power, 5\% significance, 3,720 new 1–30 day cases and 2,720 promises a week):
+
+\begin{center}\small
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{To detect} & \textbf{5\% hold-out} & \textbf{10\%} & \textbf{20\%} \\
+\midrule
+Promises kept +4.6 pts (the measured effect) & 7 weeks & 4 weeks & 2 weeks \\
+Promises kept +2 pts & 35 weeks & 19 weeks & 11 weeks \\
+Roll rate −2 pts & 28 weeks & 15 weeks & 8 weeks \\
+Roll rate −1 pt & 111 weeks & 59 weeks & 33 weeks \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+So the plan is four weeks in shadow mode, then a 20\% hold-out for eight weeks, which shows the payday effect within
+two weeks and a 2-point roll-rate drop by week eight, then 5\% once it is proven.
 \item \textbf{What isn't in the numbers.} Fewer complaints and less regulator risk from finding hardship when the customer
 says it rather than weeks later; fairness checked on every run; a plain-English reason and an audit trail for every
 decision. Those are hard to price and matter anyway.
