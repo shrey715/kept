@@ -159,6 +159,8 @@
   background: var(--k-card);
   padding: 22px 8px 10px;
   box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto; /* on a phone the table scrolls inside its panel instead of spilling out */
 }
 .k-tpanel-head {
   display: flex;
@@ -520,7 +522,7 @@ html {
   place-items: center;
   width: 1.5em;
   height: 0.95em;
-  margin: 0 0.12em;
+  margin: 0 0.2em; /* clear air between a title's words and its inline chip */
   border-radius: 999px;
   background: var(--k-chip);
   vertical-align: 0.06em;
@@ -707,8 +709,8 @@ html {
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   align-items: end;
-  height: 220px;
-  padding-top: 8px;
+  height: 240px;
+  padding-top: 30px; /* headroom: the tallest bar and its pills stay clear of the card's header chip */
   background-image: repeating-linear-gradient(to top, var(--k-line) 0, var(--k-line) 1px, transparent 1px, transparent 22px);
 }
 .k-capsule {
@@ -753,6 +755,11 @@ html {
   position: absolute;
   left: calc(100% + 6px);
   white-space: nowrap;
+  z-index: 1;
+}
+.k-capsule .tag.flip {
+  left: auto;
+  right: calc(100% + 6px);
 }
 
 /* thin horizontal meters (reasons, probabilities) */
@@ -1492,20 +1499,22 @@ html {
   background-image: radial-gradient(var(--k-dot) 1px, transparent 1.3px);
   background-size: 16px 16px;
 }
+/* one row, never wrapped (a wrapped tile would start the next line with a dangling connector): tiles shrink to
+   fit, and a long path scrolls sideways inside its card */
 .k-flow {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: stretch;
-  row-gap: 14px;
   margin: 0;
-  padding: 0;
+  padding: 0 0 4px;
   list-style: none;
+  overflow-x: auto;
 }
 .k-flow li {
   display: flex;
   align-items: center;
   flex: 1 1 118px;
-  min-width: 0;
+  min-width: 96px;
   max-width: 190px;
 }
 .k-flow-link {
@@ -1537,7 +1546,7 @@ html {
   align-items: center;
   gap: 4px;
   flex: 1;
-  min-width: 92px;
+  min-width: 74px;
   min-height: 112px;
   padding: 12px 10px;
   box-sizing: border-box;
@@ -1572,6 +1581,7 @@ html {
 @media (max-width: 767px) {
   .k-flow li {
     flex-basis: 104px;
+    min-width: 104px;
   }
   .k-flow-link {
     width: 14px;

@@ -423,6 +423,7 @@ function DpdChart({ items }: { items: QueueItem[] }) {
         {bands.map((b, k) => {
           const h = b.n ? 18 + (b.n / max) * 82 : 62;
           const part = b.n ? Math.max(b.acted ? 18 : 0, (b.acted / b.n) * 100) : 0;
+          const flip = k >= bands.length - 2; // near the right edge the pills sit on the bar's left
           return (
             <div key={b.label} style={{ position: "relative", height: "100%", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
             <span className="k-capsule-track" aria-hidden />
@@ -440,12 +441,20 @@ function DpdChart({ items }: { items: QueueItem[] }) {
                 </span>
               )}
               {k === top && b.n > 0 && (
-                <span className="tag k-badge" style={{ top: 4, background: "var(--k-strong)", color: "var(--k-on-strong)" }}>
+                <span className={`tag k-badge${flip ? " flip" : ""}`} style={{ top: 4, background: "var(--k-strong)", color: "var(--k-on-strong)" }}>
                   {b.n}
                 </span>
               )}
               {k === top && b.acted > 0 && (
-                <span className="tag k-badge" style={{ bottom: `calc(${part}% - 30px)`, background: "var(--k-hi)", color: "var(--k-hi-ink)" }}>
+                // a nearly full bar would put this pill on top of the count: stack it just under instead
+                <span
+                  className={`tag k-badge${flip ? " flip" : ""}`}
+                  style={{
+                    ...(part > 70 ? { top: 34 } : { bottom: `calc(${part}% - 30px)` }),
+                    background: "var(--k-hi)",
+                    color: "var(--k-hi-ink)",
+                  }}
+                >
                   {Math.round((b.acted / b.n) * 100)}%
                 </span>
               )}

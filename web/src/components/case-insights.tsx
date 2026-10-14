@@ -132,7 +132,11 @@ export function DriverRadar({ drivers }: { drivers: Driver[] }) {
         ))}
       </svg>
       {shown.weight > 0 && (
-        <span className="k-pill-tip" data-below={ty < C} style={{ left: `${(tx / 260) * 100}%`, top: `${(ty / 260) * 100}%` }}>
+        <span
+          className="k-pill-tip"
+          data-below={ty < C}
+          style={{ left: `${Math.min(74, Math.max(26, (tx / 260) * 100))}%`, top: `${(ty / 260) * 100}%` }}
+        >
           net {shown.net >= 0 ? "+" : "−"}
           {Math.abs(shown.net).toFixed(1)} pts
         </span>
