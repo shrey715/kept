@@ -3339,3 +3339,33 @@ html {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* case tabs: an underline that glides between tabs; focus ring for the keyboard only */
+.k-glide-tabs .rt-TabsTrigger {
+  position: relative;
+}
+.k-glide-tabs .rt-TabsTrigger::before {
+  display: none; /* Radix's own indicator: replaced by the gliding bar */
+}
+.k-glide-tabs .rt-TabsTrigger:focus:not(:focus-visible),
+.k-glide-tabs .rt-TabsTrigger:focus:not(:focus-visible) .rt-TabsTriggerInner {
+  outline: none;
+  box-shadow: none;
+}
+.k-glide-bar {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--k-red);
+}
+/* characters the source export lost: a restored letter is dotted, an unknown one is a quiet dot */
+.k-lost {
+  text-decoration: underline dotted var(--gray-9);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.k-lost.gone {
+  color: var(--gray-9);
+  text-decoration: none;
+}

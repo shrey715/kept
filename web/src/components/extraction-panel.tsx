@@ -40,7 +40,36 @@ const SIGNALS = ["none", "possible", "clear"];
 const REASONS = ["none", "job_loss", "reduced_income", "medical", "bereavement", "other"];
 
 /** The note with every evidence span marked, coloured by the field it supports. */
+const FRENCH = /\b(le|la|les|des|une|est|pas|avec|chez|famille|paiement|promesse|appel|client|pour|sur)\b/gi;
+
+/** Text with the characters the source export lost (U+FFFD) made legible: in French notes the lost letter is almost
+ * always "é", restored with a dotted underline; elsewhere a quiet placeholder. Same length, so quote offsets hold. */
+function Legible({ text, french }: { text: string; french: boolean }) {
+  if (!text.includes("\uFFFD")) return <>{text}</>;
+  return (
+    <>
+      {text.split("\uFFFD").flatMap((part, i) =>
+        i === 0
+          ? [part]
+          : [
+              french ? (
+                <span key={i} className="k-lost" title="Restored: this letter was lost in the source system's export">
+                  é
+                </span>
+              ) : (
+                <span key={i} className="k-lost gone" title="A character was lost in the source system's export">
+                  ·
+                </span>
+              ),
+              part,
+            ],
+      )}
+    </>
+  );
+}
+
 export function Highlighted({ note, ex }: { note: string; ex: TextExtraction }) {
+  const french = (note.match(FRENCH) ?? []).length >= 2;
   const spans = FIELDS.flatMap((f) => {
     const e = ex[f.key].evidence;
     return e ? [{ start: e.char_start, end: e.char_end, f }] : [];
@@ -50,17 +79,17 @@ export function Highlighted({ note, ex }: { note: string; ex: TextExtraction }) 
   const parts: React.ReactNode[] = [];
   let at = 0;
   spans.forEach((s, i) => {
-    if (s.start > at) parts.push(note.slice(at, s.start));
+    if (s.start > at) parts.push(<Legible key={`t${i}`} text={note.slice(at, s.start)} french={french} />);
     parts.push(
       <Tooltip key={i} content={s.f.label}>
         <mark className={`k-mark t-${s.f.tint}`}>
-          {note.slice(s.start, s.end)}
+          <Legible text={note.slice(s.start, s.end)} french={french} />
         </mark>
       </Tooltip>,
     );
     at = s.end;
   });
-  parts.push(note.slice(at));
+  parts.push(<Legible key="end" text={note.slice(at)} french={french} />);
   return <p className="k-quote">{parts}</p>;
 }
 
@@ -119,7 +148,7 @@ function NoteCard({ item, agentId, demo, onSaved }: { item: NoteExtraction; agen
       </div>
 
       {item.note.trim() ? <Highlighted note={item.note} ex={ex} /> : <p className="k-quote k-notecard-none">The note text is not stored for this record; its extracted values are below.</p>}
-      {garbled && <p className="k-notecard-warn">Some characters were lost in the source system&apos;s export.</p>}
+      {garbled && <p className="k-notecard-warn">Characters lost in the source system&apos;s export are restored or marked (dotted).</p>}
 
       <div className="k-notecard-read">
         <span className="k-cust-h" style={{ margin: 0 }}>
