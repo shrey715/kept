@@ -1,6 +1,6 @@
 "use client";
 
-import { PageHeader, SectionTitle } from "@/components/page-header";
+import { PageHeader, SectionTitle, useSplitReveal } from "@/components/page-header";
 import {
   CalendarIcon,
   CardStackIcon,
@@ -15,7 +15,7 @@ import {
   TimerIcon,
 } from "@radix-ui/react-icons";
 import { Box, Callout, Flex, Popover, Skeleton, Text } from "@radix-ui/themes";
-import { motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TierBadge } from "@/components/bits";
@@ -88,21 +88,32 @@ export default function CalendarPage() {
   );
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [selected, setSelected] = useState(() => startOfDay(new Date()));
+  const [dir, setDir] = useState(0); // -1 back, +1 forward: the grid slides the way you move
+  const go = (d: number) => (setDir(d), setAnchor((a) => shift(view, a, d)));
+  const calm = useReducedMotion();
   const [kinds, setKinds] = useState<Set<Kind>>(() => new Set(KINDS.map((k) => k.kind)));
   const [tiers, setTiers] = useState<Set<string>>(() => new Set(TIERS.map((t) => t[0])));
   const { start, end } = useMemo(() => rangeFor(view, anchor), [view, anchor]);
   // what came back, and for which range: a stale range's events never show under a new heading
   const [got, setGot] = useState<{ range: string; feed?: CalendarFeed; error?: string } | null>(null);
   const range = `${key(start)}/${key(end)}`;
-  const feed = got?.range === range ? (got.feed ?? null) : null;
+  const fresh = got?.range === range ? (got.feed ?? null) : null;
   const error = got?.range === range ? (got.error ?? null) : null;
+  // the last range stays on screen (dimmed) while the next one loads: no flash back to a skeleton
+  const [last, setLast] = useState<CalendarFeed | null>(null);
+  const feed = fresh ?? last;
+  const loading = fresh == null && last != null;
 
   useEffect(() => {
     if (!me) return;
     let live = true;
     const [a, b] = range.split("/");
     api.calendar(me, a, b).then(
-      (f) => live && setGot({ range, feed: f }),
+      (f) => {
+        if (!live) return;
+        setGot({ range, feed: f });
+        setLast(f);
+      },
       (e: Error) => live && setGot({ range, error: e.message }),
     );
     return () => {
@@ -143,7 +154,7 @@ export default function CalendarPage() {
   if (!me) return null;
 
   return (
-    <Stagger>
+    <Stagger className="k-cal-page">
       <Rise>
         <PageHeader
           icon={<CalendarIcon />}
@@ -163,23 +174,22 @@ export default function CalendarPage() {
           <Flex gap="2" align="center" wrap="wrap">
             <div className="k-tabs" role="tablist" aria-label="View">
               {(["month", "week", "agenda"] as View[]).map((v) => (
-                <button key={v} role="tab" aria-selected={view === v} className="k-tab" data-active={view === v} onClick={() => setView(v)}>
-                  {v[0].toUpperCase() + v.slice(1)}
+                <button key={v} role="tab" aria-selected={view === v} className="k-tab k-tab-glide" data-active={view === v} onClick={() => (setDir(0), setView(v))}>
+                  {view === v && <motion.span layoutId="cal-view-pill" className="k-tab-pill" transition={{ type: "spring", stiffness: 480, damping: 38 }} />}
+                  <span style={{ position: "relative" }}>{v[0].toUpperCase() + v.slice(1)}</span>
                 </button>
               ))}
             </div>
-            <button className="k-round-btn" aria-label="Previous" onClick={() => setAnchor((a) => shift(view, a, -1))}>
+            <button className="k-round-btn" aria-label="Previous" onClick={() => go(-1)}>
               <ChevronLeftIcon />
             </button>
-            <button className="k-tab" onClick={() => setAnchor(startOfDay(new Date()))}>
+            <button className="k-tab" onClick={() => (setDir(0), setAnchor(startOfDay(new Date())), setSelected(startOfDay(new Date())))}>
               Today
             </button>
-            <button className="k-round-btn" aria-label="Next" onClick={() => setAnchor((a) => shift(view, a, 1))}>
+            <button className="k-round-btn" aria-label="Next" onClick={() => go(1)}>
               <ChevronRightIcon />
             </button>
-            <h2 className="k-tpanel-title" style={{ marginLeft: 6 }}>
-              {label}
-            </h2>
+            <RangeTitle label={label} />
           </Flex>
           <Text size="1" color="gray" className="tabular">
             {feed ? `${shown.length.toLocaleString("en-CA")} of ${feed.events.length.toLocaleString("en-CA")} events${feed.truncated ? " (first 3,000)" : ""}` : ""}
@@ -216,15 +226,29 @@ export default function CalendarPage() {
       )}
       <Rise>
         <div className="k-cal-wrap" data-panel={view === "month"} ref={fitRef} style={fit && view !== "agenda" ? { height: fit } : undefined}>
-          <div className="k-cal-pane">
+          <div className="k-cal-pane" data-loading={loading}>
             {!feed && !error ? (
               <Skeleton height={`${fit ?? 560}px`} />
-            ) : view === "month" ? (
-              <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} selected={key(selected)} onSelect={setSelected} peak={peak} height={fit} />
-            ) : view === "week" ? (
-              <WeekView start={start} byDay={byDay} today={today} onMore={(d) => setSelected(startOfDay(d))} height={fit} />
             ) : (
-              <Agenda start={start} end={end} byDay={byDay} today={today} />
+              <AnimatePresence mode="wait" initial={false} custom={dir}>
+                <motion.div
+                  key={`${view}:${range}`}
+                  custom={dir}
+                  variants={calm ? FADE : SLIDE}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  style={{ height: "100%" }}
+                >
+                  {view === "month" ? (
+                    <MonthGrid start={start} month={anchor.getMonth()} byDay={byDay} today={today} selected={key(selected)} onSelect={setSelected} peak={peak} height={fit} calm={!!calm} />
+                  ) : view === "week" ? (
+                    <WeekView start={start} byDay={byDay} today={today} onMore={(d) => setSelected(startOfDay(d))} height={fit} />
+                  ) : (
+                    <Agenda start={start} end={end} byDay={byDay} today={today} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             )}
           </div>
           {view === "month" && feed && (
@@ -244,6 +268,25 @@ export default function CalendarPage() {
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Moving between months or weeks: the grid leaves the way you came from and the next one slides in, softly blurred. */
+const EASE = [0.22, 1, 0.36, 1] as const;
+const SLIDE: Variants = {
+  enter: (d: number) => ({ opacity: 0, x: d * 40, filter: "blur(6px)" }),
+  center: { opacity: 1, x: 0, filter: "blur(0px)", transition: { duration: 0.42, ease: EASE } },
+  exit: (d: number) => ({ opacity: 0, x: d * -40, filter: "blur(6px)", transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }),
+};
+const FADE: Variants = { enter: { opacity: 0 }, center: { opacity: 1, transition: { duration: 0.2 } }, exit: { opacity: 0, transition: { duration: 0.12 } } };
+
+/** The range heading: its words rise out of a mask each time the month or week changes (GSAP SplitText). */
+function RangeTitle({ label }: { label: string }) {
+  const ref = useSplitReveal<HTMLHeadingElement>([label]);
+  return (
+    <h2 ref={ref} key={label} className="k-tpanel-title" style={{ marginLeft: 6 }}>
+      {label}
+    </h2>
+  );
+}
+
 /** The height left on screen below `ref` on a desktop, so the month and week views fit the window instead of making
  * the page scroll; null on narrow screens, where the views flow naturally. */
 function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[]): number | null {
@@ -252,7 +295,7 @@ function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[])
     const measure = () => {
       const el = ref.current;
       if (!el || window.innerWidth <= 900) return setH(null);
-      setH(Math.max(460, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 52)));
+      setH(Math.max(340, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 52)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -265,7 +308,7 @@ function useFitHeight(ref: React.RefObject<HTMLElement | null>, deps: unknown[])
 /** How many event chips fit in `space` pixels, leaving room for a "+N more" line; at least one. */
 const fitting = (space: number, chip: number) => Math.max(1, Math.floor((space - 20) / chip));
 
-function MonthGrid({ start, month, byDay, today, selected, onSelect, peak, height }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; selected: string; onSelect: (d: Date) => void; peak: number; height: number | null }) {
+function MonthGrid({ start, month, byDay, today, selected, onSelect, peak, height, calm }: { start: Date; month: number; byDay: Map<string, CalendarEvent[]>; today: string; selected: string; onSelect: (d: Date) => void; peak: number; height: number | null; calm: boolean }) {
   // each day shows its first event when there's room; the rest is the count and a dot per kind
   const roomy = height == null || (height - 77) / 6 > 104;
   return (
@@ -282,8 +325,13 @@ function MonthGrid({ start, month, byDay, today, selected, onSelect, peak, heigh
           const evs = byDay.get(k) ?? [];
           const load = peak ? Math.sqrt(evs.length / peak) : 0; // sqrt: a quiet day still shows
           return (
-            <div
+            <motion.div
               key={i}
+              // a diagonal ripple: each cell rises in a beat after the one above and to its left
+              initial={calm ? false : { opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.38, ease: EASE, delay: calm ? 0 : ((i % 7) + Math.floor(i / 7)) * 0.018 }}
+              whileHover={calm ? undefined : { y: -2 }}
               role="gridcell"
               tabIndex={0}
               aria-selected={k === selected}
@@ -306,7 +354,8 @@ function MonthGrid({ start, month, byDay, today, selected, onSelect, peak, heigh
                 </div>
               )}
               {evs.length > 0 && <KindDots evs={evs} />}
-            </div>
+              {k === selected && <motion.span layoutId="cal-selected" className="k-cal-sel" transition={{ type: "spring", stiffness: 520, damping: 40 }} />}
+            </motion.div>
           );
         })}
       </div>
@@ -349,6 +398,14 @@ function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; 
   return (
     <aside className="k-day-panel" aria-label="The selected day">
       <div className="k-day-card">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={key(day)}
+            className="k-day-card-inner"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.32, ease: EASE } }}
+            exit={{ opacity: 0, y: -6, transition: { duration: 0.14 } }}
+          >
         <Flex align="end" justify="between" gap="3">
           <div>
             <div className="k-eyebrow">{key(day) === today ? "Today" : day.toLocaleDateString("en-CA", { weekday: "long" })}</div>
@@ -359,13 +416,24 @@ function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; 
         {evs.length > 0 && (
           <div className="k-day-mix" aria-hidden>
             {KINDS.filter((k) => n.has(k.kind)).map((k) => (
-              <span key={k.kind} className={`t-${k.tint}`} style={{ flex: n.get(k.kind) }} title={`${k.label}: ${n.get(k.kind)}`} />
+              <motion.span
+                key={k.kind}
+                className={`t-${k.tint}`}
+                initial={{ flexGrow: 0 }}
+                animate={{ flexGrow: n.get(k.kind) }}
+                transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
+                title={`${k.label}: ${n.get(k.kind)}`}
+              />
             ))}
           </div>
         )}
         <div className="k-day-list" ref={listRef}>
           {sorted.length ? (
-            sorted.slice(0, rows).map((e) => <DayRow key={e.id} e={e} />)
+            sorted.slice(0, rows).map((e, i) => (
+              <motion.div key={e.id} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, ease: EASE, delay: 0.08 + i * 0.04 }}>
+                <DayRow e={e} />
+              </motion.div>
+            ))
           ) : (
             <Text as="p" size="2" color="gray" style={{ padding: "18px 2px" }}>
               Nothing due this day.
@@ -377,6 +445,8 @@ function DayPanel({ day, evs, today, height, onAgenda, feedPath }: { day: Date; 
             +{sorted.length - rows} more in the agenda <ChevronRightIcon />
           </button>
         )}
+          </motion.div>
+        </AnimatePresence>
       </div>
       <SubscribeCard feedPath={feedPath} />
     </aside>

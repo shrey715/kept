@@ -1982,6 +1982,11 @@ html {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  margin-top: 16px; /* clear of the filter row, also while a view slides in */
+}
+.k-cal-pane {
+  overflow-x: clip; /* a sliding view never spills over the panel or the filters */
+  overflow-y: visible;
 }
 .k-cal-wrap[data-panel="true"] {
   grid-template-columns: minmax(0, 1fr) 330px;
@@ -2169,5 +2174,72 @@ html {
   .k-cal[data-fit="true"],
   .k-week[data-fit="true"] {
     height: auto;
+  }
+}
+
+/* calendar motion: the view pill glides, the selection ring follows the day, a loading range dims */
+.k-tab-glide {
+  position: relative;
+  isolation: isolate;
+}
+.k-tab-glide[data-active="true"] {
+  background: var(--k-chip);
+}
+.k-tab-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--k-strong);
+}
+.k-tab-glide[data-active="true"] span {
+  color: var(--k-on-strong);
+}
+.k-cal-cell {
+  position: relative;
+}
+.k-cal-cell[data-selected="true"],
+.k-cal-cell[data-today="true"][data-selected="true"] {
+  box-shadow: none;
+}
+.k-cal-sel {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--gray-12);
+  pointer-events: none;
+}
+.k-cal-cell[data-today="true"] .k-cal-sel {
+  box-shadow: inset 0 0 0 2px var(--k-red);
+}
+.k-cal-pane {
+  transition: opacity 0.25s ease;
+}
+.k-cal-pane[data-loading="true"] {
+  opacity: 0.55;
+}
+.k-day-card-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+}
+/* a short screen (a 768px laptop): the calendar takes the room, the page heading tightens */
+@media (max-height: 900px) and (min-width: 1101px) {
+  .k-cal-page .k-display {
+    font-size: clamp(28px, 2.6vw, 38px);
+  }
+  .k-cal-page .k-display + p {
+    display: none;
+  }
+}
+@media (max-width: 1440px) and (min-width: 1101px) {
+  .k-cal-page .k-filter {
+    padding: 0 10px;
+    gap: 6px;
+  }
+  .k-cal-page .k-filter-sep {
+    margin: 0;
   }
 }
