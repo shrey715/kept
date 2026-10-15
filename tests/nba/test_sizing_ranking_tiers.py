@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 from decimal import ROUND_CEILING, Decimal
 
 import pytest
@@ -19,20 +19,20 @@ TODAY = date(2026, 9, 28)
 
 
 # ----------------------------------------------------------------- due dates
-@pytest.mark.parametrize("offset,expected", [(1, date(2026, 10, 3)), (2, date(2026, 10, 4))])
-def test_due_one_or_two_days_after_payday(offset: int, expected: date) -> None:
+@pytest.mark.parametrize("offset,expected", [(0, date(2026, 10, 2)), (1, date(2026, 10, 3))])
+def test_due_on_payday_or_the_day_after(offset: int, expected: date) -> None:
     assert promise_due_date(PAYDAY, today=TODAY, offset_days=offset) == expected
 
 
-@pytest.mark.parametrize("offset", [0, 3, -1])
-def test_due_offset_must_be_one_or_two(offset: int) -> None:
+@pytest.mark.parametrize("offset", [2, 3, -1])
+def test_due_offset_must_be_zero_or_one(offset: int) -> None:
     with pytest.raises(ValueError):
         promise_due_date(PAYDAY, today=TODAY, offset_days=offset)
 
 
 def test_due_date_in_the_past_is_none() -> None:
-    assert promise_due_date(PAYDAY, today=date(2026, 10, 2)) == date(2026, 10, 3)
-    assert promise_due_date(PAYDAY, today=date(2026, 10, 3)) is None
+    assert promise_due_date(PAYDAY, today=date(2026, 10, 1)) == date(2026, 10, 2)
+    assert promise_due_date(PAYDAY, today=date(2026, 10, 2)) is None
 
 
 # ----------------------------------------------------------------- sizing
@@ -45,7 +45,7 @@ def test_card_example_three_month_plan_of_140() -> None:
         today=TODAY,
     )
     assert s is not None
-    assert (s.amount, s.installments, s.due_date) == (Decimal("140.00"), 3, date(2026, 10, 3))
+    assert (s.amount, s.installments, s.due_date) == (Decimal("140.00"), 3, date(2026, 10, 2))
     assert s.spare_cash_estimate == Decimal("160.00") and s.payday == PAYDAY
 
 
@@ -125,7 +125,7 @@ def test_sizing_invariants(balance: Decimal, spare: Decimal, freq: PayrollFreque
     assert s.amount <= s.spare_cash_estimate  # within spare cash
     assert s.amount * s.installments >= balance  # covers the balance
     assert 1 <= s.installments <= max_inst
-    assert s.due_date - PAYDAY in (timedelta(days=1), timedelta(days=2))
+    assert s.due_date == PAYDAY  # due on payday
     if s.installments > 1:  # minimal: one fewer installment would not fit
         fewer = (balance / (s.installments - 1)).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
         assert fewer > s.spare_cash_estimate
@@ -141,7 +141,7 @@ def test_sizing_text_matches_card() -> None:
     )
     assert s is not None
     t = sizing_text(s)
-    assert "$140 " in t and "~$160" in t and "one day after" in t and ".00" not in t
+    assert "$140 " in t and "~$160" in t and "due on the expected payroll date" in t and ".00" not in t
 
 
 # ----------------------------------------------------------------- ranking

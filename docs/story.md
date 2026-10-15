@@ -56,7 +56,7 @@ time and pays **59.8%** of the promised money; one due **8+ days after** (when t
 ## Jane with Kept
 
 Kept sees her payday in her deposit account (or, if the bank doesn't know it, asks her on the payment page). It
-proposes **$70 on the Saturday after payday, twice**, inside what she can spare. The note about her shifts flags
+proposes **$70 on her payday, twice**, inside what she can spare. The note about her shifts flags
 possible hardship with the exact words, so the card turns protective: a hardship specialist looks first, and a second
 person releases. Every step is in a tamper-evident audit trail. Jane keeps the promise; her card doesn't roll.
 

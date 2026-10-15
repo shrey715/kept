@@ -204,7 +204,7 @@ def test_threshold_orderings() -> None:
     assert config.LINKAGE_BLOCK_BELOW < config.LINKAGE_TARGET <= 1
     assert config.FRESHNESS_WARN < config.FRESHNESS_BLOCK
     assert config.CALLING_HOURS_START < config.CALLING_HOURS_END
-    assert config.PROMISE_DAYS_AFTER_PAYDAY == (1, 2)
+    assert config.PROMISE_DAYS_AFTER_PAYDAY == (0, 1)
     assert config.HOLDOUT_SHARE == 0.05
     assert config.TOP_REASONS == 3
     assert config.SQL_CANDIDATES % 2 == 1  # majority vote needs an odd count
