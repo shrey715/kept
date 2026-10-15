@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { Box, Flex, Grid, Text } from "@radix-ui/themes";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -14,7 +15,8 @@ type Card = {
 };
 type Fairness = { written: string; attributes: Record<string, { outcomes: Record<string, { ratio: number; flagged: boolean; too_few_events: boolean }> }> };
 type Drift = { written: string; headline: string; watch: number; drift: number; rows: { feature: string; psi: number; status: "drift" | "watch" | "stable"; model_input: boolean }[] };
-export type Governance = { model_card: Card | null; fairness: Fairness | null; drift: Drift | null };
+type Invariance = { written: string; cases: number; cards_differ: number; passed: boolean; scrambled: Record<string, string[]> };
+export type Governance = { model_card: Card | null; fairness: Fairness | null; drift: Drift | null; invariance?: Invariance | null };
 
 const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`;
 
@@ -23,7 +25,7 @@ export function ModelPanels({ g }: { g: Governance }) {
     <Grid columns={{ initial: "1", lg: "2" }} gap="3" mt="3">
       {g.model_card?.promise?.reliability && <PromiseCard p={g.model_card.promise} />}
       {g.model_card?.uplift?.curve && <UpliftCard u={g.model_card.uplift} />}
-      {g.fairness && <FairnessCard f={g.fairness} />}
+      {g.fairness && <FairnessCard f={g.fairness} inv={g.invariance ?? null} />}
       {g.drift && <DriftCard d={g.drift} />}
     </Grid>
   );
@@ -199,7 +201,7 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
 }
 
 /** Selection-rate ratio (lowest group / highest) per protected attribute and outcome; under 0.8 is a flag. */
-function FairnessCard({ f }: { f: Fairness }) {
+function FairnessCard({ f, inv }: { f: Fairness; inv: Invariance | null }) {
   const attrs = Object.keys(f.attributes);
   const outcomes = [...new Set(attrs.flatMap((a) => Object.keys(f.attributes[a].outcomes)))];
   return (
@@ -208,6 +210,18 @@ function FairnessCard({ f }: { f: Fairness }) {
       <Text as="p" size="1" color="gray" mb="3">
         Lowest group&apos;s rate over the highest&apos;s (1.00 = equal). Under 0.80 is flagged (the four-fifths rule); hatched cells have too few events to judge. Protected attributes are never model inputs.
       </Text>
+      {inv && (
+        <div className="k-invariance" data-ok={inv.passed}>
+          <span className="k-checks-dot" aria-hidden>
+            {inv.passed ? <CheckIcon /> : <Cross2Icon />}
+          </span>
+          <Text size="2">
+            Scrambling every protected attribute changed <b className="tabular">{inv.cards_differ.toLocaleString("en-CA")}</b> of{" "}
+            <span className="tabular">{inv.cases.toLocaleString("en-CA")}</span> cards
+            <Text color="gray"> · checked {new Date(inv.written).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}</Text>
+          </Text>
+        </div>
+      )}
       <Box style={{ overflowX: "auto" }}>
         <div className="k-heat" style={{ gridTemplateColumns: `minmax(140px, 1.4fr) repeat(${outcomes.length}, minmax(70px, 1fr))` }}>
           <span />

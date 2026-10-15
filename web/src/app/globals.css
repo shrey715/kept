@@ -3619,3 +3619,15 @@ html {
   font-size: 14px;
   color: var(--gray-11);
 }
+
+/* fairness card: the nightly scramble test, as one line with a round badge */
+.k-invariance {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.k-invariance[data-ok="false"] .k-checks-dot {
+  background: var(--k-rose-2);
+  color: var(--k-rose-ink);
+}
