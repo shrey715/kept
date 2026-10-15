@@ -1,7 +1,7 @@
 """Portfolio: tonight's cards and the bank's randomised test, summarised; analysts never see a single case."""
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
 
 import duckdb
 import pytest
@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from kept.app.api import create_app
 from kept.app.demo import demo_services
-from kept.app.portfolio import case_page, money_flow, overview, wilson
+from kept.app.portfolio import case_page, money_flow, overview, wilson, workload
 
 
 @pytest.fixture
@@ -131,3 +131,35 @@ def test_routes_keep_single_cases_from_analysts_and_mask_names(conn: duckdb.Duck
     tl = client.get("/portfolio/cases", params={"user_id": "tl-1", "role": "team_lead"}).json()
     co = client.get("/portfolio/cases", params={"user_id": "c-1", "role": "compliance"}).json()
     assert tl["rows"][0]["display_name"] != "Ann Lee" and co["rows"][0]["display_name"] == "Ann Lee"
+
+
+def test_workload_counts_call_windows_in_toronto_time_against_hourly_capacity() -> None:
+    c = duckdb.connect()
+    c.execute("create schema nba; create schema silver")
+    c.execute("create table nba.cards (card json)")
+    c.execute(
+        "insert into nba.cards values"
+        """ ('{"proposal": {"channel": "call", "window_start": "2026-10-14T13:00:00Z"}}'),"""  # Wed 09:00 EDT
+        """ ('{"proposal": {"channel": "call", "window_start": "2026-10-14T13:30:00Z"}}'),"""
+        """ ('{"proposal": {"channel": "email", "window_start": "2026-10-14T13:00:00Z"}}'),"""  # not a call
+        " ('{\"proposal\": null}')"
+    )
+    c.execute(
+        "create table silver.channel_capacity (date date, channel varchar, time_band varchar,"
+        " capacity_units bigint, used_units bigint)"
+    )
+    c.execute(
+        "insert into silver.channel_capacity values"
+        " ('2026-10-07', 'call', '08-12', 9, 1),"  # Wed: 8 units over 4 hours
+        " ('2026-10-07', 'email', 'all_day', 1000, 0),"
+        " ('2026-09-30', 'call', '08-12', 400, 0)"  # an older Wednesday: not this week
+    )
+    w = workload(c)
+    assert (w.time_zone, w.calls, w.capacity_from, w.capacity_to) == (
+        "America/Toronto",
+        2,
+        date(2026, 10, 7),
+        date(2026, 10, 7),
+    )
+    cells = {(x.weekday, x.hour): (x.calls, x.capacity) for x in w.cells}
+    assert cells == {(2, 8): (0, 2.0), (2, 9): (2, 2.0), (2, 10): (0, 2.0), (2, 11): (0, 2.0)}

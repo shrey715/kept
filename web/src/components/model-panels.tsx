@@ -2,7 +2,7 @@
 
 import { CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
 import { Box, Flex, Grid, Text } from "@radix-ui/themes";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { ACTION_LABEL, type Action } from "@/lib/api";
 import { SectionTitle } from "./page-header";
@@ -29,13 +29,25 @@ type Card = {
 type Fairness = { written: string; attributes: Record<string, { outcomes: Record<string, { ratio: number; flagged: boolean; too_few_events: boolean }> }> };
 type Drift = { written: string; headline: string; watch: number; drift: number; rows: { feature: string; psi: number; status: "drift" | "watch" | "stable"; model_input: boolean }[] };
 type Invariance = { written: string; cases: number; cards_differ: number; passed: boolean; scrambled: Record<string, string[]> };
-export type Governance = { model_card: Card | null; fairness: Fairness | null; drift: Drift | null; invariance?: Invariance | null };
+// kept nightly's heartbeat (src/kept/cli.py nightly): rewritten after every step; exit is null while it runs
+type Nightly = {
+  started: string;
+  finished: string | null;
+  exit: number | null;
+  planned: string[];
+  steps: { name: string; start: string; seconds: number; exit: number }[];
+  gate: "pass" | "block" | null;
+  parity: { passed: boolean; mismatch_rate: number | null } | null;
+  drift_alarm: string[] | null;
+};
+export type Governance = { model_card: Card | null; fairness: Fairness | null; drift: Drift | null; invariance?: Invariance | null; nightly?: Nightly | null };
 
 const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`;
 
 export function ModelPanels({ g }: { g: Governance }) {
   return (
     <Grid columns={{ initial: "1", lg: "2" }} gap="3" mt="3">
+      {g.nightly?.steps && <Heartbeat n={g.nightly} />}
       {g.model_card?.promise?.reliability && <PromiseCard p={g.model_card.promise} />}
       {g.model_card?.uplift?.curve && <UpliftCard u={g.model_card.uplift} />}
       {g.fairness && <FairnessCard f={g.fairness} inv={g.invariance ?? null} />}
@@ -44,7 +56,7 @@ export function ModelPanels({ g }: { g: Governance }) {
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
+export function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div style={{ background: "var(--k-chip)", borderRadius: 14, padding: "10px 12px", minWidth: 0 }}>
       <Text as="div" size="1" color="gray">
@@ -360,6 +372,128 @@ function DriftCard({ d }: { d: Drift }) {
           </Box>
         ))}
       </Flex>
+    </div>
+  );
+}
+
+const STEP: Record<string, string> = {
+  land: "Land raw files",
+  silver: "Silver models",
+  match: "Identity matching",
+  gold: "Gold models",
+  gate: "Quality gate",
+  extract: "Note extraction",
+  features: "Features and online store",
+  parity: "Offline/online parity",
+  score: "Score open cases",
+  invariance: "Protected-attribute check",
+};
+const took = (s: number) =>
+  s < 60 ? `${Math.round(s)} s` : s < 3600 ? `${Math.floor(s / 60)} min ${Math.round(s % 60)} s` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+const clock = (ms: number) => new Date(ms).toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" });
+
+function Badge({ tone, label, value }: { tone: "ok" | "bad" | "idle"; label: string; value: string }) {
+  return (
+    <span className="k-beat-badge" data-tone={tone}>
+      <span className="k-beat-icon" aria-hidden>
+        {tone === "ok" ? <CheckIcon /> : tone === "bad" ? <Cross2Icon /> : null}
+      </span>
+      <Text size="1" color="gray">
+        {label}
+      </Text>
+      <Text size="1" weight="medium" className="tabular">
+        {value}
+      </Text>
+    </span>
+  );
+}
+
+/** #114: the last `kept nightly` as a Gantt strip, each step a bar at its real start and length, with the
+ * gate, parity and drift results as badges. Steps planned but not reached are listed as not run. */
+function Heartbeat({ n }: { n: Nightly }) {
+  const calm = useReducedMotion();
+  const t0 = Date.parse(n.started);
+  const end = Math.max(t0 + 1000, ...n.steps.map((s) => Date.parse(s.start) + s.seconds * 1000));
+  const span = end - t0;
+  const ran = new Set(n.steps.map((s) => s.name));
+  const rows = [...n.steps, ...n.planned.filter((p) => !ran.has(p)).map((name) => ({ name, start: null, seconds: 0, exit: null }))];
+  const running = n.exit == null;
+  const failed = n.steps.find((s) => s.exit !== 0);
+  const status = running
+    ? { tone: "idle" as const, value: "In progress" }
+    : n.exit === 0
+      ? { tone: "ok" as const, value: `Completed in ${took(span / 1000)}` }
+      : { tone: "bad" as const, value: `Stopped at ${STEP[failed?.name ?? ""] ?? failed?.name ?? "a step"}` };
+  const notReached = "Not reached";
+  const drift = n.drift_alarm;
+  return (
+    <div className="k-card t-ice" style={{ padding: 22, gridColumn: "1 / -1" }}>
+      <SectionTitle eyebrow={`Nightly run · ${new Date(t0).toLocaleDateString("en-CA", { dateStyle: "medium" })}`} title="Last nightly pipeline run" />
+      <Flex gap="2" wrap="wrap" mb="4">
+        <Badge tone={status.tone} label="Run" value={status.value} />
+        <Badge tone={n.gate == null ? "idle" : n.gate === "pass" ? "ok" : "bad"} label="Quality gate" value={n.gate == null ? notReached : n.gate === "pass" ? "Passed" : "Blocked"} />
+        <Badge
+          tone={n.parity == null ? "idle" : n.parity.passed ? "ok" : "bad"}
+          label="Parity"
+          value={
+            n.parity == null
+              ? notReached
+              : n.parity.mismatch_rate == null
+                ? n.parity.passed
+                  ? "Passed"
+                  : "Failed"
+                : `${(n.parity.mismatch_rate * 100).toFixed(4)}% of cells differ`
+          }
+        />
+        <Badge
+          tone={drift == null ? "idle" : drift.length ? "bad" : "ok"}
+          label="Drift alarm"
+          value={drift == null ? notReached : drift.length ? `${drift.length} model input${drift.length > 1 ? "s" : ""} moved: ${drift.join(", ").replace(/_/g, " ")}` : "None since last night"}
+        />
+      </Flex>
+      <div className="k-beat" role="img" aria-label={`Nightly run: ${n.steps.length} of ${rows.length} steps ran; ${status.value}.`}>
+        {rows.map((s, i) => {
+          const left = s.start ? ((Date.parse(s.start) - t0) / span) * 100 : 0;
+          const width = Math.min(Math.max(0.6, ((s.seconds * 1000) / span) * 100), 100 - left);
+          const live = running && s.start == null && i === n.steps.length;
+          return (
+            <div key={s.name} className="k-beat-row" data-idle={s.start == null}>
+              <Text size="1" truncate>
+                {STEP[s.name] ?? s.name}
+              </Text>
+              <div className="k-act-track k-beat-track">
+                {s.start && (
+                  <motion.span
+                    className="k-beat-bar"
+                    data-bad={s.exit !== 0}
+                    title={`${STEP[s.name] ?? s.name}: started ${clock(Date.parse(s.start))}, ${took(s.seconds)}, exit ${s.exit}`}
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                    initial={calm ? false : { scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ delay: calm ? 0 : i * 0.12, duration: 0.5, ease: "easeOut" }}
+                  />
+                )}
+                {live && <span className="k-beat-live" />}
+              </div>
+              <Text size="1" color="gray" align="right" className="tabular">
+                {s.start ? (s.exit === 0 ? took(s.seconds) : `Exit ${s.exit}`) : live ? "Running" : "Not run"}
+              </Text>
+            </div>
+          );
+        })}
+        <div className="k-beat-row">
+          <span />
+          <Flex justify="between">
+            <Text size="1" color="gray" className="tabular">
+              {clock(t0)}
+            </Text>
+            <Text size="1" color="gray" className="tabular">
+              {clock(end)}
+            </Text>
+          </Flex>
+          <span />
+        </div>
+      </div>
     </div>
   );
 }

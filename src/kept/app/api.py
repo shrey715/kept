@@ -38,7 +38,7 @@ from kept.app.calendar_events import CalendarFeed, to_ics
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
-from kept.app.portfolio import CasePage, MoneyFlow, Portfolio, Sort
+from kept.app.portfolio import CasePage, MoneyFlow, Portfolio, Sort, Workload
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
@@ -99,6 +99,7 @@ class Services:
     calendar: Callable[[date, date, str, Role], CalendarFeed] | None = None  # real: cards and silver
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
+    workload: Callable[[], Workload] | None = None  # real: proposed calls by weekday and hour vs capacity
     governance: Callable[[], dict[str, Any]] | None = None  # real: model card, fairness, drift (report JSON)
     money_flow: Callable[[], MoneyFlow | None] | None = None  # real: the business case's roll funnel
     brief_llm: LLMGateway | None = None  # real: the local model writes cited briefs; None: template briefs
@@ -241,7 +242,9 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/brief?user_id&role      200 Brief: cited bullets from the local model, each number
                                                   checked against what it cites; else a template brief
     GET  /portfolio/brief?user_id&role            200 Brief over tonight's computed portfolio facts
-    GET  /portfolio/models?user_id&role           200 {model_card, fairness, drift}: the reports' JSON
+    GET  /portfolio/models?user_id&role           200 {model_card, fairness, drift, invariance, nightly}:
+                                                  the reports' JSON (nightly: the last run's heartbeat)
+    GET  /portfolio/workload?user_id&role         200 Workload: proposed calls by weekday x hour vs capacity
     GET  /portfolio?user_id&role                  200 Portfolio (KPIs, slices, A/B with Wilson CIs, cohorts,
                                                   insights with their SQL); analysts and case-wide roles
     GET  /portfolio/money?user_id&role            200 MoneyFlow: a year of new arrears, today and with Kept's
@@ -518,6 +521,14 @@ def create_app(services: Services) -> FastAPI:
         if services.portfolio is None:
             raise HTTPException(503, "the portfolio needs the warehouse")
         return services.portfolio()
+
+    @app.get("/portfolio/workload", response_model=Workload)
+    def get_portfolio_workload(user_id: str, role: Role) -> Workload:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        if services.workload is None:
+            raise HTTPException(503, "the workload needs the warehouse")
+        return services.workload()
 
     @app.get("/portfolio/cases", response_model=CasePage)
     def get_portfolio_cases(

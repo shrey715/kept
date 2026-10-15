@@ -7,11 +7,13 @@ reader can rerun it. Nothing is estimated here: the model's work is on the cards
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 import duckdb
 from pydantic import BaseModel
+
+from kept.config import OPERATING_TZ
 
 Sort = Literal["expected_value", "total_overdue", "max_dpd", "p_paid_14d"]
 SORTS: tuple[Sort, ...] = ("expected_value", "total_overdue", "max_dpd", "p_paid_14d")
@@ -110,6 +112,23 @@ class CaseRow(BaseModel):
 class CasePage(BaseModel):
     rows: list[CaseRow]
     total: int
+
+
+class WorkloadCell(BaseModel):
+    weekday: int  # 0 = Monday
+    hour: int  # local hour in the operating time zone
+    calls: int  # proposed calls whose window starts in this hour
+    capacity: float  # agents' outbound attempts available in this hour
+
+
+class Workload(BaseModel):
+    """#115: tonight's proposed calls by weekday and hour against the call team's capacity."""
+
+    time_zone: str
+    calls: int
+    capacity_from: date | None  # the capacity week used (the latest seven days of channel_capacity)
+    capacity_to: date | None
+    cells: list[WorkloadCell]
 
 
 MIN_PROMISES = 30
@@ -409,4 +428,44 @@ def case_page(
             for r in rows
         ],
         total=int(total[0]) if total else 0,
+    )
+
+
+SQL_WORKLOAD_CALLS = (
+    "select isodow(t) - 1, hour(t), count(*) from (select timezone(?, (card->>'$.proposal.window_start')"
+    "::timestamptz) as t from nba.cards where card->>'$.proposal.channel' = 'call') where t is not null"
+    " group by 1, 2"
+)
+# each hourly band's units (capacity less used) spread evenly over its hours; all_day bands aren't calls
+SQL_WORKLOAD_CAPACITY = (
+    "with c as (select date, greatest(capacity_units - coalesce(used_units, 0), 0) as units,"
+    " split_part(time_band, '-', 1)::int as s, split_part(time_band, '-', 2)::int as e"
+    " from silver.channel_capacity where channel = 'call' and time_band similar to '[0-9]+-[0-9]+'"
+    " and date > (select max(date) from silver.channel_capacity where channel = 'call') - 7),"
+    " h as (select date, unnest(range(s, e)) as hour, units / (e - s) as per from c where e > s)"
+    " select isodow(date) - 1, hour, sum(per), min(min(date)) over (), max(max(date)) over ()"
+    " from h group by 1, 2"
+)
+
+
+def workload(conn: duckdb.DuckDBPyConnection) -> Workload:
+    """#115: proposed calls by the weekday and hour their window starts (operating time zone) against the
+    latest week of call capacity. ponytail: a call counts in its start hour, not spread over its window."""
+    cur = conn.cursor()
+    try:
+        rows = cur.execute(SQL_WORKLOAD_CALLS, [OPERATING_TZ]).fetchall()
+        cap_rows = cur.execute(SQL_WORKLOAD_CAPACITY).fetchall()
+    finally:
+        cur.close()
+    calls = {(int(d), int(h)): int(n) for d, h, n in rows}
+    cap = {(int(d), int(h)): float(u) for d, h, u, _, _ in cap_rows}
+    return Workload(
+        time_zone=OPERATING_TZ,
+        calls=sum(calls.values()),
+        capacity_from=cap_rows[0][3] if cap_rows else None,
+        capacity_to=cap_rows[0][4] if cap_rows else None,
+        cells=[
+            WorkloadCell(weekday=d, hour=h, calls=calls.get((d, h), 0), capacity=cap.get((d, h), 0.0))
+            for d, h in sorted(calls.keys() | cap.keys())
+        ],
     )

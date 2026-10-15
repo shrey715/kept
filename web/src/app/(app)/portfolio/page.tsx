@@ -23,6 +23,7 @@ import { MoneyFlowCard, RunFlow } from "@/components/flows";
 import { ModelPanels } from "@/components/model-panels";
 import { PageHeader, SectionTitle, TablePanel } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
+import { WorkloadHeatmap } from "@/components/workload-heatmap";
 import { download, toCsv } from "@/lib/csv";
 import { ACTION_LABEL, api, money, type Action, type Governance, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
 import { keys, load, peek } from "@/lib/live";
@@ -177,6 +178,7 @@ export default function PortfolioPage() {
         )
       )}
 
+      <WorkloadHeatmap />
       {p && (
         <Box mt="5">
           <MoneyFlowCard />
