@@ -13,7 +13,7 @@ type Bucket = Clock["buckets"][number];
 const C = 160; // centre of the 320 × 320 face
 const R0 = 62; // the lowest kept rate on the scale
 const R1 = 132; // the highest
-const SPAN = 32; // -15 … +15 days and an empty seam at six for the scale: one turn
+const SPAN = 33; // -15 … +15 days and a two-day seam at the bottom for the scale: one turn
 
 const pct = (v: number, dp = 1) => `${(v * 100).toFixed(dp)}%`;
 const when = (d: number) =>
@@ -65,20 +65,20 @@ export function PaydayClock({ c }: { c: Clock }) {
       <SectionTitle eyebrow="Pay cycle" title="Promise-kept rate around payday" mb="1" />
       <Text as="p" size="1" color="gray" mb="4">
         Each arc is one day from the customer&apos;s nearest recorded payday to the promise&apos;s due date. Distance from the centre is the share kept in full;
-        thickness is the number of promises.
+        thickness is the number of promises; the dashed ring is the rate over all of them.
       </Text>
       <Grid columns={{ initial: "1", md: "minmax(0, 340px) minmax(0, 1fr)" }} gap="5" align="center">
         <div className="k-clock t-ice">
           <svg viewBox="0 0 320 320" role="img" aria-label={`Kept rate by days from payday: ${on != null ? pct(on) : "n/a"} on payday`}>
             {rings.map((v) => (
-              <g key={v}>
-                <circle cx={C} cy={C} r={r(v)} className="k-clock-ring" />
-                <text x={C} y={C + r(v)} textAnchor="middle" dominantBaseline="middle" className="k-clock-scale">
-                  {Math.round(v * 100)}%
-                </text>
-              </g>
+              <circle key={v} cx={C} cy={C} r={r(v)} className="k-clock-ring" />
             ))}
             <circle cx={C} cy={C} r={r(c.kept_rate)} className="k-clock-mean" />
+            {rings.map((v) => (
+              <text key={v} x={C} y={C + r(v)} textAnchor="middle" dominantBaseline="middle" className="k-clock-scale">
+                {Math.round(v * 100)}%
+              </text>
+            ))}
             {[-14, -7, 0, 7, 14].map((d) => {
               const [x, y] = at(d, R1 + 16);
               return (

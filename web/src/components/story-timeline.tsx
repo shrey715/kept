@@ -151,7 +151,8 @@ export function StoryTimeline({ s }: { s: CaseStory }) {
   });
 
   const broken = s.promises.filter((p) => p.status === "broken");
-  const brokenBefore = broken.filter((p) => p.payday_days != null && p.payday_days < 0).length;
+  const nBroken = (f: (d: number) => boolean) => broken.filter((p) => p.payday_days != null && f(p.payday_days)).length;
+  const brokenSplit = `Broken promises: ${nBroken((d) => d < 0)} due before a payday, ${nBroken((d) => d === 0)} on one, ${nBroken((d) => d > 0)} after one.`;
   const hardship = s.notes.filter((n) => n.hardship !== "none").length;
 
   return (
@@ -182,7 +183,7 @@ export function StoryTimeline({ s }: { s: CaseStory }) {
       />
       <Text as="p" size="1" color="gray" mb="3">
         {s.promises.length} promises, {s.contacts.length} contacts, {s.payments.length} payments and {s.notes.length} notes from {fmtDay(start)} to{" "}
-        {fmtDay(start + span)}.{broken.length > 0 && ` ${brokenBefore} of ${broken.length} broken promises fell due before a payday.`}
+        {fmtDay(start + span)}.{broken.length > 0 && ` ${brokenSplit}`}
         {hardship > 0 && ` ${hardship} note${hardship === 1 ? "" : "s"} read as possible hardship.`} Filled contact dots reached the customer.
       </Text>
       <div ref={wrap} style={{ position: "relative" }}>

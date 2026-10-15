@@ -3643,6 +3643,7 @@ html {
 .k-story {
   overflow-x: auto;
   overflow-y: hidden;
+  contain: inline-size; /* a wide case scrolls here instead of widening the page */
 }
 .k-story svg {
   display: block;
