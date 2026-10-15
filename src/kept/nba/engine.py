@@ -203,6 +203,8 @@ class KeptEngine:
         gate_ctx = ctx.model_copy(update={"now": slot[0]}) if slot else ctx  # check at the slot we propose
         allowed, results = allowed_actions(gate_ctx)  # stage 2
         allowed = hardship_override(ctx, allowed)  # stage 3
+        if ctx.hardship_plan_until:  # #93: a running plan is already the hardship review's outcome
+            allowed = [a for a in allowed if a is not Action.HARDSHIP_REVIEW]
         checks = {r.action: r.checks for r in results}
 
         if self._kill_switch or ctx.in_holdout:
@@ -237,9 +239,13 @@ class KeptEngine:
         probs = _alternatives(best.action, ranked)
         legacy = _legacy_text(ctx.legacy_action, best.action, proba, model_of, allowed)
         if best.action is Action.WAIT:
+            plan = ctx.hardship_plan_until
             return self._no_action(
                 ctx,
-                "Best action is to wait: no contact beats waiting today.",
+                f"Monitoring the hardship plan: it runs until {plan:%b %-d, %Y}, so no new review is needed. "
+                "Every protection still applies."
+                if plan
+                else "Best action is to wait: no contact beats waiting today.",
                 probabilities=probs,
                 legacy_text=legacy,
             )

@@ -62,7 +62,7 @@ function SignIn() {
             Promises customers can keep.
           </h2>
           <Text as="p" size="3" color="gray" mt="3" style={{ maxWidth: 440 }}>
-            Dated the day after payday, sized to spare cash, explained, and never sent without a person releasing it.
+            Dated to payday, sized to spare cash, explained, and never sent without a person releasing it.
           </Text>
         </Box>
       </section>
