@@ -36,9 +36,9 @@ from kept.app.briefs import (
 from kept.app.briefs import write as write_brief
 from kept.app.calendar_events import CalendarFeed, to_ics
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
-from kept.app.history import CaseHistory
+from kept.app.history import CaseHistory, CaseStory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
-from kept.app.portfolio import CasePage, MoneyFlow, Portfolio, Sort, Workload
+from kept.app.portfolio import CasePage, MoneyFlow, PaydayClock, Portfolio, Sort, Workload
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
@@ -96,6 +96,8 @@ class Services:
     calls: VoiceCalls | None = None  # recorded calls read by Whisper, for the Calls panel (display only)
     reads: ReadState | None = None  # how far each person has read the bell
     history: Callable[[str], CaseHistory] | None = None  # real: contacts, promises, months from silver
+    story: Callable[[str], CaseStory] | None = None  # real: the timeline's lanes from silver and text
+    payday_clock: Callable[[], PaydayClock] | None = None  # real: kept rate by days from payday, all promises
     calendar: Callable[[date, date, str, Role], CalendarFeed] | None = None  # real: cards and silver
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
@@ -233,6 +235,8 @@ def create_app(services: Services) -> FastAPI:
                                                   False; 404 unknown case
     GET  /cases/{case_id}/customer?user_id&role   200 GoldenCustomer, PII masked unless compliance
     GET  /cases/{case_id}/history?user_id&role    200 CaseHistory (contacts, promises, month-ends); 503 demo
+    GET  /cases/{case_id}/story?user_id&role      200 CaseStory (contacts, promises, payments, notes, paydays
+                                                  for the timeline); 503 demo
     GET  /approvals?user_id&role                  200 list[ApprovalItem] this role can act on
     GET  /calendar?user_id&role&start&end         200 CalendarFeed: promise dues, send windows, approval
                                                   deadlines, paydays, hardship plan ends in [start, end]
@@ -247,6 +251,7 @@ def create_app(services: Services) -> FastAPI:
     GET  /portfolio/workload?user_id&role         200 Workload: proposed calls by weekday x hour vs capacity
     GET  /portfolio?user_id&role                  200 Portfolio (KPIs, slices, A/B with Wilson CIs, cohorts,
                                                   insights with their SQL); analysts and case-wide roles
+    GET  /portfolio/payday?user_id&role           200 PaydayClock: kept rate by days from payday, same roles
     GET  /portfolio/money?user_id&role            200 MoneyFlow: a year of new arrears, today and with Kept's
                                                   base case; 503 without the business case report
     GET  /portfolio/cases?user_id&role[&offset&limit&sort&tier&action&bucket&q]
@@ -352,6 +357,16 @@ def create_app(services: Services) -> FastAPI:
             raise HTTPException(503, "case history needs the warehouse")
         try:
             return services.history(case_id)
+        except KeyError:
+            raise HTTPException(404, f"no case {case_id} in the warehouse") from None
+
+    @app.get("/cases/{case_id}/story", response_model=CaseStory)
+    def get_story(case_id: str, user_id: str, role: Role) -> CaseStory:
+        guard_case(case_id, user_id, role)
+        if services.story is None:
+            raise HTTPException(503, "the case timeline needs the warehouse")
+        try:
+            return services.story(case_id)
         except KeyError:
             raise HTTPException(404, f"no case {case_id} in the warehouse") from None
 
@@ -521,6 +536,14 @@ def create_app(services: Services) -> FastAPI:
         if services.portfolio is None:
             raise HTTPException(503, "the portfolio needs the warehouse")
         return services.portfolio()
+
+    @app.get("/portfolio/payday", response_model=PaydayClock)
+    def get_payday_clock(user_id: str, role: Role) -> PaydayClock:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        if services.payday_clock is None:
+            raise HTTPException(503, "the payday clock needs the warehouse")
+        return services.payday_clock()
 
     @app.get("/portfolio/workload", response_model=Workload)
     def get_portfolio_workload(user_id: str, role: Role) -> Workload:

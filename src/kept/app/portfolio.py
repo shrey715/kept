@@ -431,6 +431,57 @@ def case_page(
     )
 
 
+# ---------------------------------------------------------------- the payday clock (#105)
+
+MIN_CUSTOMERS = 50  # the cohort rule: no bucket smaller than 50 customers
+
+SQL_PAYDAY = """with pr as (select ptp_id, crm_customer_id, ptp_due_date due, (ptp_status = 'kept')::int kept,
+        ptp_amount::double amt, coalesce(amount_paid_against, 0)::double paid
+    from silver.promises_to_pay where ptp_status in ('kept', 'partially_kept', 'broken')),
+pay as (select distinct crm_customer_id, unnest([first_credit_date, last_credit_date]) d
+    from silver.salary_credit_history where crm_customer_id is not null),
+lst as (select p.ptp_id, max(y.d) lp from pr p join pay y on y.crm_customer_id = p.crm_customer_id
+    and y.d between p.due - 40 and p.due group by 1),
+nxt as (select p.ptp_id, min(y.d) np from pr p join pay y on y.crm_customer_id = p.crm_customer_id
+    and y.d > p.due and y.d <= p.due + 40 group by 1),
+x as (select p.*, case when p.due - l.lp <= n.np - p.due then p.due - l.lp else p.due - n.np end x
+    from pr p join lst l using (ptp_id) join nxt n using (ptp_id))
+select x, count(*), count(distinct crm_customer_id), avg(kept), sum(paid) / nullif(sum(amt), 0)
+from x where x between -15 and 15 group by 1 order by 1"""
+
+
+class PaydayBucket(BaseModel):
+    days: int  # due date minus the nearest recorded payday: 0 on payday, -1 the day before
+    promises: int
+    kept_rate: float
+    money_rate: float | None  # promised money paid
+
+
+class PaydayClock(BaseModel):
+    buckets: list[PaydayBucket]
+    kept_rate: float  # over every bucket shown, for the reference ring
+    sql: str
+
+
+def payday_clock(conn: duckdb.DuckDBPyConnection) -> PaydayClock:
+    """Kept rate of resolved promises by signed days from the nearest recorded payday (a payday on both
+    sides within 40 days, as in scripts/evidence_report.py), -15 to +15; buckets under 50 customers are
+    left out."""
+    with conn.cursor() as cur:
+        rows = cur.execute(SQL_PAYDAY).fetchall()
+    buckets = [
+        PaydayBucket(days=x, promises=n, kept_rate=k, money_rate=m)
+        for x, n, c, k, m in rows
+        if c >= MIN_CUSTOMERS
+    ]
+    total = sum(b.promises for b in buckets)
+    return PaydayClock(
+        buckets=buckets,
+        kept_rate=sum(b.kept_rate * b.promises for b in buckets) / total if total else 0.0,
+        sql=SQL_PAYDAY,
+    )
+
+
 SQL_WORKLOAD_CALLS = (
     "select isodow(t) - 1, hour(t), count(*) from (select timezone(?, (card->>'$.proposal.window_start')"
     "::timestamptz) as t from nba.cards where card->>'$.proposal.channel' = 'call') where t is not null"

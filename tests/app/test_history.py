@@ -5,7 +5,7 @@ from datetime import date, datetime
 import duckdb
 import pytest
 
-from kept.app.history import case_history
+from kept.app.history import case_history, case_story, signed_payday
 
 
 @pytest.fixture
@@ -56,3 +56,69 @@ def test_history_reads_a_case_newest_first(conn: duckdb.DuckDBPyConnection) -> N
 def test_unknown_case_is_a_key_error(conn: duckdb.DuckDBPyConnection) -> None:
     with pytest.raises(KeyError):
         case_history(conn, "C-404")
+
+
+def test_signed_payday_counts_from_the_nearest_payday() -> None:
+    pays = [date(2026, 7, 30), date(2026, 8, 29)]
+    assert signed_payday(date(2026, 8, 29), pays) == 0
+    assert signed_payday(date(2026, 8, 1), pays) == 2  # two days after the last one
+    assert signed_payday(date(2026, 8, 26), pays) == -3  # three days before the next one
+    assert signed_payday(date(2026, 9, 12), pays) == 14  # only the last one is recorded
+    assert signed_payday(date(2026, 12, 1), pays) is None
+
+
+def test_story_puts_every_lane_in_one_window() -> None:
+    c = duckdb.connect()
+    c.execute("create schema silver; create schema text")
+    c.execute(
+        "create table silver.collections_cases as select 'C-1' case_id, 'X-1' coll_customer_ref,"
+        " date '2026-07-01' case_open_date, '[\"L-1\"]' account_ids"
+    )
+    c.execute(
+        "create table silver.contact_history as select 'C-1' case_id, timestamp '2026-07-02 18:00' contact_ts_utc,"
+        " 'call' channel, true rpc_flag, 20 dpd_at_contact"
+    )
+    c.execute(
+        "create table silver.promises_to_pay as select * from (values"
+        " ('C-1', timestamp '2026-07-02 18:05', date '2026-07-29', 'broken', 140.0, 0.0, null::date),"
+        " ('C-1', timestamp '2026-07-31 10:00', date '2026-07-31', 'kept', 90.0, 90.0, date '2026-07-31'))"
+        " t(case_id, ptp_created_ts, ptp_due_date, ptp_status, ptp_amount, amount_paid_against, paid_date)"
+    )
+    c.execute(
+        "create table silver.transactions as select * from (values"
+        " (date '2026-07-31', -90.0, 'card_payment', 'L-1', 'P-2'), (date '2026-01-05', -10.0, 'card_payment', 'L-1', null),"
+        " (date '2026-07-31', -50.0, 'card_payment', 'L-9', null))"
+        " t(value_date, amount, txn_type, target_account_id, ptp_id_matched)"
+    )
+    c.execute(
+        "create table silver.salary_credit_history as select * from (values"
+        " ('X-1', date '2026-06-30', date '2026-06-30'), ('X-1', date '2026-07-31', date '2026-07-31'),"
+        " ('X-2', date '2026-07-15', date '2026-07-15')) t(crm_customer_id, first_credit_date, last_credit_date)"
+    )
+    c.execute(
+        "create table text.text_signals as select 'N-1' source_id, 'C-1' case_id, 'note' source_type,"
+        " timestamptz '2026-07-02 18:10:00+00' written_at, 'possible' hardship_signal"
+    )
+    c.execute(
+        "create table text.extractions as select 'N-1' source_id, 'C-1' case_id, 'job_loss' stated_reason_value,"
+        " 'lost my job' hardship_signal_quote, null::varchar stated_reason_quote"
+    )
+    c.execute(
+        "create table text.redacted_notes as select 'N-1' source_id, 'C-1' case_id, 'cust lost my job, pays on payday' \"text\""
+    )
+    s = case_story(c, "C-1")
+    assert (s.start, s.end) == (date(2026, 6, 24), date(2026, 8, 7))  # a week either side of the case
+    assert [p.payday_days for p in s.promises] == [-2, 0]  # two days before payday, then on it
+    ((pay),) = s.payments  # January's is outside the window, L-9 is another account
+    assert (pay.amount, pay.against_promise) == (90, True)
+    assert s.paydays == [date(2026, 6, 30), date(2026, 7, 31)]  # X-2's payday is someone else's
+    (n,) = s.notes
+    assert (n.hardship, n.reason, n.quote, n.at) == (
+        "possible",
+        "job_loss",
+        "lost my job",
+        datetime(2026, 7, 2, 18, 10),
+    )
+    assert s.contacts[0].reached and s.contacts[0].dpd == 20
+    with pytest.raises(KeyError):
+        case_story(c, "C-404")

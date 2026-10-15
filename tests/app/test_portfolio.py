@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 
 from kept.app.api import create_app
 from kept.app.demo import demo_services
-from kept.app.portfolio import case_page, money_flow, overview, wilson, workload
+from kept.app.history import CaseStory
+from kept.app.portfolio import PaydayClock, case_page, money_flow, overview, payday_clock, wilson, workload
 
 
 @pytest.fixture
@@ -131,6 +132,49 @@ def test_routes_keep_single_cases_from_analysts_and_mask_names(conn: duckdb.Duck
     tl = client.get("/portfolio/cases", params={"user_id": "tl-1", "role": "team_lead"}).json()
     co = client.get("/portfolio/cases", params={"user_id": "c-1", "role": "compliance"}).json()
     assert tl["rows"][0]["display_name"] != "Ann Lee" and co["rows"][0]["display_name"] == "Ann Lee"
+
+
+def test_payday_clock_buckets_by_days_from_payday_and_drops_small_buckets() -> None:
+    c = duckdb.connect()
+    c.execute("create schema silver")
+    # 70 customers paid on the 1st of each month; 60 each has one promise due on payday (kept) and one 2 days before
+    # it (broken); 10 more have a promise 5 days after payday, too few customers to show
+    c.execute(
+        "create table silver.salary_credit_history as select 'X-' || i crm_customer_id,"
+        " d first_credit_date, d last_credit_date from range(70) r(i), (values (date '2026-07-01'), (date '2026-08-01'), (date '2026-09-01')) v(d)"
+    )
+    c.execute(
+        "create table silver.promises_to_pay as"
+        " select 'P-a' || i ptp_id, 'X-' || i crm_customer_id, date '2026-08-01' ptp_due_date, 'kept' ptp_status,"
+        " 100.0 ptp_amount, 100.0 amount_paid_against from range(60) r(i)"
+        " union all select 'P-b' || i, 'X-' || i, date '2026-07-30', 'broken', 100.0, 25.0 from range(60) r(i)"
+        " union all select 'P-c' || i, 'X-' || i, date '2026-07-06', 'kept', 100.0, 100.0 from range(60, 70) r(i)"
+    )
+    clock = payday_clock(c)
+    assert [(b.days, b.promises, b.kept_rate, b.money_rate) for b in clock.buckets] == [
+        (-2, 60, 0.0, 0.25),
+        (0, 60, 1.0, 1.0),
+    ]
+    assert clock.kept_rate == 0.5 and "salary_credit_history" in clock.sql
+
+
+def test_story_and_clock_routes_follow_the_role_rules() -> None:
+    def no_case(case_id: str) -> CaseStory:
+        raise KeyError(case_id)
+
+    services = replace(
+        demo_services(), payday_clock=lambda: PaydayClock(buckets=[], kept_rate=0.0, sql=""), story=no_case
+    )
+    client = TestClient(create_app(services))
+    assert client.get("/portfolio/payday", params={"user_id": "an-1", "role": "analyst"}).status_code == 200
+    assert client.get("/portfolio/payday", params={"user_id": "agent-7", "role": "agent"}).status_code == 403
+    story = "/cases/CS-2026-118204/story"
+    assert (
+        client.get(story, params={"user_id": "agent-8", "role": "agent"}).status_code == 403
+    )  # not their case
+    assert (
+        client.get(story, params={"user_id": "agent-7", "role": "agent"}).status_code == 404
+    )  # theirs, not in silver
 
 
 def test_workload_counts_call_windows_in_toronto_time_against_hourly_capacity() -> None:

@@ -9,6 +9,7 @@ The API owns the file while it runs (K5: no batch jobs against the warehouse it 
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import pickle
@@ -18,9 +19,9 @@ import duckdb
 
 from kept.app.api import QueueItem, Services
 from kept.app.calendar_events import calendar_feed
-from kept.app.history import case_history
+from kept.app.history import case_history, case_story
 from kept.app.notifications import ReadState
-from kept.app.portfolio import MoneyFlow, case_page, money_flow, overview, workload
+from kept.app.portfolio import MoneyFlow, case_page, money_flow, overview, payday_clock, workload
 from kept.app.voice import VoiceCalls
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
@@ -127,6 +128,9 @@ def real_services(
             Path(os.environ.get("KEPT_VOICE_DIR", RAW_DIR / "files" / "voice")),
         ),
         history=lambda case_id: case_history(conn, case_id),
+        story=lambda case_id: case_story(conn, case_id),
+        # silver doesn't change while the API owns the file: compute the clock once
+        payday_clock=functools.cache(lambda: payday_clock(conn)),
         calendar=lambda start, end, user_id, role: calendar_feed(
             conn, start=start, end=end, user_id=user_id, role=role
         ),
