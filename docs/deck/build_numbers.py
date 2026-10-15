@@ -82,8 +82,8 @@ def main() -> None:
     BANK = "The bank's strategy"
     con = duckdb.connect(str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"), read_only=True)
     per_week = con.execute(
-        "select count(*) / 52.0 from silver.promises_to_pay where ptp_created_ts >= date '2025-09-28' - interval 1 year"
-        " and ptp_created_ts < date '2025-09-28' + interval 0 day"
+        "select count(*) / 52.0 from silver.promises_to_pay"
+        " where ptp_created_ts >= date '2025-09-28' and ptp_created_ts < date '2026-09-28'"  # the 12 months to the snapshot
     ).fetchone()[0] or 1
     kept0 = 0.368  # kept rate of promises from June 2026 (evidence.md §7 window); the base the hold-out is measured on
 
@@ -102,6 +102,7 @@ def main() -> None:
         "onAfter": pt(ev["on_vs_after"]), "onAfterCI": iv(*ev["on_vs_after"][1:]),
         "within": pt(ev["within_customer"]), "withinCI": iv(*ev["within_customer"][1:]),
         "placeboNull": f"{sum(lo < 0 < hi for _, lo, hi in placebo)} of {len(placebo)}",
+        "bankAuc": f"{wide[0] - wide[1] / 100:.3f}",
         "wideAuc": f"{wide[0]:.3f}", "wideGap": f"{wide[1]:+.1f}", "wideGapCI": iv(*wide[2:]),
         "wideFairGap": f"{wide_fair[1]:+.1f}", "wideFairGapCI": iv(*wide_fair[2:]),
         "blendAuc": f"{blend[0]:.3f}", "blendGap": f"{blend[1]:+.1f}", "blendGapCI": iv(*blend[2:]),
