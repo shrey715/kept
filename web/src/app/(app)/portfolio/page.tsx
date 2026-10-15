@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { TierBadge, initials, tierTint } from "@/components/bits";
 import { CountUp, Donut, Rise, Stagger } from "@/components/motion";
 import { BriefCard } from "@/components/brief-card";
+import { MoneyFlowCard, RunFlow } from "@/components/flows";
 import { ModelPanels } from "@/components/model-panels";
 import { PageHeader, SectionTitle, TablePanel } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
@@ -105,6 +106,12 @@ export default function PortfolioPage() {
 
       {p && (
         <Box mt="5">
+          <RunFlow flow={p.flow} cases={p.cases} />
+        </Box>
+      )}
+
+      {p && (
+        <Box mt="5">
           <BriefCard load={loadBrief} eyebrow="Summary" title="Key points for today" />
         </Box>
       )}
@@ -168,6 +175,12 @@ export default function PortfolioPage() {
             ))}
           </Grid>
         )
+      )}
+
+      {p && (
+        <Box mt="5">
+          <MoneyFlowCard />
+        </Box>
       )}
 
       <ModelsSection />

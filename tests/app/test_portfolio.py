@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from kept.app.api import create_app
 from kept.app.demo import demo_services
-from kept.app.portfolio import case_page, overview, wilson
+from kept.app.portfolio import case_page, money_flow, overview, wilson
 
 
 @pytest.fixture
@@ -19,23 +19,28 @@ def conn() -> duckdb.DuckDBPyConnection:
     c.execute(
         "create table nba.cards (case_id varchar, display_name varchar, current_bucket varchar, max_dpd int,"
         " total_overdue decimal(12,2), action varchar, tier varchar, p_paid_14d double, expected_value decimal(12,2),"
-        " hardship boolean, hard_stop boolean, features_as_of timestamptz)"
+        " hardship boolean, hard_stop boolean, features_as_of timestamptz, no_action_reason varchar, card json)"
     )
     c.execute(
         "insert into nba.cards values"
-        " ('C-1', 'Ann Lee', '31-60', 40, 1000, 'call', 'red', 0.5, 200, true, false, '2026-10-14 06:00:00+00'),"
-        " ('C-2', 'Bo Kim', '31-60', 35, 500, 'sms_payment_link', 'green', 0.3, 50, false, false, '2026-10-14 06:00:00+00'),"
-        " ('C-3', 'Cy Doe', '61-90', 70, 300, null, null, null, 0, false, true, '2026-10-14 06:00:00+00')"
+        " ('C-1', 'Ann Lee', '31-60', 40, 1000, 'call', 'red', 0.5, 200, true, false, '2026-10-14 06:00:00+00', null, '{}'),"
+        " ('C-2', 'Bo Kim', '31-60', 35, 500, 'sms_payment_link', 'green', 0.3, 50, false, false, '2026-10-14 06:00:00+00',"
+        " null, '{}'),"
+        " ('C-3', 'Cy Doe', '61-90', 70, 300, null, null, null, 0, false, true, '2026-10-14 06:00:00+00', 'No contact.',"
+        """ '{"hard_stop": {"fired": ["cease", "insolvency"]}}'),"""
+        " ('C-4', 'Di Ray', '1-30', 9, 200, null, null, null, 0, false, false, '2026-10-14 06:00:00+00',"
+        " 'Best action is to wait: no contact beats waiting today.', '{}')"
     )
     c.execute(
         "create table silver.collections_cases (test_cell varchar, outcome varchar, promises_kept int,"
-        " promises_broken int, cure_flag boolean, case_open_date date, primary_product varchar)"
+        " promises_broken int, cure_flag boolean, case_open_date date, primary_product varchar, entry_dpd int,"
+        " dpd_at_day_30 int)"
     )
     c.execute(
         "insert into silver.collections_cases values"
-        " ('champion', 'cured', 60, 40, true, '2026-08-01', 'card'),"
-        " ('challenger_A', 'cured', 30, 20, true, '2026-08-02', 'card'),"
-        " ('champion', null, 1, 1, false, '2026-09-01', 'card')"  # open: not in the A/B
+        " ('champion', 'cured', 60, 40, true, '2026-08-01', 'card', 10, 0),"
+        " ('challenger_A', 'cured', 30, 20, true, '2026-08-02', 'card', 20, 12),"
+        " ('champion', null, 1, 1, false, '2026-09-01', 'card', 5, 45)"  # open: not in the A/B
     )
     return c
 
@@ -48,14 +53,63 @@ def test_wilson_matches_the_textbook_interval() -> None:
 
 def test_overview_counts_slices_ab_and_insights(conn: duckdb.DuckDBPyConnection) -> None:
     p = overview(conn)
-    assert (p.cases, p.balance, p.expected, p.actionable, p.red, p.hard_stops) == (3, 1800, 250, 2, 1, 1)
-    assert [s.key for s in p.by_bucket] == ["31-60", "61-90"] and p.by_tier[-1].key in ("none", "green")
+    assert (p.cases, p.balance, p.expected, p.actionable, p.red, p.hard_stops) == (4, 2000, 250, 2, 1, 1)
+    assert [s.key for s in p.by_bucket] == ["31-60", "61-90", "1-30"] and p.by_tier[-1].key in (
+        "none",
+        "green",
+    )
     champ = next(c for c in p.ab_test if c.test_cell == "champion")
     assert (champ.cases, champ.promises, champ.kept_rate) == (1, 100, 0.6)
     assert {i.id for i in p.insights} == {"ab", "red", "bucket", "stops"} and all(i.sql for i in p.insights)
     assert p.as_of == datetime.fromisoformat("2026-10-14T06:00:00+00:00")
     (cohort,) = p.cohorts
     assert cohort.product == "card" and cohort.kept_rate == 91 / 152  # 60+30+1 kept of 152 promises
+
+
+def test_flow_takes_every_case_through_each_gate_to_one_card(conn: duckdb.DuckDBPyConnection) -> None:
+    bands = {(f.source, f.target): f.cases for f in overview(conn).flow}
+    assert bands == {
+        ("open", "contactable"): 3,
+        ("open", "hard_stop"): 1,
+        ("hard_stop", "insolvency"): 1,  # the strongest of the stops that fired
+        ("contactable", "hardship"): 1,
+        ("contactable", "no_hardship"): 2,
+        ("hardship", "red"): 1,
+        ("no_hardship", "green"): 1,
+        ("no_hardship", "wait"): 1,
+    }
+
+
+def test_money_flow_keeps_the_overdue_and_moves_the_payday_gain(conn: duckdb.DuckDBPyConnection) -> None:
+    roll = {
+        "inflow_cases": 100,
+        "inflow_overdue": 1000.0,
+        "rate": 0.5,
+        "chargeoff_if_rolled": 0.1,
+        "avg_chargeoff": 50.0,
+    }
+    base = {
+        "Promises dated to payday": 40.0,
+        "Roll-rate cut: charge-offs avoided": 0.0,
+        "_rolled_per_pt": 5.0,
+    }
+    business = {"roll": roll, "scenarios": {"Base": base}}
+    m = money_flow(conn, business)
+    today, kept = ({(f.source, f.target): f.amount for f in fs} for fs in (m.today, m.with_kept))
+    assert today[("entered", "rolled")] == 500 and kept[("entered", "rolled")] == 460
+    assert (
+        today[("entered", "cured")] == 250 and today[("entered", "partly_paid")] == 250
+    )  # 1 cured, 1 partly
+    for bands in (today, kept):
+        assert sum(v for (s, _), v in bands.items() if s == "entered") == 1000
+        assert (
+            bands[("rolled", "charged_off")] + bands[("rolled", "not_charged_off")]
+            == bands[("entered", "rolled")]
+        )
+    assert today[("rolled", "charged_off")] == kept[("rolled", "charged_off")] == 50  # base: no roll-rate cut
+    assert m.written_off == m.written_off_kept == 100 * 0.5 * 0.1 * 50
+    base["Roll-rate cut: charge-offs avoided"] = 5.0  # one point
+    assert money_flow(conn, business).written_off_kept == 100 * 0.49 * 0.1 * 50
 
 
 def test_case_page_filters_sorts_and_rejects_unknown_sorts(conn: duckdb.DuckDBPyConnection) -> None:

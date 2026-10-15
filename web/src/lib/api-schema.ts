@@ -187,10 +187,27 @@ export interface paths {
         };
         /**
          * Portfolio Models
-         * @description The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+         * @description The model card (scripts/model_card.py), fairness, drift and invariance reports as written:
          *     the page shows exactly what the reports say.
          */
         get: operations["portfolio_models_portfolio_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Money */
+        get: operations["portfolio_money_portfolio_money_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1156,6 +1173,20 @@ export interface components {
             };
         };
         /**
+         * FlowLink
+         * @description One band of a Sankey: cases, and their money, from one node to the next.
+         */
+        FlowLink: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Cases */
+            cases: number;
+            /** Amount */
+            amount: number;
+        };
+        /**
          * GoldenCustomer
          * @description One row of gold.c360_customer, one per golden_customer_id.
          */
@@ -1357,6 +1388,27 @@ export interface components {
          * @enum {string}
          */
         MatchReviewStatus: "auto" | "steward_approved" | "unlinked";
+        /**
+         * MoneyFlow
+         * @description A year of cases entering at 1-30 days past due (scripts/business_case.py), as bands of their overdue at
+         *     entry: today, and with Kept's base case. Cases are at the year's average overdue per case.
+         */
+        MoneyFlow: {
+            /** Cases */
+            cases: number;
+            /** Overdue */
+            overdue: number;
+            /** Written Off */
+            written_off: number;
+            /** Written Off Kept */
+            written_off_kept: number;
+            /** Gain */
+            gain: number;
+            /** Today */
+            today: components["schemas"]["FlowLink"][];
+            /** With Kept */
+            with_kept: components["schemas"]["FlowLink"][];
+        };
         /** MonthPoint */
         MonthPoint: {
             /**
@@ -1533,6 +1585,11 @@ export interface components {
             cohorts: components["schemas"]["CohortCell"][];
             /** Insights */
             insights: components["schemas"]["Insight"][];
+            /**
+             * Flow
+             * @default []
+             */
+            flow: components["schemas"]["FlowLink"][];
         };
         /**
          * PromiseSizing
@@ -2241,6 +2298,38 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_money_portfolio_money_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyFlow"];
                 };
             };
             /** @description Validation Error */
