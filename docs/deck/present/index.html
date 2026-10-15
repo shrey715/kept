@@ -86,6 +86,8 @@ td b{font-weight:600}
 .pill{display:inline-block;white-space:nowrap;padding:3px 9px;border-radius:999px;font:600 11px/1.3 var(--text)}
 .pill.ok{background:rgba(43,182,115,.16);color:#43d08a}.pill.no{background:rgba(229,41,63,.16);color:#ff6b7c}
 .light .pill.ok{background:#d9f1e4;color:#11744a}.light .pill.no{background:#fbd9de;color:#a10e25}
+.pill.tie{background:rgba(227,161,39,.16);color:#f0b54a}
+table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,15.5px);white-space:nowrap}
 /* graph diagram */
 .gnode{fill:var(--ink3);stroke:rgba(255,255,255,.14)}
 .gtext{fill:var(--sand);font:500 13px var(--text)}
@@ -233,12 +235,13 @@ td b{font-weight:600}
       <tr><td>Propensity to pay</td><td><span class="pill no">rejected</span></td><td class="small">Ranks people who'd pay anyway; spends contacts where they change nothing.</td></tr>
       <tr><td>Causal forest / deep uplift</td><td><span class="pill no">rejected</span></td><td class="small">Slower and harder to explain, with no evidence of more signal in this data.</td></tr>
       <tr><td>Tuned LightGBM (40 candidates)</td><td><span class="pill no">lost</span></td><td class="small">Best on validation, worse than the champion on held-out decisions (Qini 0.0029 vs 0.0073).</td></tr>
+      <tr><td>X- and DR-learners</td><td><span class="pill no">mixed</span></td><td class="small">Doubly robust Qini on held-out decisions: SMS +0.0060 vs +0.0020, email -0.0010 vs +0.0052. Wins some arms, loses others; the gate keeps the champion.</td></tr>
     </table>
     <div class="card"><h3>Who does a contact actually help?</h3><p class="muted small">Qini on 141,350 held-out decisions: the model's order (red) against random (dashed).</p>
       <svg id="qini" viewBox="0 0 320 200" style="width:100%;max-height:38vh;margin-top:10px"></svg>
       <p class="small muted" style="margin-top:6px">Any contact: 0.0008 ± 0.0005. Small, and the gate knows it: a worse model can't go live.</p></div>
   </div>
-  <div class="foot"><span><b>Kept</b> · model_card.json · docs/reports/tuning.md</span><span>6</span></div>
+  <div class="foot"><span><b>Kept</b> · model_card.json · tuning.md · uplift_learners.md</span><span>6</span></div>
   <aside>The rationale: propensity models are the industry default but they target the wrong people. Uplift asks what the contact changes. We tried to beat our own champion with a 40-model search and couldn't: the champion stays, which is the gate working.</aside>
 </section>
 
@@ -249,14 +252,14 @@ td b{font-weight:600}
   <div class="grid stagger" style="grid-template-columns:1fr 1fr 1fr;margin-top:3.5vh;align-items:start">
     <div class="card"><h3>Leakage found and removed</h3><p class="small">The first model scored AUC 0.92. One feature, amount_ratio, encoded the outcome. Dropped: <b>honest AUC 0.63</b>.</p></div>
     <div class="card"><h3>Calibrated, not just ranked</h3><p class="small">LightGBM on six point-in-time features, then isotonic calibration on the last 60 days, so "60%" means about 60%.</p></div>
-    <div class="card hot"><h3>Better together</h3><p class="small">Ours plus the bank's own score: <b>0.728</b> vs the bank's <b>0.702</b>. Ours adds payday timing and promise history.</p></div>
+    <div class="card hot"><h3>Matched, then better together</h3><p class="small">A wider model on the bank's kinds of inputs: <b>0.697</b> vs the bank's <b>0.702</b> (gap -0.5, 95% CI -1.9 to +1.0). Averaged with the bank's score: <b>0.764</b>, +6.1 points (CI 5.1–6.9).</p></div>
   </div>
   <div class="grid stagger" style="grid-template-columns:1fr 1fr;margin-top:14px">
     <div class="card"><h3>Reliability on 50,653 unseen promises</h3><svg id="rel" viewBox="0 0 300 200" style="width:100%;max-height:30vh"></svg><p class="small muted">AUC 0.610 · Brier 0.221 · dashed = perfect calibration</p></div>
     <div class="card"><h3>What drives it (share of |TreeSHAP|)</h3><div id="imp" style="margin-top:12px"></div></div>
   </div>
-  <div class="foot"><span><b>Kept</b> · evidence.md §3, §6 · model_card.json</span><span>7</span></div>
-  <aside>Decision process in miniature: we nearly shipped a 0.92 model, audited it, found the leak, and shipped the honest 0.63 instead. Combined with the bank's own score it beats the bank's model alone.</aside>
+  <div class="foot"><span><b>Kept</b> · evidence.md §3, §6, §8 · model_card.json</span><span>7</span></div>
+  <aside>Decision process in miniature: we nearly shipped a 0.92 model, audited it, found the leak, and shipped the honest 0.63 instead. Then we gave a wider model the same kinds of inputs the bank's score names (repayment record, balances, bureau, cash flow, payroll): it matches the bank's model on unseen promises, and averaged with it the two are far better than either. We say matched, not beaten: the interval includes zero.</aside>
 </section>
 
 <!-- 8 · LLM choice -->
@@ -382,15 +385,36 @@ td b{font-weight:600}
   <div class="grid stagger" style="grid-template-columns:1.2fr 1fr;margin-top:3.5vh;align-items:start">
     <div class="card"><h3>Promise-kept rate by strategy, 95% Wilson interval</h3><svg id="forest" viewBox="0 0 520 210" style="width:100%;margin-top:6px"></svg></div>
     <div class="grid" style="gap:12px">
-      <div class="card hot"><div class="big">+6.1 pts</div><p class="small" style="margin-top:6px">promised money paid when due 0–2 days after payday (95% CI 2.8–10.6)</p></div>
-      <div class="card"><div class="mid">38.6–42.0%</div><p class="small muted" style="margin-top:6px">paid in 14 days under Kept's policy vs 32.4–32.5% for the bank's (off-policy; two estimators agree)</p></div>
+      <div class="card hot"><div class="big">+6.1 pts</div><p class="small" style="margin-top:6px">promised money paid when due 0–2 days after payday (95% CI 2.8–10.6), on 12,808 promises in the bank's randomised cases</p></div>
+      <div class="card"><div class="mid">+61 per 1,000</div><p class="small muted" style="margin-top:6px">more customers paying within 14 days when Kept chooses the action instead of the bank's strategy (95% CI 55–67; off-policy, doubly robust)</p></div>
     </div>
   </div>
   <div class="foot"><span><b>Kept</b> · evidence.md §1, §2, §4</span><span>14</span></div>
   <aside>The randomised evidence came first and chose the idea: no strategy beats another, so we moved timing, and timing measurably moves payment.</aside>
 </section>
 
-<!-- 15 · business value -->
+<!-- 15 · is it real -->
+<section class="slide" data-title="Is it real?">
+  <div class="glow"></div>
+  <div class="eyebrow">Is it real? · every claim, its test, its interval</div>
+  <h2>What holds up, what ties, and what we can't yet prove.</h2>
+  <table class="stagger proof" style="margin-top:3vh">
+    <tr><th>Claim</th><th>Test</th><th>Result, 95% CI</th><th></th></tr>
+    <tr><td><b>Dating to payday raises money paid</b></td><td class="small muted">Bank's randomised cases, within days-past-due bands, bootstrap</td><td class="mono">+6.1 pts <span class="muted">[2.8–10.6]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>It is the payday, not the customer</b></td><td class="small muted">Due on payday vs 1–3 days before / after</td><td class="mono">+7.7 <span class="muted">[5.0–9.8]</span> · +8.3 <span class="muted">[6.1–10.5]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Same customer, on vs off payday</b></td><td class="small muted">Customer fixed effects, customer-clustered bootstrap</td><td class="mono">+4.0 pts <span class="muted">[1.1–7.4]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Fake paydays show nothing</b></td><td class="small muted">Every payday moved 3–10 days (placebo)</td><td class="mono">6 of 6 intervals include zero</td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Kept's promise model vs the bank's</b></td><td class="small muted">Paired bootstrap, same unseen promises</td><td class="mono">0.697 vs 0.702 <span class="muted">[-1.9 to +1.0]</span></td><td><span class="pill tie">tie</span></td></tr>
+    <tr><td><b>The two models together</b></td><td class="small muted">Equal-weight rank average, nothing fitted on the test</td><td class="mono">0.764, +6.1 <span class="muted">[5.1–6.9]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Kept's action choice vs the bank's</b></td><td class="small muted">Doubly robust, paired on the same decisions</td><td class="mono">+61 payers / 1,000 <span class="muted">[55–67]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Targeting by uplift</b></td><td class="small muted">The bank's randomisation only: worked vs held out</td><td class="mono">$+18K to $+42K per 1,000 cases, CIs include 0</td><td><span class="pill no">unproven</span></td></tr>
+    <tr><td><b>Pays back in year one</b></td><td class="small muted">20,000 draws over every assumption</td><td class="mono">99.97% of draws <span class="muted">(98.5% if all move together)</span></td><td><span class="pill ok">holds</span></td></tr>
+  </table>
+  <div class="foot"><span><b>Kept</b> · evidence.md §2, §2a, §4, §8, §9 · business_case.pdf</span><span>15</span></div>
+  <aside>One table for the question judges ask most: how do you know? Read the verdicts: the payday effect holds three different ways and the placebos are null; our promise model matches the bank's rather than beats it, and together they're far better; uplift targeting on the bank's own randomisation is still unproven, which is why the pilot plan exists. Each row reproduces with scripts/evidence_report.py.</aside>
+</section>
+
+<!-- 16 · business value -->
 <section class="slide light" data-title="Business value">
   <div class="eyebrow">Business value</div>
   <h2>$1.55M a year in the base case, and where it comes from.</h2>
@@ -398,25 +422,25 @@ td b{font-weight:600}
     <div class="card"><h3>Base case by driver ($k a year)</h3><div id="drivers" style="margin-top:12px"></div></div>
     <div class="grid" style="gap:12px">
       <div class="card hot"><div class="big">2.4×</div><p class="small" style="margin-top:6px">year-one ROI, base case; payback in about 2.6 months</p></div>
-      <div class="card"><div class="mid">$0.44M · $4.27M</div><p class="small muted" style="margin-top:6px">low and high cases. The low case doesn't pay back in year one, and we say so.</p></div>
+      <div class="card"><div class="mid">99.97%</div><p class="small muted" style="margin-top:6px">of 20,000 draws over every assumption pay back build and run in year one. Even with no payday effect it pays back; with everything else at its low end it needs 0.2 pts.</p></div>
     </div>
   </div>
-  <div class="foot"><span><b>Kept</b> · business_case.pdf · business_data.json</span><span>15</span></div>
+  <div class="foot"><span><b>Kept</b> · business_case.pdf · business_data.json</span><span>16</span></div>
   <aside>Each driver has its assumption and source in the business case: payday dating on the promises made each year, a cheaper contact mix, call summaries agents don't type, QA on flagged calls only.</aside>
 </section>
 
-<!-- 16 · pilot + close -->
+<!-- 17 · pilot + close -->
 <section class="slide" data-title="Pilot and close">
   <div class="glow"></div>
   <div class="eyebrow">Next</div>
   <h2>A pilot that proves it, with a rule that ends it either way.</h2>
   <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:4vh">
-    <div class="card"><h3>Hold-out</h3><p class="small muted">20% on the bank's strategy first, then a permanent 5%.</p></div>
+    <div class="card"><h3>Hold-out</h3><p class="small muted">20% on the bank's strategy first: the payday effect shows within 2 weeks (80% power). Then a permanent 5%, which would take 7.</p></div>
     <div class="card"><h3>A randomised due-date cell</h3><p class="small muted">Turns the payday estimate into a trial. Primary metric: promised money paid; guards: complaints, caps, hours, fairness.</p></div>
     <div class="card hot"><h3>Decision rule</h3><p class="small">Stop for harm if any guard worsens beyond its 95% interval; scale if promised money paid beats the hold-out two months running.</p></div>
   </div>
   <p class="mid" style="margin-top:7vh;max-width:30ch">Jane's promise lands the day after payday, inside what she can spare, and her hardship was heard the first time she said it.</p>
-  <div class="foot"><span><b>Kept</b> · github.com/shrey715/kept</span><span>16</span></div>
+  <div class="foot"><span><b>Kept</b> · github.com/shrey715/kept</span><span>17</span></div>
   <aside>Close on Jane, then stop. Questions go to the appendix slides in the PDF deck (roles, benchmarks, tuning, drift and fairness).</aside>
 </section>
 
