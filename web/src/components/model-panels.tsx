@@ -7,11 +7,24 @@ import { useState } from "react";
 import { ACTION_LABEL, type Action } from "@/lib/api";
 import { SectionTitle } from "./page-header";
 
+type Arm = { decisions: number; contacts: number; cost_per_contact: number; end: number; qini: number; qini_bank: number; curve: { frac: number; model: number; bank: number; lo: number; hi: number }[] };
+const ARM_LABEL: Record<string, string> = { call: "Calls", nudge: "Digital nudges", any: "Any contact" };
+const ARM_NOUN: Record<string, string> = { call: "call candidates", nudge: "nudge candidates", any: "contact candidates" };
+
 // The report JSON as the scripts write it (scripts/model_card.py, fairness_report, drift_report)
 type Card = {
   written: string;
   promise: { rows_test: number; auc: number; brier: number; kept_rate: number; cutoff: string; reliability: { predicted: number; observed: number; n: number }[]; importance: { label: string; share: number }[] };
-  uplift: { rows_test: number; qini_any_contact: number; qini_noise: number; cutoff: string; curve: { frac: number; gain: number }[]; random_end: number; importance: Record<string, { label: string; pts: number }[]> };
+  uplift: {
+    rows_test: number;
+    qini_any_contact: number;
+    qini_noise: number;
+    cutoff: string;
+    curve: { frac: number; gain: number }[];
+    random_end: number;
+    arms?: Record<string, Arm>;
+    importance: Record<string, { label: string; pts: number }[]>;
+  };
 };
 type Fairness = { written: string; attributes: Record<string, { outcomes: Record<string, { ratio: number; flagged: boolean; too_few_events: boolean }> }> };
 type Drift = { written: string; headline: string; watch: number; drift: number; rows: { feature: string; psi: number; status: "drift" | "watch" | "stable"; model_input: boolean }[] };
@@ -148,43 +161,89 @@ function PromiseCard({ p }: { p: Card["promise"] }) {
   );
 }
 
-/** Qini curve: extra payments gained by contacting the model's top-ranked cases first, against random order. */
+/** Qini curves per arm: extra payments as more decisions are contacted, best-ranked first, for the model, the bank's
+ * strategy and random order (shaded: the 5th-95th percentile of 30 random rankings). The slider reads one point. */
 function UpliftCard({ u }: { u: Card["uplift"] }) {
   const actions = Object.keys(u.importance);
   const [a, setA] = useState(actions[0]);
-  const W = 300;
-  const H = 200;
-  const gains = u.curve.map((c) => c.gain);
-  const lo = Math.min(0, ...gains);
-  const hi = Math.max(u.random_end, ...gains, 1);
-  const x = (v: number) => 12 + v * (W - 20);
-  const y = (v: number) => H - 20 - ((v - lo) / (hi - lo)) * (H - 36);
+  const arms = u.arms ?? {};
+  const armKeys = Object.keys(arms);
+  const [arm, setArm] = useState(armKeys[0] ?? "");
+  const [at, setAt] = useState(50);
+  const A = arms[arm];
+  const W = 320;
+  const H = 210;
+  const pts = A ? A.curve : [];
+  const vals = pts.flatMap((c) => [c.model, c.bank, c.lo, c.hi]);
+  const lo = Math.min(0, ...vals);
+  const hi = Math.max(1, ...vals);
+  const x = (v: number) => 14 + v * (W - 24);
+  const y = (v: number) => H - 22 - ((v - lo) / (hi - lo)) * (H - 40);
+  const line = (k: "model" | "bank") => pts.map((c) => `${x(c.frac)},${y(c[k])}`).join(" ");
+  const band = pts.length ? `${pts.map((c) => `${x(c.frac)},${y(c.hi)}`).join(" ")} ${[...pts].reverse().map((c) => `${x(c.frac)},${y(c.lo)}`).join(" ")}` : "";
+  const i = Math.round((at / 100) * (pts.length - 1));
+  const p = pts[i];
+  const peak = pts.reduce((m, c) => (c.model > m.model ? c : m), pts[0] ?? { frac: 0, model: 0, bank: 0, lo: 0, hi: 0 });
+  const saved = A ? Math.round((1 - at / 100) * A.contacts) : 0;
+  const fmt = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString("en-CA")}`;
   return (
     <div className="k-card t-lilac" style={{ padding: 22 }}>
-      <SectionTitle eyebrow="Uplift model" title="Qini curve on held-out decisions" />
+      <SectionTitle eyebrow="Uplift model" title="Who a contact actually helps" />
       <Grid columns="3" gap="2" mb="3">
         <Stat label="Qini, any contact" value={u.qini_any_contact.toFixed(4)} note={`noise ± ${u.qini_noise.toFixed(4)}`} />
         <Stat label="Held-out decisions" value={u.rows_test.toLocaleString("en-CA")} note={`after ${u.cutoff}`} />
         <Stat label="Gate" value="Champion kept" note="a worse model can't go live" />
       </Grid>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: 420, height: "auto", display: "block", margin: "0 auto" }} role="img" aria-label="Qini curve">
-        <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(0)} stroke="var(--k-line)" />
-        <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(u.random_end)} stroke="var(--gray-9)" strokeDasharray="4 4" />
-        <motion.polyline
-          fill="none"
-          stroke="var(--k-red)"
-          strokeWidth="2"
-          points={u.curve.map((c) => `${x(c.frac)},${y(c.gain)}`).join(" ")}
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: 1 }}
-        />
-        <text x={x(1)} y={H - 6} textAnchor="end" fontSize="9" fill="var(--gray-10)">
-          share of cases contacted, best-ranked first →
-        </text>
-      </svg>
-      <Text as="p" size="1" color="gray" mt="1">
-        Red: the model&apos;s order · dashed: random order. The gap is small and the gate measures it against noise before any model goes live; timing (payday) is where the measured gain is.
+      {A && (
+        <>
+          <Flex gap="2" wrap="wrap" mb="2" role="tablist" aria-label="Contact type">
+            {armKeys.map((k) => (
+              <button key={k} role="tab" aria-selected={arm === k} className="k-tab" data-active={arm === k} style={{ height: 30 }} onClick={() => setArm(k)}>
+                {ARM_LABEL[k] ?? k}
+              </button>
+            ))}
+          </Flex>
+          <p className="k-qini-head">
+            Contacting the model&apos;s top <b className="tabular">{Math.round(peak.frac * 100)}%</b> of {ARM_NOUN[arm]} gains{" "}
+            <b className="tabular">{fmt(peak.model)}</b> extra payments; contacting all of them gains <b className="tabular">{fmt(A.end)}</b>.
+          </p>
+          <svg viewBox={`0 0 ${W} ${H}`} className="k-qini" role="img" aria-label={`Qini curves for ${ARM_LABEL[arm]}`}>
+            <polygon points={band} className="band" />
+            <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(0)} className="axis" />
+            <motion.polyline key={arm + "b"} points={line("bank")} className="bank" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.8 }} />
+            <motion.polyline key={arm + "m"} points={line("model")} className="model" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }} />
+            {p && (
+              <g>
+                <line x1={x(p.frac)} x2={x(p.frac)} y1={14} y2={H - 22} className="cursor" />
+                <circle cx={x(p.frac)} cy={y(p.model)} r={3.5} className="dot" />
+              </g>
+            )}
+            <text x={x(1)} y={H - 6} textAnchor="end" fontSize="9" fill="var(--gray-10)">
+              share of decisions contacted, best-ranked first →
+            </text>
+          </svg>
+          <Flex gap="3" wrap="wrap" mt="1" className="k-qini-legend">
+            <span data-k="model">Kept&apos;s model</span>
+            <span data-k="bank">The bank&apos;s strategy</span>
+            <span data-k="band">Random order (90% band)</span>
+          </Flex>
+          <label className="k-qini-slider">
+            <span>
+              Contact the top <b className="tabular">{at}%</b>
+            </span>
+            <input type="range" min={0} max={100} step={5} value={at} onChange={(e) => setAt(Number(e.target.value))} aria-label="Share contacted" />
+          </label>
+          {p && (
+            <Grid columns="3" gap="2" mt="2">
+              <Stat label="Kept's model" value={fmt(p.model)} note="extra payments" />
+              <Stat label="The bank's strategy" value={fmt(p.bank)} note="extra payments" />
+              <Stat label="Contacts saved" value={saved.toLocaleString("en-CA")} note={`about $${Math.round(saved * A.cost_per_contact).toLocaleString("en-CA")} in contact cost`} />
+            </Grid>
+          )}
+        </>
+      )}
+      <Text as="p" size="1" color="gray" mt="2">
+        Measured on decisions the model never saw, against waiting. Actions were chosen by the bank, so this compares what happened, not a trial; the gate checks every new model against noise before it goes live.
       </Text>
       <Flex gap="2" mt="3" wrap="wrap">
         {actions.map((k) => (
