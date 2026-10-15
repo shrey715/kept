@@ -106,6 +106,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/calendar.ics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Calendar Ics
+         * @description The same events as a feed calendar apps subscribe to (webcal://): the past week and the next
+         *     `days`, refreshed hourly by the subscriber, each event linking back to its case.
+         */
+        get: operations["get_calendar_ics_calendar_ics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/approvals": {
         parameters: {
             query?: never;
@@ -1389,6 +1410,8 @@ export interface components {
             similar_cases_text?: string | null;
             /** Legacy Text */
             legacy_text?: string | null;
+            /** Why Not Text */
+            why_not_text?: string | null;
             /**
              * Checks
              * @default []
@@ -2053,6 +2076,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalendarFeed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_calendar_ics_calendar_ics_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

@@ -270,6 +270,7 @@ class KeptEngine:
             sizing_text=self._sizing_text(ctx, fv, proposal.sizing) if proposal.sizing else None,
             similar_cases_text=similar_cases(fv, best.action),
             legacy_text=legacy,
+            why_not_text=why_not(best, ranked),
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
@@ -401,6 +402,34 @@ class KeptEngine:
 
 
 # ------------------------------------------------------------------ helpers
+_CALLS = (Action.CALL, Action.PROMISE_REQUEST, Action.PAYMENT_PLAN, Action.HARDSHIP_REVIEW)  # one call model
+
+
+def why_not(best: ActionScore, ranked: Sequence[ActionScore]) -> str | None:
+    """"Why this, not that": the chosen action against the best-scoring other kind of action, in points
+    of payment chance over waiting and in value after contact cost and customer burden. Template only."""
+    family = _CALLS if best.action in _CALLS else (best.action,)
+    runner = next((s for s in ranked if s.action not in family), None)
+    if runner is None or best.action is Action.WAIT:
+        return None
+    if best.score < runner.score:  # a protection chose it (the hardship override), not value
+        other = "Waiting" if runner.action is Action.WAIT else f"To {_LABEL[runner.action].lower()}"
+        return (
+            f"{other} would be worth ${runner.score - best.score:,.2f} more on value alone; this action is "
+            "chosen because the case's protections come first."
+        )
+    gain = f"{_LABEL[best.action]} adds {100 * best.uplift:.1f} points to the chance of payment over waiting"
+    if runner.action is Action.WAIT:
+        return (
+            f"{gain}; after contact cost and the burden on the customer it is worth "
+            f"${best.score:,.2f} more than waiting."
+        )
+    return (
+        f"{gain}; to {_LABEL[runner.action].lower()} adds {100 * runner.uplift:.1f}. After contact cost "
+        f"and the burden on the customer, it is worth ${best.score - runner.score:,.2f} more."
+    )
+
+
 def _legacy_text(
     legacy: Action | None,
     ours: Action,

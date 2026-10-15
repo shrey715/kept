@@ -3631,3 +3631,10 @@ html {
   background: var(--k-rose-2);
   color: var(--k-rose-ink);
 }
+
+/* "why this, not that" under the drivers' title */
+.k-whynot {
+  margin-top: -6px;
+  max-width: 68ch;
+  line-height: 1.5;
+}

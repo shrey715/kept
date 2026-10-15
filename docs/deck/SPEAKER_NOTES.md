@@ -79,24 +79,46 @@ evening slot, $140 × 3 due the day after payday, Red because of hardship.
 **Demo hand-off:** open the case page for Jane, then Portfolio, then ask a question in the Ask.
 
 ## 15 · Measured impact
-**Say:** the bank's strategies overlap; timing adds 6.1 points; off-policy, Kept's policy beats the bank's.
-**If asked "is the 38.6–42.0% real?":** it's an estimate (actions weren't randomised); two estimators agree; the pilot's
-randomised cell turns it into a trial.
+**Say:** the bank's strategies overlap; timing adds 6.1 points; when Kept chooses the action, 61 more customers in every
+1,000 pay within 14 days (interval 55–67).
+**If asked "is the +61 real?":** it's an off-policy estimate (the bank chose the actions, so we model how it chose and
+correct for it, paired on the same decisions); two estimators agree; the pilot's randomised cell turns it into a trial.
 
-## 16 · Business value
-**Say:** $1.55M base, by driver; ROI 2.4×; payback about 2.6 months; the low case doesn't pay back in year one.
+## 16 · Is it real?
+**Say:** one table, every claim, the test, the interval, and a plain verdict. Walk the verdicts, not the numbers:
+the payday effect holds three ways (randomised cases, due on payday against a day or three either side, the same
+customer on and off payday) and fake paydays show nothing; our promise model ties the bank's and together they're
+much better; uplift targeting on the bank's own randomisation is unproven, which is what the pilot is for; and the
+business case pays back in 99.97% of simulated draws.
+**If asked "did you beat the bank's model?":** not alone, and we don't claim to. A wider model on the same kinds of
+inputs the bank's score uses matches it (0.697 against 0.702, interval −1.9 to +1.0 points). Ours exists the moment a
+promise is made, about nine days before the bank's score, and averaged with it the two reach 0.764 (+6.1 points). The
+bank keeps its model and gains ours.
+**If asked "why is uplift so small?":** the bank's randomised test says contact intensity barely moves outcomes, so a
+small uplift signal is the honest result. We tried X- and doubly robust learners: they win some actions and lose
+others, so the gate kept the live model. That's why the lever is the due date.
+**If asked "is it causal?":** the sharp comparison around payday, the same-customer comparison and the placebos are the
+strongest checks short of a trial; a promise due on payday is kept 8 points more often than one due a day or three
+either side, and a payday that isn't real shows nothing. The randomised due-date cell in the pilot is the trial.
+**How do you know?** `docs/reports/evidence.md` §2, §2a, §4, §8, §9; `docs/reports/uplift_learners.md`;
+`docs/reports/business_case.pdf` §8. One command reproduces each: `uv run python scripts/evidence_report.py`.
+
+## 17 · Business value
+**Say:** $1.55M base, by driver; ROI 2.4×; payback about 2.6 months. Across 20,000 draws of every assumption, 99.97%
+pay back in year one; even with no payday effect at all it pays back.
 **How do you know?** `docs/reports/business_case.pdf`; every assumption is listed there with its source.
 
-## 17 · Value beyond dollars
+## 18 · Value beyond dollars
 **Say:** the guard metrics: caps, hours, hardship, fairness, complaints; complaints need a live cell.
 
-## 18 · The pilot
-**Say:** a 20% hold-out, then 5%; a randomised due-date cell; a decision rule that ends it either way.
+## 19 · The pilot
+**Say:** a 20% hold-out first, which shows the payday effect within two weeks at 80% power, then a permanent 5%; a
+randomised due-date cell; a decision rule that ends it either way.
 
-## 19 · How we built it
+## 20 · How we built it
 **Say:** four tracks, gated; every claim in `JUDGES.md` with the command that reproduces it.
 
-## 20 · Close
+## 21 · Close
 **Say:** read Jane's line, then stop.
 
 ## Appendix (only when asked)

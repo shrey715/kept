@@ -52,7 +52,7 @@
         \item \textbf{Five systems, five keys per person.} Each files the same customer differently, so nobody sees
           the whole person.
         \item \textbf{Promises are dated by the calendar, not by pay.} A promise due before payday breaks; the bank's own
-          data shows promised money paid is \textbf{+6.1 pts} higher when the due date falls just after payday.
+          data shows promised money paid is \textbf{\KpayMoney\ pts} higher when the due date falls just after payday.
         \item \textbf{More contact doesn't help.} The bank's randomised champion, two challengers and a hold-out keep
           promises at the same rate.
         \item \textbf{Hardship gets missed} in notes and calls, so vulnerable customers are pushed like anyone.
@@ -245,7 +245,7 @@
     \toprule
     \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
     Uplift per action & a propensity-to-pay score & propensity contacts people who'd pay anyway; uplift finds who a contact changes \\
-    Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds +6.1 pts \\
+    Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts \\
     Local models for everything & a hosted model & customer words never leave the bank; no per-call cost; no quota or outage mid-demo \\
     Certified metrics first & free-form SQL from a model & reviewed definitions answer most questions with no model-written SQL \\
     A graph with checks (LangGraph) & one prompt & each step is testable, traced, and fixable without retuning a prompt \\
@@ -262,8 +262,8 @@
   \source{docs/reports/tuning.md, evidence.md §3, PR \#169}
   \begin{columns}[T]
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Rejected; the dense Qwen3.8-27B fits and is faster.}\end{column}
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). The gate kept the champion.}\end{column}
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. Ours plus the bank's score: 0.728 vs 0.702.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). X- and DR-learners won some arms and lost others. The gate kept the champion.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. A wider model then matched the bank's (\KwideAuc\ vs \KbankAuc); averaged with it, \KblendAuc.}\end{column}
   \end{columns}
   \vspace{0.8em}
   {\small The rule: a change ships only if it beats what's live by more than the noise, on data it never saw.}
@@ -341,10 +341,31 @@
       {\scriptsize Every interval overlaps the champion's (dashed).}
     \end{column}
     \begin{column}{0.44\textwidth}
-      \kcard{\bignum{+6.1 pts}{promised money paid when due 0--2 days after payday (95\% CI 2.8--10.6)}\\[0.5em]
-        \bignum{38.6--42.0\%}{paid in 14 days under Kept's policy vs 32.4--32.5\% for the bank's (off-policy estimate; two estimators agree)}}
+      \kcard{\bignum{\KpayMoney\ pts}{promised money paid when due 0--2 days after payday (95\% CI \KpayMoneyCI), \KpayPromises\ promises in randomised cases}\\[0.5em]
+        \bignum{\KoffPolicy\ per 1,000}{more customers paying within 14 days when Kept chooses the action, paired on the same decisions (95\% CI \KoffPolicyCI; off-policy, doubly robust)}}
     \end{column}
   \end{columns}
+\end{frame}
+
+
+\begin{frame}
+  \kicker{Is it real?}\frametitle{Every claim, its test, its 95\% interval}
+  \source{evidence.md §2, §2a, §4, §8, §9; business\_case.pdf}
+  \scriptsize\renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}L{4.1cm}L{3.4cm}L{4.1cm}l@{}}
+    \toprule
+    \textbf{Claim} & \textbf{Test} & \textbf{Result [95\% CI]} & \\ \midrule
+    Payday dating raises money paid & randomised cases & \KpayMoney\ pts [\KpayMoneyCI] & \pill[kgreen]{holds} \\
+    It is the payday, not the customer & vs 1--3 days either side & \KonBefore\ [\KonBeforeCI] · \KonAfter\ [\KonAfterCI] & \pill[kgreen]{holds} \\
+    Same customer, on vs off payday & fixed effects & \Kwithin\ pts [\KwithinCI] & \pill[kgreen]{holds} \\
+    Fake paydays show nothing & paydays moved 3--10 days & \KplaceboNull\ intervals include 0 & \pill[kgreen]{holds} \\
+    Promise model vs the bank's & paired bootstrap & \KwideAuc\ vs \KbankAuc\ [\KwideGapCI] & \pill[kamber]{tie} \\
+    The two models together & rank average, nothing fitted & \KblendAuc, \KblendGap\ [\KblendGapCI] & \pill[kgreen]{holds} \\
+    Kept's action vs the bank's & doubly robust, paired & \KoffPolicy\ payers / 1,000 [\KoffPolicyCI] & \pill[kgreen]{holds} \\
+    Targeting by uplift & randomised cells only & \KcellAll\ to \KcellTop\ / 1,000, CI spans 0 & \pill{unproven} \\
+    Pays back in year one & 20,000 simulated draws & \KpPayback\ (\KpPaybackTogether\ if correlated) & \pill[kgreen]{holds} \\
+    \bottomrule
+  \end{tabular}
 \end{frame}
 
 
@@ -367,7 +388,7 @@
       \kcard{\bignum[20]{\KvalueBase}{a year, base case (low \KvalueLow, high \KvalueHigh)}\\[0.5em]
         \bignum[20]{\KroiBase×}{year-one ROI, base case}\\[0.5em]
         \bignum[20]{\KpaybackBase\ months}{payback, base case}}\\[0.4em]
-      {\scriptsize The low case doesn't pay back in year one, and we say so: it assumes payday dating barely helps.}
+      {\scriptsize \KpPayback\ of 20,000 draws over every assumption pay back in year one (\KpPaybackTogether\ if they all move together). With no payday effect it still pays back; with everything else at its low end it needs \KbreakevenLow\ pts.}
     \end{column}
   \end{columns}
 \end{frame}
@@ -397,7 +418,7 @@
   \begin{columns}[T]
     \begin{column}{0.48\textwidth}
       \begin{itemize}\setlength\itemsep{0.45em}
-        \item \textbf{20\% hold-out first}, then a permanent 5\% on the bank's strategy.
+        \item \textbf{20\% hold-out first}: the payday effect shows within \KweeksTwenty\ weeks (80\% power); then a permanent 5\% on the bank's strategy (\KweeksFive\ weeks to the same answer).
         \item \textbf{A randomised due-date cell}, so the payday effect becomes a trial, not an estimate.
         \item \textbf{Primary metric:} promised money paid. \textbf{Guards:} complaints, caps, hours, fairness ratio.
       \end{itemize}

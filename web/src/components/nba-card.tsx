@@ -112,6 +112,11 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
         <motion.div layout transition={spring}>
           <Card size="3">
             <SectionTitle eyebrow="Drivers" title="Why this action" />
+            {card.why_not_text && (
+              <Text as="p" size="2" color="gray" mb="4" className="k-whynot">
+                {card.why_not_text}
+              </Text>
+            )}
             <Flex direction="column" gap="4">
               {card.reasons.map((r, i) => (
                 <motion.div key={r.feature} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...spring, delay: 0.1 + i * 0.08 }}>
