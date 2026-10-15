@@ -21,7 +21,7 @@ import pandas as pd
 
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
-from kept.config import CENT, EXPORT_DIR
+from kept.config import CENT, EXPORT_DIR, OPERATING_TZ
 from kept.contracts.audit import AuditEvent, AuditKind
 from kept.contracts.enums import Action
 from kept.contracts.feature_registry import model_inputs
@@ -31,8 +31,9 @@ from kept.contracts.nba import NBACard
 from kept.data.c360_reader import _to_customer
 from kept.features.drift import load_alarm
 from kept.nba.context import CaseRow, KeptContextBuilder
-from kept.nba.engine import KeptEngine
+from kept.nba.engine import WINDOW, KeptEngine
 from kept.nba.promise_model import load_model
+from kept.nba.ranking import CallCapacity
 from kept.nba.uplift import TLearnerUplift
 from kept.text.store import from_row
 
@@ -231,12 +232,35 @@ def load(conn: duckdb.DuckDBPyConnection) -> _Bulk:
     return _Bulk(customers, vectors, cases, dict(notes))
 
 
+SQL_CALL_CAPACITY = """
+with c as (select date, capacity_units::double as units, split_part(time_band, '-', 1)::int as s,
+                  split_part(time_band, '-', 2)::int as e
+           from silver.channel_capacity
+           where channel = 'call' and time_band similar to '[0-9]+-[0-9]+'
+             and date > (select max(date) from silver.channel_capacity where channel = 'call') - 7)
+select isodow(date) - 1, hour, sum(units / (e - s)) from c, unnest(range(s, e)) as r(hour) where e > s
+group by 1, 2"""
+
+
+def call_capacity(conn: duckdb.DuckDBPyConnection) -> CallCapacity | None:
+    """The call team's attempts per weekday and hour (bank time), from the latest week of
+    silver.channel_capacity; None when the table is missing or empty."""
+    try:
+        rows = conn.execute(SQL_CALL_CAPACITY).fetchall()
+    except duckdb.Error:
+        return None
+    if not rows:
+        return None
+    return CallCapacity({(int(w), int(h)): float(u) for w, h, u in rows}, tz=OPERATING_TZ, length=WINDOW)
+
+
 def score(
     warehouse: Path | str, *, model: Path, holdout_salt: str, now: datetime, audit_log: DuckDBAuditLog
 ) -> pd.DataFrame:
     """Score every open case and write nba.cards. Returns the cards table."""
     with duckdb.connect(str(warehouse), read_only=True) as conn:
         bulk = load(conn)
+        calls = call_capacity(conn)
     buffer = _Buffer()
     context = KeptContextBuilder(
         c360=bulk, features=bulk, cases=bulk.case_row, holdout_salt=holdout_salt, extractions=bulk
@@ -251,11 +275,11 @@ def score(
         proposals=_NoStore(),
         drift_alarm=load_alarm(EXPORT_DIR / "features"),
         promise_model=load_model(EXPORT_DIR / "models" / "promise.pkl"),
+        call_capacity=calls,
     )
-    rows = [
-        _row(engine.recommend(case_id, now), bulk.customers[case_id], now)
-        for case_id in sorted(bulk.customers)
-    ]
+    # larger balances first, so they get the earlier call hours while capacity lasts
+    order = sorted(bulk.customers, key=lambda c: (-bulk.cases[c].total_overdue if c in bulk.cases else 0, c))
+    rows = [_row(engine.recommend(case_id, now), bulk.customers[case_id], now) for case_id in order]
     cards = pd.DataFrame(rows)
     with connect(warehouse) as c:  # one write at the end (K5)
         c.execute(_CARDS_DDL)

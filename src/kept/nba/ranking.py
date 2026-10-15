@@ -9,11 +9,13 @@ time bands are applied when the call window is chosen.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from kept.config import CENT
 from kept.contracts.enums import ACTION_CHANNEL, Action, Channel
-from kept.contracts.nba import ActionScore
+from kept.contracts.nba import ActionScore, CaseContext
 
 _ORDER = {a: i for i, a in enumerate(Action)}
 _KEPT_SIZED = (Action.PROMISE_REQUEST, Action.PAYMENT_PLAN)
@@ -97,3 +99,40 @@ def is_close_call(ranked: Sequence[ActionScore], *, margin: float) -> bool:
         return False
     top, second = ranked[0].score, ranked[1].score
     return abs(top - second) < Decimal(str(margin)) * abs(top)
+
+
+class CallCapacity:
+    """Hourly call capacity in the bank's operating time zone, booked as the nightly batch places calls.
+    `units[(weekday, hour)]` is how many call attempts the team can make in that hour on that weekday
+    (Monday 0); each date gets its own copy, used up as calls are booked into it."""
+
+    def __init__(self, units: Mapping[tuple[int, int], float], *, tz: str, length: timedelta) -> None:
+        self._units = dict(units)
+        self._tz = ZoneInfo(tz)
+        self._length = length
+        self._left: dict[tuple[date, int], float] = {}
+
+    def book(self, ctx: CaseContext, first: tuple[datetime, datetime]) -> tuple[datetime, datetime]:
+        """The earliest half-hour slot from `first` inside the customer's own calling hours (up to a week
+        ahead) whose operating hour still has capacity, booked. None free: `first`, unbooked."""
+        local_tz = ZoneInfo(ctx.time_zone)
+        start = first[0].astimezone(local_tz)
+        for d in range(8):
+            day = start.date() + timedelta(days=d)
+            if day.weekday() == 6 and not ctx.sunday_contact_permitted:
+                continue
+            open_, close = (
+                datetime.combine(day, t, local_tz)
+                for t in (ctx.permitted_call_start_local, ctx.permitted_call_end_local)
+            )
+            s = max(open_, start)
+            while s < close:
+                op = s.astimezone(self._tz)
+                key = (op.date(), op.hour)
+                if key not in self._left:
+                    self._left[key] = self._units.get((op.weekday(), op.hour), 0.0)
+                if self._left[key] >= 1:
+                    self._left[key] -= 1
+                    return s.astimezone(UTC), min(s + self._length, close).astimezone(UTC)
+                s += timedelta(minutes=30)
+        return first

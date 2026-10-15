@@ -12,7 +12,7 @@ import pandas as pd
 from kept.common.audit import new_event_id
 from kept.config import CLOSE_CALL_MARGIN, PROPOSAL_TTL
 from kept.contracts.audit import AuditEvent, AuditKind
-from kept.contracts.enums import ACTION_CHANNEL, Action, HardshipStatus
+from kept.contracts.enums import ACTION_CHANNEL, Action, Channel, HardshipStatus
 from kept.contracts.feature_registry import model_inputs
 from kept.contracts.features import FeatureVector
 from kept.contracts.interfaces import AuditLog, CaseContextBuilder, FeatureProvider, UpliftScorer
@@ -28,9 +28,9 @@ from kept.contracts.nba import (
 )
 from kept.nba.explain import drivers, top_reasons
 from kept.nba.promise_model import PromiseModel, serving_row
-from kept.nba.ranking import is_close_call, score_actions
+from kept.nba.ranking import CallCapacity, is_close_call, score_actions
 from kept.nba.release import cancel_pending, is_stale
-from kept.nba.rules import allowed_actions, hard_stops, hardship_override
+from kept.nba.rules import allowed_actions, hard_stops, hardship_override, permission_gate
 from kept.nba.sizing import promise_options, size_promise
 from kept.nba.tiers import assign_tier
 
@@ -108,6 +108,7 @@ class KeptEngine:
         programs: Callable[[CaseContext], Sequence[str]] | None = None,
         drift_alarm: Sequence[str] = (),
         promise_model: PromiseModel | None = None,
+        call_capacity: CallCapacity | None = None,
     ) -> None:
         """proposals: where new proposals are stored for the release gate (Releaser reads it).
         programs: hardship programmes the case is eligible for, named for the banner
@@ -123,6 +124,7 @@ class KeptEngine:
         self._programs = programs
         self._drift = tuple(drift_alarm)  # model inputs that shifted overnight (#86): Green goes to a person
         self._promise = promise_model  # explains a sized promise on the card, never ranks it (#79)
+        self._calls = call_capacity  # the nightly batch books calls into hours with capacity
 
     def payment_options(
         self, case_id: str, now: datetime, stated: StatedPay | None = None
@@ -262,6 +264,7 @@ class KeptEngine:
             hardship_status=_protective_status(ctx),
             close_call=is_close_call(ranked, margin=CLOSE_CALL_MARGIN) or bool(self._drift),
         )
+        slot, checks = self._book(ctx, best.action, slot, checks)
         proposal = self._proposal(ctx, best.action, tier, slot, sizing if best.action in _SIZED else None)
         return NBACard(
             case_id=ctx.case_id,
@@ -307,6 +310,23 @@ class KeptEngine:
             return f"{sizing.rationale} {chance}."
         return f"{sizing.rationale} {chance} ({p_before:.0%} if it fell due the day before payday)."
 
+    def _book(
+        self,
+        ctx: CaseContext,
+        action: Action,
+        slot: tuple[datetime, datetime] | None,
+        checks: Mapping[Action, tuple[CheckResult, ...]],
+    ) -> tuple[tuple[datetime, datetime] | None, Mapping[Action, tuple[CheckResult, ...]]]:
+        """A call goes into the earliest hour with call capacity (nightly batch only); its checks are
+        rerun at the booked time."""
+        if self._calls is None or slot is None or ACTION_CHANNEL[action] is not Channel.CALL:
+            return slot, checks
+        booked = self._calls.book(ctx, slot)
+        if booked == slot:
+            return slot, checks
+        rerun = permission_gate(ctx.model_copy(update={"now": booked[0]}), action).checks
+        return booked, {**checks, action: rerun}
+
     def _legacy(
         self,
         ctx: CaseContext,
@@ -326,6 +346,7 @@ class KeptEngine:
                 ctx, f"No action: old strategy ({why}) asks for a promise that can't be kept."
             )
         tier = assign_tier(action=a, hard_stopped=False, hardship_status=_protective_status(ctx))
+        slot, checks = self._book(ctx, a, slot, checks)
         proposal = self._proposal(ctx, a, tier, slot, sizing, legacy=True)
         return NBACard(
             case_id=ctx.case_id,
@@ -412,7 +433,7 @@ _CALLS = (Action.CALL, Action.PROMISE_REQUEST, Action.PAYMENT_PLAN, Action.HARDS
 
 
 def why_not(best: ActionScore, ranked: Sequence[ActionScore]) -> str | None:
-    """"Why this, not that": the chosen action against the best-scoring other kind of action, in points
+    """ "Why this, not that": the chosen action against the best-scoring other kind of action, in points
     of payment chance over waiting and in value after contact cost and customer burden. Template only."""
     family = _CALLS if best.action in _CALLS else (best.action,)
     runner = next((s for s in ranked if s.action not in family), None)
