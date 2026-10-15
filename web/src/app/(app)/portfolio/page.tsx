@@ -19,10 +19,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { TierBadge, initials, tierTint } from "@/components/bits";
 import { CountUp, Donut, Rise, Stagger } from "@/components/motion";
 import { BriefCard } from "@/components/brief-card";
+import { MoneyFlowCard, RunFlow } from "@/components/flows";
 import { ModelPanels } from "@/components/model-panels";
 import { PaydayClock } from "@/components/payday-clock";
 import { PageHeader, SectionTitle, TablePanel } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
+import { WorkloadHeatmap } from "@/components/workload-heatmap";
 import { download, toCsv } from "@/lib/csv";
 import { ACTION_LABEL, api, money, type Action, type Governance, type PaydayClock as Clock, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
 import { keys, load, peek } from "@/lib/live";
@@ -111,6 +113,12 @@ export default function PortfolioPage() {
 
       {p && (
         <Box mt="5">
+          <RunFlow flow={p.flow} cases={p.cases} />
+        </Box>
+      )}
+
+      {p && (
+        <Box mt="5">
           <BriefCard load={loadBrief} eyebrow="Summary" title="Key points for today" />
         </Box>
       )}
@@ -181,6 +189,13 @@ export default function PortfolioPage() {
           <Rise>
             <PaydayClock c={clock} />
           </Rise>
+        </Box>
+      )}
+
+      <WorkloadHeatmap />
+      {p && (
+        <Box mt="5">
+          <MoneyFlowCard />
         </Box>
       )}
 

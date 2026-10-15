@@ -216,6 +216,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Money */
+        get: operations["portfolio_money_portfolio_money_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portfolio": {
         parameters: {
             query?: never;
@@ -242,6 +259,23 @@ export interface paths {
         };
         /** Get Payday Clock */
         get: operations["get_payday_clock_portfolio_payday_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/workload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Workload */
+        get: operations["get_portfolio_workload_portfolio_workload_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1213,6 +1247,20 @@ export interface components {
             };
         };
         /**
+         * FlowLink
+         * @description One band of a Sankey: cases, and their money, from one node to the next.
+         */
+        FlowLink: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Cases */
+            cases: number;
+            /** Amount */
+            amount: number;
+        };
+        /**
          * GoldenCustomer
          * @description One row of gold.c360_customer, one per golden_customer_id.
          */
@@ -1414,6 +1462,27 @@ export interface components {
          * @enum {string}
          */
         MatchReviewStatus: "auto" | "steward_approved" | "unlinked";
+        /**
+         * MoneyFlow
+         * @description A year of cases entering at 1-30 days past due (scripts/business_case.py), as bands of their overdue at
+         *     entry: today, and with Kept's base case. Cases are at the year's average overdue per case.
+         */
+        MoneyFlow: {
+            /** Cases */
+            cases: number;
+            /** Overdue */
+            overdue: number;
+            /** Written Off */
+            written_off: number;
+            /** Written Off Kept */
+            written_off_kept: number;
+            /** Gain */
+            gain: number;
+            /** Today */
+            today: components["schemas"]["FlowLink"][];
+            /** With Kept */
+            with_kept: components["schemas"]["FlowLink"][];
+        };
         /** MonthPoint */
         MonthPoint: {
             /**
@@ -1610,6 +1679,11 @@ export interface components {
             cohorts: components["schemas"]["CohortCell"][];
             /** Insights */
             insights: components["schemas"]["Insight"][];
+            /**
+             * Flow
+             * @default []
+             */
+            flow: components["schemas"]["FlowLink"][];
         };
         /**
          * PromiseSizing
@@ -2035,6 +2109,33 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Workload
+         * @description #115: tonight's proposed calls by weekday and hour against the call team's capacity.
+         */
+        Workload: {
+            /** Time Zone */
+            time_zone: string;
+            /** Calls */
+            calls: number;
+            /** Capacity From */
+            capacity_from: string | null;
+            /** Capacity To */
+            capacity_to: string | null;
+            /** Cells */
+            cells: components["schemas"]["WorkloadCell"][];
+        };
+        /** WorkloadCell */
+        WorkloadCell: {
+            /** Weekday */
+            weekday: number;
+            /** Hour */
+            hour: number;
+            /** Calls */
+            calls: number;
+            /** Capacity */
+            capacity: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2432,6 +2533,38 @@ export interface operations {
             };
         };
     };
+    portfolio_money_portfolio_money_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyFlow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_portfolio_portfolio_get: {
         parameters: {
             query: {
@@ -2483,6 +2616,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaydayClock"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_workload_portfolio_workload_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workload"];
                 };
             };
             /** @description Validation Error */

@@ -243,8 +243,8 @@ export function ExtractionPanel({ items, agentId, demo, onSaved }: { items: Note
     <Card size="3">
       <SectionTitle eyebrow="Notes" title="Extracted from notes" mb="1" aside={<span className="k-badge">{items.length}</span>} />
       <Text as="p" size="2" color="gray" mt="1" mb="4">
-        Each value is highlighted in the note it came from. Confirm or correct it: a confirmed hardship signal sets hardship to
-        confirmed, and a stop request becomes a hard stop.
+        Confirm or correct each value. A confirmed hardship signal sets hardship to confirmed; a confirmed stop request becomes
+        a hard stop.
       </Text>
       <Flex direction="column" gap="3">
         <AnimatePresence initial={false}>

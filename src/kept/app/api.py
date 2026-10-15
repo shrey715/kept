@@ -38,7 +38,7 @@ from kept.app.calendar_events import CalendarFeed, to_ics
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory, CaseStory
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
-from kept.app.portfolio import CasePage, PaydayClock, Portfolio, Sort
+from kept.app.portfolio import CasePage, MoneyFlow, PaydayClock, Portfolio, Sort, Workload
 from kept.app.voice import CallOut, VoiceCalls
 from kept.common.audit import new_event_id
 from kept.common.llm import Purpose
@@ -101,7 +101,9 @@ class Services:
     calendar: Callable[[date, date, str, Role], CalendarFeed] | None = None  # real: cards and silver
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
+    workload: Callable[[], Workload] | None = None  # real: proposed calls by weekday and hour vs capacity
     governance: Callable[[], dict[str, Any]] | None = None  # real: model card, fairness, drift (report JSON)
+    money_flow: Callable[[], MoneyFlow | None] | None = None  # real: the business case's roll funnel
     brief_llm: LLMGateway | None = None  # real: the local model writes cited briefs; None: template briefs
     demo: bool = False
 
@@ -244,10 +246,14 @@ def create_app(services: Services) -> FastAPI:
     GET  /cases/{case_id}/brief?user_id&role      200 Brief: cited bullets from the local model, each number
                                                   checked against what it cites; else a template brief
     GET  /portfolio/brief?user_id&role            200 Brief over tonight's computed portfolio facts
-    GET  /portfolio/models?user_id&role           200 {model_card, fairness, drift}: the reports' JSON
+    GET  /portfolio/models?user_id&role           200 {model_card, fairness, drift, invariance, nightly}:
+                                                  the reports' JSON (nightly: the last run's heartbeat)
+    GET  /portfolio/workload?user_id&role         200 Workload: proposed calls by weekday x hour vs capacity
     GET  /portfolio?user_id&role                  200 Portfolio (KPIs, slices, A/B with Wilson CIs, cohorts,
                                                   insights with their SQL); analysts and case-wide roles
     GET  /portfolio/payday?user_id&role           200 PaydayClock: kept rate by days from payday, same roles
+    GET  /portfolio/money?user_id&role            200 MoneyFlow: a year of new arrears, today and with Kept's
+                                                  base case; 503 without the business case report
     GET  /portfolio/cases?user_id&role[&offset&limit&sort&tier&action&bucket&q]
                                                   200 CasePage of nba.cards; case-wide roles, names masked
     GET  /notifications?user_id&role[&limit]      200 NotificationFeed: audit events for this person, newest
@@ -512,6 +518,17 @@ def create_app(services: Services) -> FastAPI:
             raise HTTPException(503, "the model reports aren't on this machine")
         return services.governance()
 
+    @app.get("/portfolio/money", response_model=MoneyFlow)
+    def portfolio_money(user_id: str, role: Role) -> MoneyFlow:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        flow = services.money_flow() if services.money_flow else None
+        if flow is None:
+            raise HTTPException(
+                503, "the business case report isn't on this machine (scripts/business_case.py)"
+            )
+        return flow
+
     @app.get("/portfolio", response_model=Portfolio)
     def get_portfolio(user_id: str, role: Role) -> Portfolio:
         if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
@@ -527,6 +544,14 @@ def create_app(services: Services) -> FastAPI:
         if services.payday_clock is None:
             raise HTTPException(503, "the payday clock needs the warehouse")
         return services.payday_clock()
+
+    @app.get("/portfolio/workload", response_model=Workload)
+    def get_portfolio_workload(user_id: str, role: Role) -> Workload:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")
+        if services.workload is None:
+            raise HTTPException(503, "the workload needs the warehouse")
+        return services.workload()
 
     @app.get("/portfolio/cases", response_model=CasePage)
     def get_portfolio_cases(

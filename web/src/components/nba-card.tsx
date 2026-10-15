@@ -140,7 +140,7 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
             <SectionTitle eyebrow="Expected outcome" title="Probability of payment within 14 days" mb="0" />
             {wait !== undefined && (
               <Text as="p" size="2" color="gray" mt="1" mb="4">
-                Tick marks show the outcome with no contact ({pct(wait)}). Hover a bar for detail; select two to compare.
+                Tick marks show the outcome with no contact ({pct(wait)}).
               </Text>
             )}
             <Flex direction="column" gap="1">

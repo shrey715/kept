@@ -400,9 +400,13 @@ NIGHTLY = (
 )
 
 
-def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = None) -> int:
+def nightly(
+    args: argparse.Namespace, run: Callable[[list[str]], int] | None = None, exports: Path = EXPORT_DIR
+) -> int:
     """Everyone's steps in order (S6). --from STEP resumes; --skip STEP (repeatable) leaves one out,
-    e.g. `--skip extract` on a machine without C's model. Exit code = the failing step's."""
+    e.g. `--skip extract` on a machine without C's model. Exit code = the failing step's.
+    After each step it rewrites reports/nightly_run.json (#114): each step's start, seconds and exit
+    code, plus the gate result, parity mismatch rate and drift alarm those steps wrote."""
     import subprocess
     import sys
     import time
@@ -414,18 +418,63 @@ def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = N
         print(f"kept nightly: unknown step {args.start}; steps: {', '.join(names)}")
         return 2
     steps = NIGHTLY[names.index(args.start) :] if args.start else NIGHTLY
+    done: list[dict[str, object]] = []
+    beat: dict[str, object] = {
+        "started": datetime.now(UTC).isoformat(),
+        "finished": None,
+        "exit": None,  # None while the run is going
+        "planned": [n for n, _ in steps if n not in args.skip],
+        "steps": done,
+        "gate": None,
+        "parity": None,
+        "drift_alarm": None,
+    }
     for name, argv in steps:
         if name in args.skip:
             print(f"== {name}: skipped")
             continue
         print(f"== {name}: kept {' '.join(argv)}", flush=True)
-        t0 = time.perf_counter()
+        start, t0 = datetime.now(UTC), time.perf_counter()
         code = run(argv)
-        print(f"== {name}: exit {code} in {time.perf_counter() - t0:.0f}s", flush=True)
+        took = time.perf_counter() - t0
+        print(f"== {name}: exit {code} in {took:.0f}s", flush=True)
+        done.append({"name": name, "start": start.isoformat(), "seconds": round(took, 1), "exit": code})
+        _badges(beat, name, code, exports)
         if code != 0:
             print(f"kept nightly: stopped at {name}; nothing after it ran (resume with --from {name})")
-            return code
-    return 0
+            return _heartbeat(beat, code, exports)
+        _heartbeat(beat, None, exports)
+    return _heartbeat(beat, 0, exports)
+
+
+def _badges(beat: dict[str, object], name: str, code: int, exports: Path) -> None:
+    """The heartbeat's badges, from what the gate, parity and features steps already wrote."""
+    import re
+
+    from kept.features.drift import load_alarm
+
+    if name == "gate":
+        beat["gate"] = "pass" if code == 0 else "block"
+    elif name == "parity":
+        report = exports / "quality" / "parity_report.md"
+        m = re.search(r"cells differ \(([\d.]+)%", report.read_text()) if report.exists() else None
+        beat["parity"] = {"passed": code == 0, "mismatch_rate": float(m[1]) / 100 if m else None}
+    elif name == "features" and code == 0:
+        beat["drift_alarm"] = load_alarm(exports / "features")  # model inputs that moved since last night
+
+
+def _heartbeat(beat: dict[str, object], code: int | None, exports: Path) -> int:
+    """Write the run so far, whole, then swap it in: the API never reads half a file. Returns code."""
+    import json
+
+    if code is not None:
+        beat["finished"], beat["exit"] = datetime.now(UTC).isoformat(), code
+    out = exports / "reports" / "nightly_run.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".tmp")
+    tmp.write_text(json.dumps(beat, indent=1))
+    tmp.replace(out)
+    return code or 0
 
 
 def invariance(args: argparse.Namespace) -> int:

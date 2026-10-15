@@ -3391,7 +3391,7 @@ html {
 }
 
 /* review panel: what is being approved, before the buttons; tinted by the release tier */
-.k-brief {
+.k-ab {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3401,30 +3401,30 @@ html {
   background: var(--t-bg, var(--gray-a2));
   border: 1px solid color-mix(in srgb, var(--t-2, var(--gray-a5)) 70%, transparent);
 }
-.k-brief-h {
+.k-ab-h {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
   font-weight: 700;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-title {
+.k-ab-title {
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin-top: -4px;
 }
-.k-brief-title span {
+.k-ab-title span {
   font-weight: 400;
   color: var(--gray-11);
 }
-.k-brief-chips {
+.k-ab-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.k-brief-chips span {
+.k-ab-chips span {
   font-size: 12.5px;
   font-weight: 500;
   padding: 4px 11px;
@@ -3432,7 +3432,7 @@ html {
   background: var(--t-2, var(--gray-a3));
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why {
+.k-ab-why {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -3440,23 +3440,23 @@ html {
   border-radius: 14px;
   background: color-mix(in srgb, var(--t-2, var(--gray-a3)) 45%, transparent);
 }
-.k-brief-why svg {
+.k-ab-why svg {
   flex: none;
   width: 18px;
   height: 18px;
   margin-top: 1px;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-why b {
+.k-ab-why b {
   font-size: 13.5px;
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why p {
+.k-ab-why p {
   margin: 3px 0 0;
   font-size: 13.5px;
   line-height: 1.5;
 }
-.k-brief-note {
+.k-ab-note {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
@@ -3890,4 +3890,235 @@ html {
   .k-clock-arc {
     transition: none;
   }
+}
+/* flows (Sankey): bands, node labels with a halo in the card's tint, the value in bold */
+.k-sankey-band {
+  cursor: default;
+  mix-blend-mode: multiply;
+}
+.dark .k-sankey-band {
+  mix-blend-mode: screen;
+}
+.k-sankey-label {
+  font-size: 12px;
+  fill: var(--gray-12);
+  paint-order: stroke;
+  stroke: var(--t-bg, var(--k-card));
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.k-sankey-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* WorkloadHeatmap (portfolio): weekday x hour, shade = share of call capacity used, hatched = over capacity */
+.k-load {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+}
+.k-load-hour {
+  font-size: 10px;
+}
+.k-load-day {
+  font-size: 11px;
+}
+.k-load-cell {
+  height: 24px;
+  border-radius: 5px;
+  background: var(--k-chip);
+  transition: box-shadow 0.15s;
+}
+.k-load-cell[data-none="true"],
+.k-load-swatch {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--k-dash);
+}
+.k-load-cell[data-over="true"],
+.k-load-swatch[data-over="true"] {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--k-rose-ink) 55%, transparent) 0 1.5px, transparent 1.5px 6px),
+    var(--k-rose-2);
+  box-shadow: none;
+}
+.k-load-cell[data-hover="true"] {
+  box-shadow: 0 0 0 2px var(--k-strong);
+}
+.k-load-swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+}
+.k-load-scale {
+  width: 110px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(to right, color-mix(in srgb, var(--k-ice-ink) 8%, var(--k-chip)), color-mix(in srgb, var(--k-ice-ink) 92%, var(--k-chip)));
+}
+@media (max-width: 640px) {
+  .k-load-hour:nth-child(even) {
+    visibility: hidden; /* every other hour label on a phone */
+  }
+  .k-load-cell {
+    height: 18px;
+  }
+}
+
+/* Heartbeat (model panels): the last kept nightly, one Gantt row per step, badges above */
+.k-beat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  background: var(--k-chip);
+  max-width: 100%;
+}
+.k-beat-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--k-line);
+}
+.k-beat-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.k-beat-badge[data-tone="ok"] .k-beat-icon {
+  background: var(--k-mint-2);
+  color: var(--k-mint-ink);
+}
+.k-beat-badge[data-tone="bad"] .k-beat-icon {
+  background: var(--k-rose-2);
+  color: var(--k-rose-ink);
+}
+.k-beat {
+  display: grid;
+  gap: 6px;
+}
+.k-beat-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 190px) minmax(0, 1fr) 84px;
+  gap: 12px;
+  align-items: center;
+}
+.k-beat-row[data-idle="true"] > :first-child {
+  color: var(--gray-10);
+}
+.k-beat-track {
+  height: 12px;
+}
+.k-beat-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--k-ice-ink);
+  transform-origin: left center;
+}
+.k-beat-bar[data-bad="true"] {
+  background: var(--k-red);
+}
+.k-beat-live {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--k-ice-ink);
+  animation: k-beat-pulse 1.2s ease-in-out infinite;
+}
+@keyframes k-beat-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-beat-live {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .k-beat-row {
+    grid-template-columns: 96px minmax(0, 1fr) 64px;
+    gap: 8px;
+  }
+}
+
+/* uplift panel: Qini curves per arm with a random band and a share slider */
+.k-qini {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  display: block;
+  margin: 4px auto 0;
+}
+.k-qini .band {
+  fill: var(--gray-a4);
+}
+.k-qini .axis {
+  stroke: var(--k-line);
+}
+.k-qini polyline {
+  fill: none;
+  stroke-linejoin: round;
+}
+.k-qini .model {
+  stroke: var(--k-red);
+  stroke-width: 2.2;
+}
+.k-qini .bank {
+  stroke: var(--gray-11);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+}
+.k-qini .cursor {
+  stroke: var(--gray-8);
+  stroke-dasharray: 2 3;
+}
+.k-qini .dot {
+  fill: var(--k-red);
+}
+.k-qini-head {
+  margin: 4px 0 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.k-qini-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-11);
+}
+.k-qini-legend span::before {
+  content: "";
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--k-red);
+}
+.k-qini-legend span[data-k="bank"]::before {
+  background: repeating-linear-gradient(90deg, var(--gray-11) 0 5px, transparent 5px 9px);
+}
+.k-qini-legend span[data-k="band"]::before {
+  height: 10px;
+  background: var(--gray-a5);
+}
+.k-qini-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.k-qini-slider input {
+  flex: 1;
+  accent-color: var(--k-red);
 }

@@ -21,7 +21,7 @@ from kept.app.api import QueueItem, Services
 from kept.app.calendar_events import calendar_feed
 from kept.app.history import case_history, case_story
 from kept.app.notifications import ReadState
-from kept.app.portfolio import case_page, overview, payday_clock
+from kept.app.portfolio import MoneyFlow, case_page, money_flow, overview, payday_clock, workload
 from kept.app.voice import VoiceCalls
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
@@ -137,7 +137,9 @@ def real_services(
         portfolio=lambda: overview(conn),
         brief_llm=_brief_llm(audit_log),
         governance=_governance,
+        money_flow=lambda: _money_flow(conn),
         portfolio_cases=lambda **kw: case_page(conn, **kw),
+        workload=lambda: workload(conn),
         reads=ReadState(warehouse.parent / "app_state.duckdb"),  # not the warehouse: kept score writes that
     )
 
@@ -176,10 +178,17 @@ def _governance() -> dict[str, object]:
         ("fairness", "fairness_data"),
         ("drift", "drift_data"),
         ("invariance", "invariance_protected"),  # the nightly's scramble test (`kept invariance`)
+        ("nightly", "nightly_run"),  # the last `kept nightly`, step by step (#114)
     ):
         path = EXPORT_DIR / "reports" / f"{name}.json"
         out[key] = json.loads(path.read_text()) if path.exists() else None
     return out
+
+
+def _money_flow(conn: duckdb.DuckDBPyConnection) -> MoneyFlow | None:
+    """The business case's report (scripts/business_case.py), read fresh like the others."""
+    path = EXPORT_DIR / "reports" / "business_data.json"
+    return money_flow(conn, json.loads(path.read_text())) if path.exists() else None
 
 
 def _brief_llm(audit_log: DuckDBAuditLog) -> LLMGateway:
