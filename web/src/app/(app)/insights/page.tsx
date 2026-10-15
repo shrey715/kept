@@ -4,7 +4,7 @@ import { GlobeIcon } from "@radix-ui/react-icons";
 import { Box, Callout, Flex, Skeleton, Text } from "@radix-ui/themes";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { CallingHoursMap, StressMapView } from "@/components/insight-maps";
+import { CallingHoursMap, DistrictMap, StressMapView, UpliftExplorer } from "@/components/insight-maps";
 import { Rise, Stagger } from "@/components/motion";
 import { PageHeader, SectionTitle } from "@/components/page-header";
 import { api, type CallingHours, type CollectionsMap, type StressMap, type UpliftLandscape } from "@/lib/api";
@@ -41,7 +41,6 @@ export default function InsightsPage() {
   const stress = useInsight<StressMap>(allowed ? me : null, api.stressMap);
   const towers = useInsight<CollectionsMap>(allowed ? me : null, api.collectionsMap);
   const uplift = useInsight<UpliftLandscape>(allowed ? me : null, api.upliftLandscape);
-  const [mode, setMode] = useState<"roll" | "tier">("roll");
   if (!me) return null;
   if (!allowed)
     return (
@@ -70,7 +69,7 @@ export default function InsightsPage() {
           <>
             <StressMapView data={d} />
             <Text as="p" size="1" color="gray" mt="3">
-              Customers in tonight&apos;s portfolio, at each of the last 12 month-ends. The first month has no earlier month to compare, so cash flow and payroll are blank there.
+              The first month has no earlier month to compare, so cash flow and payroll are blank there.
             </Text>
           </>
         )}
@@ -81,33 +80,16 @@ export default function InsightsPage() {
         title="Overdue balance by postal district"
         state={towers}
         height={520}
-        aside={
-          <div className="k-tabs">
-            <button className="k-tab" data-active={mode === "roll"} style={{ height: 32 }} onClick={() => setMode("roll")}>
-              Roll rate
-            </button>
-            <button className="k-tab" data-active={mode === "tier"} style={{ height: 32 }} onClick={() => setMode("tier")}>
-              Kept&apos;s tier mix
-            </button>
-          </div>
-        }
       >
-        {(d) => (
-          <>
-            <CollectionsTowers data={d} mode={mode} />
-            <Text as="p" size="1" color="gray" mt="3">
-              Tonight&apos;s cards by forward sortation area, binned into hexagons. Height is the overdue balance; colour is the share of the bank&apos;s cases from the last 12 months that were 30 or more days further behind by day 30, or Kept&apos;s tier mix. {d.hidden_fsas.toLocaleString("en-CA")} areas with fewer than 50 cases ({d.hidden_cases.toLocaleString("en-CA")} cases) are left off. Postal geography is shown for monitoring only; it is never a model input.
-            </Text>
-          </>
-        )}
+        {(d) => <DistrictMap data={d} towers={(m) => <CollectionsTowers data={d} mode={m} />} />}
       </Section>
 
       <Section eyebrow="Uplift model" title="Where a call helps" state={uplift} height={520}>
         {(d) => (
           <>
-            <UpliftSurface data={d} />
+            <UpliftExplorer data={d} surface={<UpliftSurface data={d} />} />
             <Text as="p" size="1" color="gray" mt="3">
-              The live uplift model ({d.model_version}): the predicted change in the chance of payment within 14 days from a call rather than waiting, across days past due and answer rate, with every other input at tonight&apos;s median. Green rises where a call helps; red falls where it does not. Each sphere is a group of 50 or more of tonight&apos;s {d.cases.toLocaleString("en-CA")} cases with an answer rate, at their average position and predicted uplift, coloured by the card&apos;s action.
+              The live uplift model ({d.model_version}), with every other input at tonight&apos;s median. Each dot is a group of 50 or more of tonight&apos;s {d.cases.toLocaleString("en-CA")} cases, coloured by the card&apos;s action.
             </Text>
           </>
         )}
