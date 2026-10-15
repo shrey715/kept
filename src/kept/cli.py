@@ -22,6 +22,7 @@ COMMANDS = {
     "train": "Track D: train uplift models, log to MLflow",
     "train-promises": "Track D: P(kept | promise) model for the card's promise line (#79)",
     "score": "Track D: score every open case",
+    "invariance": "Governance: scramble protected attributes on a warehouse copy; exit 1 if any card moves",
     "benchmark": "Track B: run the Ask scorecard",
     "serve": "Track D: run the API",
     "nightly": "Everyone: land -> silver -> match -> gold -> gate -> extract -> features -> parity -> score",
@@ -395,6 +396,7 @@ NIGHTLY = (
     ("features", ["features"]),  # rebuilds text_signals, then features, Feast
     ("parity", ["parity"]),
     ("score", ["score"]),
+    ("invariance", ["invariance"]),  # 0 of tonight's cards may change when protected attributes are scrambled
 )
 
 
@@ -424,6 +426,16 @@ def nightly(args: argparse.Namespace, run: Callable[[list[str]], int] | None = N
             print(f"kept nightly: stopped at {name}; nothing after it ran (resume with --from {name})")
             return code
     return 0
+
+
+def invariance(args: argparse.Namespace) -> int:
+    """#92: scripts/invariance_test.py on copies of tonight's warehouse (two rebuilds and two scorings, side
+    by side). Writes data/exports/reports/invariance_protected.json; the fairness card shows it."""
+    import subprocess
+    import sys
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "invariance_test.py"
+    return subprocess.run([sys.executable, str(script), "protected"]).returncode
 
 
 def train_promises(args: argparse.Namespace) -> int:
@@ -717,6 +729,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "features": features,
     "parity": parity,
     "score": score,
+    "invariance": invariance,
     "train-promises": train_promises,
     "nightly": nightly,
     "map": map_,

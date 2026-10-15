@@ -489,7 +489,7 @@ def create_app(services: Services) -> FastAPI:
 
     @app.get("/portfolio/models")
     def portfolio_models(user_id: str, role: Role) -> dict[str, Any]:
-        """The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+        """The model card (scripts/model_card.py), fairness, drift and invariance reports as written:
         the page shows exactly what the reports say."""
         if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
             raise HTTPException(403, "the portfolio is for analysts, specialists, team leads and compliance")

@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -38,8 +39,7 @@ from kept.contracts.data_contract import load_data_contract
 
 WORK = WAREHOUSE_PATH.parent / "invariance"
 OUT = EXPORT_DIR / "reports" / "invariance_{}.json"  # one file per scenario
-FEATURES_AS_OF = "2026-10-03T06:00:00+00:00"  # tonight's feature snapshot
-NOW = datetime(2026, 10, 3, 14, 0, tzinfo=UTC)  # one clock for both runs (calling hours depend on it)
+DBT_THREADS = "4"
 OPERATIONAL = {  # proxies the bank must use to contact a customer correctly; not scrambled
     "preferred_language": "contact in the customer's language",
     "correspondence_language": "letters in the customer's language",
@@ -99,33 +99,43 @@ def scramble(path: Path, names: set[str]) -> dict[str, list[str]]:
     return done
 
 
-def rebuild(path: Path) -> None:
+def snapshot(path: Path) -> tuple[str, datetime]:
+    """Tonight's feature date (read from a copy: `kept serve` may hold the warehouse), and one clock for both
+    runs (calling hours depend on it)."""
+    with duckdb.connect(str(path), read_only=True) as con:
+        as_of = con.execute("select max(as_of) from features.case_features").fetchone()[0]  # type: ignore[index]
+    as_of = as_of.replace(tzinfo=UTC)
+    return as_of.isoformat(), datetime.now(UTC)
+
+
+def rebuild(path: Path, features_as_of: str) -> None:
     """gold from silver, then the features: the dbt runs of `kept build --gold-only` and `kept features`.
     A subprocess each, so no dbt connection keeps the copy open in this process."""
     from kept.data.gold import DBT_DIR, GOLD_MODELS
 
     dbt = str(Path(sys.executable).parent / "dbt")
-    common = ["--threads", "1", "--profiles-dir", str(DBT_DIR), "--project-dir", str(DBT_DIR)]
+    common = ["--threads", DBT_THREADS, "--profiles-dir", str(DBT_DIR), "--project-dir", str(DBT_DIR)]
     env = os.environ | {"KEPT_WAREHOUSE_PATH": str(path)}
     for select, extra in (
         (list(GOLD_MODELS), []),
         (
             ["text_signals", "path:models/features"],
-            ["--vars", json.dumps({"features_as_of": FEATURES_AS_OF})],
+            ["--vars", json.dumps({"features_as_of": features_as_of})],
         ),
     ):
         subprocess.run([dbt, "build", "--select", *select, *extra, *common], env=env, check=True)
 
 
-def score(path: Path) -> pd.DataFrame:
+def score(path: Path, now: datetime) -> pd.DataFrame:
     from kept.common.audit import DuckDBAuditLog
     from kept.nba.score import score as score_all
 
+    load_dotenv()  # a worker process: the hold-out salt comes from .env
     return score_all(
         path,
         model=EXPORT_DIR / "models" / "uplift.pkl",
         holdout_salt=os.environ["KEPT_HOLDOUT_SALT"],
-        now=NOW,
+        now=now,
         audit_log=DuckDBAuditLog(":memory:"),
     )
 
@@ -157,7 +167,7 @@ def moved(base: Path, pert: Path, table: str, key: str, cols: list[str]) -> dict
     return out
 
 
-def main(scenario: str) -> None:
+def main(scenario: str) -> bool:
     load_dotenv()
     WORK.mkdir(parents=True, exist_ok=True)
     contract = load_data_contract()
@@ -165,14 +175,17 @@ def main(scenario: str) -> None:
     proxies = set(contract.proxy_attributes) - set(OPERATIONAL)
     t0 = time.perf_counter()
     base, pert = copy("base"), copy("perturbed")
+    features_as_of, now = snapshot(base)
     scrambled = scramble(pert, protected if scenario == "protected" else protected | proxies)
     print(f"scrambled {sum(map(len, scrambled.values()))} columns in {len(scrambled)} tables")
-    for p in (base, pert):
-        rebuild(p)
-        print(f"rebuilt gold + features on {p.name} ({time.perf_counter() - t0:.0f}s)")
+    # the two copies are independent: rebuild them side by side, then score them side by side
+    with ThreadPoolExecutor(2) as pool:
+        list(pool.map(lambda p: rebuild(p, features_as_of), (base, pert)))
+    print(f"rebuilt gold + features on both copies ({time.perf_counter() - t0:.0f}s)")
     shown = {"gender_code", "marital_status", "citizenship_status", "household_size", "vulnerability_type"}
     reach = moved(base, pert, "gold.c360_restricted", "golden_customer_id", sorted(protected & shown))
-    a, b = score(base), score(pert)
+    with ProcessPoolExecutor(2) as procs:
+        a, b = procs.map(score, (base, pert), (now, now))
     print(f"scored {len(a):,} + {len(b):,} cases ({time.perf_counter() - t0:.0f}s)")
     m = a.merge(b, on="case_id", suffixes=("_base", "_pert"), how="outer", indicator=True)
     diffs = {}
@@ -205,12 +218,14 @@ def main(scenario: str) -> None:
         "seconds": round(time.perf_counter() - t0),
     }
     out = Path(str(OUT).format(scenario))
+    data["features_as_of"] = features_as_of
     out.write_text(json.dumps(data, indent=1, default=str))
     print(
         json.dumps({k: data[k] for k in ("cases", "field_differences", "cards_differ", "passed")}, indent=1)
     )
     print(f"-> {out}")
+    return bool(data["passed"])
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "protected")
+    sys.exit(0 if main(sys.argv[1] if len(sys.argv) > 1 else "protected") else 1)

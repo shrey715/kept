@@ -167,7 +167,12 @@ def _live_extraction(warehouse: Path, audit_log: AuditLog, typed: dict[str, str]
 def _governance() -> dict[str, object]:
     """The latest model card, fairness and drift reports, read fresh so a rerun shows without a restart."""
     out: dict[str, object] = {}
-    for key, name in (("model_card", "model_card"), ("fairness", "fairness_data"), ("drift", "drift_data")):
+    for key, name in (
+        ("model_card", "model_card"),
+        ("fairness", "fairness_data"),
+        ("drift", "drift_data"),
+        ("invariance", "invariance_protected"),  # the nightly's scramble test (`kept invariance`)
+    ):
         path = EXPORT_DIR / "reports" / f"{name}.json"
         out[key] = json.loads(path.read_text()) if path.exists() else None
     return out

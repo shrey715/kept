@@ -28,6 +28,7 @@ def test_runs_every_step_in_order() -> None:
     names = [n for n, _ in NIGHTLY]  # A's order, then text, features, parity, score
     assert names.index("gate") < names.index("features") < names.index("parity") < names.index("score")
     assert names.index("extract") < names.index("features")  # tonight's notes reach the features
+    assert names[-1] == "invariance"  # tonight's cards, checked against scrambled protected attributes
     assert dict(NIGHTLY)["match"] == [
         "match",
         "--train-sample-mod",
@@ -44,5 +45,5 @@ def test_a_failing_gate_publishes_nothing() -> None:
 def test_resume_and_skip() -> None:
     calls, run = _run()
     assert nightly(argparse.Namespace(start="extract", skip=["extract"]), run=run) == 0
-    assert calls == [["features"], ["parity"], ["score"]]
+    assert calls == [["features"], ["parity"], ["score"], ["invariance"]]
     assert nightly(argparse.Namespace(start="nope", skip=[]), run=run) == 2
