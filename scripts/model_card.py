@@ -83,6 +83,54 @@ def promise_card(conn: duckdb.DuckDBPyConnection) -> dict[str, object]:
     }
 
 
+NUDGES = ("sms_payment_link", "email", "push")
+
+
+def arm_curves(late, lift, contacts, rng, steps: int = 41, draws: int = 30) -> dict[str, object]:  # type: ignore[no-untyped-def]
+    """Per arm (calls, digital nudges, any contact) against waiting: extra payments as the share contacted grows,
+    for the model's ranking, the bank's strategy (its recommendation, ties broken at random) and random order
+    (the 5th-95th percentile band of 30 random rankings). Gains are payments, as in qini_curve."""
+    from kept.contracts.enums import Action
+    from kept.nba.engine import DEFAULT_CONTACT_COST
+    from kept.nba.legacy import legacy_to_action
+
+    legacy = late.nba_recommendation_last.map(lambda c: (x := legacy_to_action(c)) and x.value).to_numpy()
+    wait = (late.action == "wait").to_numpy()
+    y_all = late.paid_14d.to_numpy(dtype=int)
+    out: dict[str, object] = {}
+    for name, members in (("call", ("call",)), ("nudge", NUDGES), ("any", tuple(contacts))):
+        members = tuple(m for m in members if m in contacts)
+        if not members:
+            continue
+        arm = late.action.isin(members).to_numpy()
+        both = arm | wait
+        t, y = arm[both].astype(int), y_all[both]
+        if not t.any() or t.all():
+            continue
+        model = lift[list(members)].max(axis=1).to_numpy()[both]
+        bank = np.isin(legacy[both], members).astype(float) + 1e-9 * rng.random(both.sum())
+        frac, g_model = qini_curve(model, t, y)
+        _, g_bank = qini_curve(bank, t, y)
+        pick = np.linspace(0, len(frac) - 1, steps).astype(int)
+        rand = np.array([qini_curve(rng.random(len(t)), t, y)[1][pick] for _ in range(draws)])
+        lo, hi = np.percentile(rand, [5, 95], axis=0)
+        mix = late.action[arm].value_counts()
+        cost = sum(float(DEFAULT_CONTACT_COST[Action(a)]) * n for a, n in mix.items()) / int(t.sum())
+        out[name] = {
+            "decisions": int(both.sum()),
+            "contacts": int(t.sum()),
+            "cost_per_contact": round(cost, 4),  # the engine's contact costs, over this arm's actual mix
+            "end": float(g_model[-1]),
+            "qini": float(qini_coefficient(model, t, y)),
+            "qini_bank": float(qini_coefficient(bank, t, y)),
+            "curve": [
+                {"frac": float(frac[i]), "model": float(g_model[i]), "bank": float(g_bank[i]), "lo": float(a), "hi": float(b)}
+                for i, a, b in zip(pick, lo, hi, strict=True)
+            ],
+        }
+    return out
+
+
 def uplift_card(conn: duckdb.DuckDBPyConnection, *, sample: int = 4000, seed: int = 0) -> dict[str, object]:
     model = pickle.loads((MODELS / "uplift.pkl").read_bytes())
     rows = load_rows(conn)
@@ -98,6 +146,7 @@ def uplift_card(conn: duckdb.DuckDBPyConnection, *, sample: int = 4000, seed: in
     frac, gain = qini_curve(score, t, y)
     pick = np.linspace(0, len(frac) - 1, 41).astype(int)  # 40 steps is plenty for a chart
     rng = np.random.default_rng(seed)
+    arms = arm_curves(late, lift, contacts, rng)
     rows_s = late.sample(min(sample, len(late)), random_state=seed)
     importance = {}
     for a in [x for x in ("call", "sms_payment_link", "email") if x in contacts]:
@@ -114,6 +163,7 @@ def uplift_card(conn: duckdb.DuckDBPyConnection, *, sample: int = 4000, seed: in
         "qini_noise": float(np.std([qini_coefficient(rng.random(len(t)), t, y) for _ in range(30)])),
         "curve": [{"frac": float(frac[i]), "gain": float(gain[i])} for i in pick],
         "random_end": float(gain[-1]),
+        "arms": arms,
         "importance": importance,
         "cutoff": UPLIFT_CUTOFF.date().isoformat(),
     }
