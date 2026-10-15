@@ -11,6 +11,10 @@ export type Brief = S["Brief"];
 export type { Governance } from "@/components/model-panels";
 import type { Governance } from "@/components/model-panels";
 export type PortfolioPage = S["CasePage"];
+export type CallingHours = S["CallingHours"];
+export type StressMap = S["StressMap"];
+export type CollectionsMap = S["CollectionsMap"];
+export type UpliftLandscape = S["UpliftLandscape"];
 export type CalendarFeed = S["CalendarFeed"];
 export type CalendarEvent = S["CalendarEvent"];
 export type Driver = S["Driver"];
@@ -83,6 +87,10 @@ export const api = {
   portfolioBrief: (w: Who) => call<Brief>(`/portfolio/brief?${q(w)}`),
   portfolio: (w: Who) => call<Portfolio>(`/portfolio?${q(w)}`),
   portfolioCases: (w: Who, f: Record<string, string>) => call<PortfolioPage>(`/portfolio/cases?${q(w, f)}`),
+  callingHours: (w: Who) => call<CallingHours>(`/insights/calling-hours?${q(w)}`),
+  stressMap: (w: Who) => call<StressMap>(`/insights/stress?${q(w)}`),
+  collectionsMap: (w: Who) => call<CollectionsMap>(`/insights/map?${q(w)}`),
+  upliftLandscape: (w: Who) => call<UpliftLandscape>(`/insights/uplift?${q(w)}`),
   history: (caseId: string, w: Who) => call<CaseHistory>(`/cases/${encodeURIComponent(caseId)}/history?${q(w)}`),
   notifications: (w: Who) => call<NotificationFeed>(`/notifications?${q(w)}`),
   markRead: (userId: string, upto: string) => call<{ status: string }>("/notifications/read", post({ user_id: userId, upto })),

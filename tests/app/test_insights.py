@@ -63,10 +63,18 @@ def conn() -> duckdb.DuckDBPyConnection:
     return c
 
 
-def test_calling_hours_drops_small_provinces_and_counts_cards_outside_hours(conn: duckdb.DuckDBPyConnection) -> None:
+def test_calling_hours_drops_small_provinces_and_counts_cards_outside_hours(
+    conn: duckdb.DuckDBPyConnection,
+) -> None:
     h = calling_hours(conn)
     (on,) = h.provinces
-    assert (on.province, on.time_zone, on.start, on.end, on.customers) == ("ON", "America/Toronto", "07:00", "21:00", 60)
+    assert (on.province, on.time_zone, on.start, on.end, on.customers) == (
+        "ON",
+        "America/Toronto",
+        "07:00",
+        "21:00",
+        60,
+    )
     assert on.sunday_share == 45 / 60
     assert h.bank_contacts == 20 and h.cases == 70 and {b.province for b in h.bank} == {"ON"}
     assert (h.kept_cards, h.kept_outside) == (56, 1)  # the one card whose own check failed
@@ -83,7 +91,7 @@ def test_map_keeps_only_fsas_of_50_or_more(conn: duckdb.DuckDBPyConnection) -> N
 
 class FakeModel:
     model_version = "fake"
-    _columns = ["max_dpd", "answer_rate", "pay_frequency"]
+    _columns = ("max_dpd", "answer_rate", "pay_frequency")
 
     def uplift(self, X: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame({"call": X["answer_rate"].astype(float) - X["max_dpd"].astype(float) / 1000})
@@ -94,7 +102,10 @@ def test_uplift_grid_holds_other_inputs_and_groups_tonight(conn: duckdb.DuckDBPy
     assert len(u.uplift) == len(u.answer_rate) and len(u.uplift[0]) == len(u.dpd)
     assert u.uplift[-1][0] == 1.0 and u.held == {"pay_frequency": "biweekly"}
     assert u.cases == 66 and all(g.cases >= 50 for g in u.groups)
-    assert held_inputs(pd.DataFrame({"a": [1.0, 3.0, None], "b": [None, None, None]})) == {"a": 2.0, "b": None}
+    assert held_inputs(pd.DataFrame({"a": [1.0, 3.0, None], "b": [None, None, None]})) == {
+        "a": 2.0,
+        "b": None,
+    }
 
 
 def test_routes_are_aggregates_for_analysts_not_agents(conn: duckdb.DuckDBPyConnection) -> None:

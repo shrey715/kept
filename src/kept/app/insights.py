@@ -64,7 +64,8 @@ group by all order by all
 """
 SQL_KEPT_OUT_OF_HOURS = """
 select count(*), count(*) filter (where exists (
-    select 1 from (select unnest(from_json(json_extract(card, '$.checks'), '[{"check":"VARCHAR","passed":"BOOLEAN"}]')) as c)
+    select 1 from (select unnest(from_json(json_extract(card, '$.checks'),
+                                           '[{"check":"VARCHAR","passed":"BOOLEAN"}]')) as c)
     where c.check = 'calling_hours' and not c.passed))
 from nba.cards where action is not null and action <> 'wait'
 """
@@ -74,7 +75,12 @@ def calling_hours(conn: duckdb.DuckDBPyConnection) -> CallingHours:
     with conn.cursor() as cur:
         provinces = [
             ProvinceHours(
-                province=p, time_zone=tz, start=f"{s:%H:%M}", end=f"{e:%H:%M}", sunday_share=float(sun), customers=n
+                province=p,
+                time_zone=tz,
+                start=f"{s:%H:%M}",
+                end=f"{e:%H:%M}",
+                sunday_share=float(sun),
+                customers=n,
             )
             for p, tz, s, e, sun, n in cur.execute(SQL_HOURS, [MIN_GROUP]).fetchall()
         ]
@@ -85,7 +91,8 @@ def calling_hours(conn: duckdb.DuckDBPyConnection) -> CallingHours:
             if p in shown
         ]
         contacts, cases = cur.execute(
-            "select count(*), count(distinct case_id) from silver.contact_history where not within_permitted_hours_flag"
+            "select count(*), count(distinct case_id) from silver.contact_history"
+            " where not within_permitted_hours_flag"
         ).fetchone() or (0, 0)
         (all_cases,) = cur.execute("select count(*) from silver.collections_cases").fetchone() or (0,)
         kept, outside = cur.execute(SQL_KEPT_OUT_OF_HOURS).fetchone() or (0, 0)
@@ -204,7 +211,9 @@ class FsaTower(BaseModel):
     lon: float
     cases: int
     overdue: float
-    roll_rate: float | None  # cases 30+ days later by day 30 of the case, last 12 months; None under MIN_GROUP
+    roll_rate: (
+        float | None
+    )  # cases 30+ days later by day 30 of the case, last 12 months; None under MIN_GROUP
     roll_base: int
     hardship: float
     green: int
@@ -223,13 +232,16 @@ SQL_MAP = """
 with fsa as (
     select x.golden_customer_id, any_value(c.fsa) as fsa
     from gold.identity_crosswalk x
-    join silver.customers c on x.source_system = 'crm' and x.source_key = c.crm_customer_id and x.valid_to is null
+    join silver.customers c
+        on x.source_system = 'crm' and x.source_key = c.crm_customer_id and x.valid_to is null
     where c.fsa is not null
     group by 1
 ),
 cards as (
-    select f.fsa, count(*) as n, sum(n.total_overdue) as overdue, avg(coalesce(n.hardship, false)::int) as hardship,
-           count(*) filter (where n.tier = 'green') as green, count(*) filter (where n.tier = 'amber') as amber,
+    select f.fsa, count(*) as n, sum(n.total_overdue) as overdue,
+           avg(coalesce(n.hardship, false)::int) as hardship,
+           count(*) filter (where n.tier = 'green') as green,
+           count(*) filter (where n.tier = 'amber') as amber,
            count(*) filter (where n.tier = 'red') as red, count(*) filter (where n.tier is null) as none
     from nba.cards n join fsa f using (golden_customer_id)
     group by 1
@@ -351,7 +363,10 @@ def uplift_landscape(conn: duckdb.DuckDBPyConnection, model: Any) -> UpliftLands
     tonight["dpd_bin"] = (tonight["dpd"].clip(0, GRID_DPD[-1]) // DPD_BIN).astype(int)
     tonight["answer_bin"] = (tonight["answer_rate"].clip(0, 0.999) // ANSWER_BIN).astype(int)
     g = tonight.groupby(["action", "dpd_bin", "answer_bin"]).agg(
-        cases=("uplift", "size"), dpd=("dpd", "mean"), answer_rate=("answer_rate", "mean"), uplift=("uplift", "mean")
+        cases=("uplift", "size"),
+        dpd=("dpd", "mean"),
+        answer_rate=("answer_rate", "mean"),
+        uplift=("uplift", "mean"),
     )
     groups = [
         UpliftGroup(action=a, cases=int(r.cases), dpd=r.dpd, answer_rate=r.answer_rate, uplift=r.uplift)

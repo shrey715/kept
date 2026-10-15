@@ -187,7 +187,7 @@ export interface paths {
         };
         /**
          * Portfolio Models
-         * @description The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+         * @description The model card (scripts/model_card.py), fairness, drift and invariance reports as written:
          *     the page shows exactly what the reports say.
          */
         get: operations["portfolio_models_portfolio_models_get"];
@@ -225,6 +225,74 @@ export interface paths {
         };
         /** Get Portfolio Cases */
         get: operations["get_portfolio_cases_portfolio_cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/calling-hours": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insights Calling Hours */
+        get: operations["insights_calling_hours_insights_calling_hours_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/stress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insights Stress */
+        get: operations["insights_stress_insights_stress_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insights Map */
+        get: operations["insights_map_insights_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/insights/uplift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Insights Uplift */
+        get: operations["insights_uplift_insights_uplift_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -818,6 +886,23 @@ export interface components {
             transcript: string;
             extraction: components["schemas"]["TextExtraction"] | null;
         };
+        /** CallingHours */
+        CallingHours: {
+            /** Provinces */
+            provinces: components["schemas"]["ProvinceHours"][];
+            /** Bank */
+            bank: components["schemas"]["OutOfHours"][];
+            /** Bank Contacts */
+            bank_contacts: number;
+            /** Bank Cases */
+            bank_cases: number;
+            /** Cases */
+            cases: number;
+            /** Kept Cards */
+            kept_cards: number;
+            /** Kept Outside */
+            kept_outside: number;
+        };
         /** CaseHistory */
         CaseHistory: {
             /** Events */
@@ -1025,6 +1110,15 @@ export interface components {
             /** Kept Rate */
             kept_rate: number | null;
         };
+        /** CollectionsMap */
+        CollectionsMap: {
+            /** Towers */
+            towers: components["schemas"]["FsaTower"][];
+            /** Hidden Fsas */
+            hidden_fsas: number;
+            /** Hidden Cases */
+            hidden_cases: number;
+        };
         /** ColumnProfile */
         ColumnProfile: {
             /** Name */
@@ -1154,6 +1248,37 @@ export interface components {
             edits: {
                 [key: string]: unknown;
             };
+        };
+        /** FsaTower */
+        FsaTower: {
+            /** Fsa */
+            fsa: string;
+            /** Province */
+            province: string | null;
+            /** City */
+            city: string | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** Cases */
+            cases: number;
+            /** Overdue */
+            overdue: number;
+            /** Roll Rate */
+            roll_rate: number | null;
+            /** Roll Base */
+            roll_base: number;
+            /** Hardship */
+            hardship: number;
+            /** Green */
+            green: number;
+            /** Amber */
+            amber: number;
+            /** Red */
+            red: number;
+            /** None */
+            none: number;
         };
         /**
          * GoldenCustomer
@@ -1477,6 +1602,17 @@ export interface components {
              */
             upto: string;
         };
+        /** OutOfHours */
+        OutOfHours: {
+            /** Province */
+            province: string;
+            /** Day */
+            day: string;
+            /** Hour */
+            hour: number;
+            /** Contacts */
+            contacts: number;
+        };
         /** PayChoiceIn */
         PayChoiceIn: {
             /** Installments */
@@ -1607,6 +1743,21 @@ export interface components {
          * @enum {string}
          */
         ProposalStatus: "pending" | "approved" | "released" | "expired" | "cancelled" | "rejected";
+        /** ProvinceHours */
+        ProvinceHours: {
+            /** Province */
+            province: string;
+            /** Time Zone */
+            time_zone: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Sunday Share */
+            sunday_share: number;
+            /** Customers */
+            customers: number;
+        };
         /** QueueItem */
         QueueItem: {
             /** Case Id */
@@ -1826,6 +1977,35 @@ export interface components {
             /** Steward Id */
             steward_id: string;
         };
+        /** StressCell */
+        StressCell: {
+            /** Province */
+            province: string;
+            /**
+             * Month
+             * Format: date
+             */
+            month: string;
+            /** Customers */
+            customers: number;
+            /** Falling Cash Flow */
+            falling_cash_flow: number | null;
+            /** Cash Flow Base */
+            cash_flow_base: number;
+            /** Payroll Delay */
+            payroll_delay: number | null;
+            /** Payroll Base */
+            payroll_base: number;
+            /** Hardship */
+            hardship: number | null;
+        };
+        /** StressMap */
+        StressMap: {
+            /** Months */
+            months: string[];
+            /** Cells */
+            cells: components["schemas"]["StressCell"][];
+        };
         /**
          * TextExtraction
          * @description What the LLM (or SetFit backfill) returns for one note or call transcript.
@@ -1877,6 +2057,38 @@ export interface components {
              * @enum {string}
              */
             tone: "good" | "bad" | "neutral";
+        };
+        /** UpliftGroup */
+        UpliftGroup: {
+            /** Action */
+            action: string;
+            /** Cases */
+            cases: number;
+            /** Dpd */
+            dpd: number;
+            /** Answer Rate */
+            answer_rate: number;
+            /** Uplift */
+            uplift: number;
+        };
+        /** UpliftLandscape */
+        UpliftLandscape: {
+            /** Model Version */
+            model_version: string;
+            /** Dpd */
+            dpd: number[];
+            /** Answer Rate */
+            answer_rate: number[];
+            /** Uplift */
+            uplift: number[][];
+            /** Held */
+            held: {
+                [key: string]: number | string | null;
+            };
+            /** Groups */
+            groups: components["schemas"]["UpliftGroup"][];
+            /** Cases */
+            cases: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -2312,6 +2524,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CasePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insights_calling_hours_insights_calling_hours_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CallingHours"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insights_stress_insights_stress_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StressMap"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insights_map_insights_map_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionsMap"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    insights_uplift_insights_uplift_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpliftLandscape"];
                 };
             };
             /** @description Validation Error */
