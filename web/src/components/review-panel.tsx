@@ -20,12 +20,12 @@ const MODES: { v: Mode; label: string; hint: string }[] = [
   { v: "reject", label: "Reject", hint: "Decline the proposal. Nothing is sent to the customer." },
 ];
 
-/** Why a proposal of this tier waits for a person. */
+/** Who releases a proposal of this tier, and why. */
 const WHY_APPROVAL: Record<Proposal["tier"], string> = {
-  red: "This case shows hardship or vulnerability. Only protective actions are proposed, and two people must agree: a hardship specialist first, then a team lead or compliance.",
-  amber: "The recommendation needs the assigned agent's judgement before it is sent.",
-  green: "Routine contact within every rule. It is released with the team lead's daily batch.",
-  blocked: "A hard stop applies (cease request, insolvency or deceased flag). Nothing can be released.",
+  red: "Hardship or vulnerability on this case, so only protective actions are proposed. A hardship specialist approves first, then a team lead or compliance.",
+  amber: "The assigned agent reviews it and releases it.",
+  green: "Routine contact within every rule. The team lead releases it in the daily batch.",
+  blocked: "A hard stop applies (cease request, insolvency or deceased). Nothing can be released.",
 };
 
 /** A labelled input that slides in after the ones before it (i) when the decision mode changes. */
@@ -45,7 +45,7 @@ function Field({ label, i, grow, children }: { label: string; i: number; grow?: 
 }
 
 /** What the reviewer is about to approve, and why their approval is needed, shown before any button. */
-function ApprovalBrief({ p }: { p: Proposal }) {
+function ApprovalBrief({ p, canAct }: { p: Proposal; canAct: boolean }) {
   const s = p.sizing;
   const time = (iso: string) => new Date(iso).toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" });
   const day = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { weekday: "short" });
@@ -55,29 +55,30 @@ function ApprovalBrief({ p }: { p: Proposal }) {
     `Expires ${when(p.expires_at)}`,
   ].filter(Boolean) as string[];
   const tint = { red: "rose", amber: "butter", green: "mint", blocked: "lilac" }[p.tier];
+  const label = ACTION_LABEL[p.action];
+  const channel = p.channel ? humanize(p.channel).toLowerCase() : null;
   return (
-    <div className={`k-brief t-${tint}`}>
-      <span className="k-brief-h">You are approving</span>
-      <div className="k-brief-title">
-        {ACTION_LABEL[p.action]}
-        {p.channel && <span> by {humanize(p.channel).toLowerCase()}</span>}
+    <div className={`k-ab t-${tint}`}>
+      <span className="k-ab-h">{canAct ? "You are approving" : "Proposed action"}</span>
+      <div className="k-ab-title">
+        {label}
+        {channel && !label.toLowerCase().includes(channel) && <span> by {channel}</span>}
       </div>
-      <div className="k-brief-chips">
+      <div className="k-ab-chips">
         {chips.map((c) => (
           <span key={c} className="tabular">
             {c}
           </span>
         ))}
       </div>
-      {s && <p className="k-brief-note">{s.rationale}</p>}
-      <div className="k-brief-why">
+      {s && <p className="k-ab-note">{s.rationale}</p>}
+      <div className="k-ab-why">
         <InfoCircledIcon aria-hidden />
         <div>
-          <b>Why it needs your approval</b>
+          <b>{canAct ? "Why it needs your approval" : "Who approves it"}</b>
           <p>{WHY_APPROVAL[p.tier]}</p>
         </div>
       </div>
-      <p className="k-brief-note">The reasons for this action are under “Why this action”. Every rule is checked again at release.</p>
     </div>
   );
 }
@@ -188,11 +189,13 @@ export function ReviewPanel({
           </motion.div>
         ) : (
           <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <ApprovalBrief p={p} />
+            <ApprovalBrief p={p} canAct={st.can} />
             {!st.can ? (
-              <Callout.Root color="gray" variant="soft">
-                <Callout.Text>{st.note}</Callout.Text>
-              </Callout.Root>
+              p.status !== "pending" && (
+                <Callout.Root color="gray" variant="soft">
+                  <Callout.Text>{st.note}</Callout.Text>
+                </Callout.Root>
+              )
             ) : (
               <Flex direction="column" gap="3">
                 {!secondStep && (

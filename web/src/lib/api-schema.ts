@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/story": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Story */
+        get: operations["get_story_cases__case_id__story_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/customer": {
         parameters: {
             query?: never;
@@ -199,6 +216,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Money */
+        get: operations["portfolio_money_portfolio_money_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/portfolio": {
         parameters: {
             query?: never;
@@ -208,6 +242,40 @@ export interface paths {
         };
         /** Get Portfolio */
         get: operations["get_portfolio_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/payday": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Payday Clock */
+        get: operations["get_payday_clock_portfolio_payday_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/workload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Workload */
+        get: operations["get_portfolio_workload_portfolio_workload_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -952,6 +1020,29 @@ export interface components {
             /** Hard Stop */
             hard_stop: boolean;
         };
+        /** CaseStory */
+        CaseStory: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Contacts */
+            contacts: components["schemas"]["StoryContact"][];
+            /** Promises */
+            promises: components["schemas"]["StoryPromise"][];
+            /** Payments */
+            payments: components["schemas"]["StoryPayment"][];
+            /** Notes */
+            notes: components["schemas"]["StoryNote"][];
+            /** Paydays */
+            paydays: string[];
+        };
         /**
          * Cell
          * @description One arm of the bank's randomised test: promise-kept rate and cure rate with Wilson 95% intervals.
@@ -1249,6 +1340,20 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * FlowLink
+         * @description One band of a Sankey: cases, and their money, from one node to the next.
+         */
+        FlowLink: {
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+            /** Cases */
+            cases: number;
+            /** Amount */
+            amount: number;
+        };
         /** FsaTower */
         FsaTower: {
             /** Fsa */
@@ -1482,6 +1587,27 @@ export interface components {
          * @enum {string}
          */
         MatchReviewStatus: "auto" | "steward_approved" | "unlinked";
+        /**
+         * MoneyFlow
+         * @description A year of cases entering at 1-30 days past due (scripts/business_case.py), as bands of their overdue at
+         *     entry: today, and with Kept's base case. Cases are at the year's average overdue per case.
+         */
+        MoneyFlow: {
+            /** Cases */
+            cases: number;
+            /** Overdue */
+            overdue: number;
+            /** Written Off */
+            written_off: number;
+            /** Written Off Kept */
+            written_off_kept: number;
+            /** Gain */
+            gain: number;
+            /** Today */
+            today: components["schemas"]["FlowLink"][];
+            /** With Kept */
+            with_kept: components["schemas"]["FlowLink"][];
+        };
         /** MonthPoint */
         MonthPoint: {
             /**
@@ -1634,6 +1760,26 @@ export interface components {
              */
             ask: boolean;
         };
+        /** PaydayBucket */
+        PaydayBucket: {
+            /** Days */
+            days: number;
+            /** Promises */
+            promises: number;
+            /** Kept Rate */
+            kept_rate: number;
+            /** Money Rate */
+            money_rate: number | null;
+        };
+        /** PaydayClock */
+        PaydayClock: {
+            /** Buckets */
+            buckets: components["schemas"]["PaydayBucket"][];
+            /** Kept Rate */
+            kept_rate: number;
+            /** Sql */
+            sql: string;
+        };
         /**
          * PayrollFrequency
          * @enum {string}
@@ -1669,6 +1815,11 @@ export interface components {
             cohorts: components["schemas"]["CohortCell"][];
             /** Insights */
             insights: components["schemas"]["Insight"][];
+            /**
+             * Flow
+             * @default []
+             */
+            flow: components["schemas"]["FlowLink"][];
         };
         /**
          * PromiseSizing
@@ -1977,6 +2128,73 @@ export interface components {
             /** Steward Id */
             steward_id: string;
         };
+        /** StoryContact */
+        StoryContact: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Channel */
+            channel: string;
+            /** Reached */
+            reached: boolean;
+            /** Dpd */
+            dpd: number | null;
+        };
+        /** StoryNote */
+        StoryNote: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Source */
+            source: string;
+            /** Hardship */
+            hardship: string;
+            /** Reason */
+            reason: string | null;
+            /** Quote */
+            quote: string | null;
+            /** Text */
+            text: string | null;
+        };
+        /** StoryPayment */
+        StoryPayment: {
+            /**
+             * On
+             * Format: date
+             */
+            on: string;
+            /** Amount */
+            amount: string;
+            /** Against Promise */
+            against_promise: boolean;
+        };
+        /** StoryPromise */
+        StoryPromise: {
+            /**
+             * Made
+             * Format: date-time
+             */
+            made: string;
+            /**
+             * Due
+             * Format: date
+             */
+            due: string;
+            /** Status */
+            status: string;
+            /** Amount */
+            amount: string;
+            /** Paid */
+            paid: string | null;
+            /** Paid Date */
+            paid_date: string | null;
+            /** Payday Days */
+            payday_days: number | null;
+        };
         /** StressCell */
         StressCell: {
             /** Province */
@@ -2103,6 +2321,33 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Workload
+         * @description #115: tonight's proposed calls by weekday and hour against the call team's capacity.
+         */
+        Workload: {
+            /** Time Zone */
+            time_zone: string;
+            /** Calls */
+            calls: number;
+            /** Capacity From */
+            capacity_from: string | null;
+            /** Capacity To */
+            capacity_to: string | null;
+            /** Cells */
+            cells: components["schemas"]["WorkloadCell"][];
+        };
+        /** WorkloadCell */
+        WorkloadCell: {
+            /** Weekday */
+            weekday: number;
+            /** Hour */
+            hour: number;
+            /** Calls */
+            calls: number;
+            /** Capacity */
+            capacity: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2220,6 +2465,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_cases__case_id__story_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseStory"];
                 };
             };
             /** @description Validation Error */
@@ -2466,6 +2745,38 @@ export interface operations {
             };
         };
     };
+    portfolio_money_portfolio_money_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyFlow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_portfolio_portfolio_get: {
         parameters: {
             query: {
@@ -2485,6 +2796,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Portfolio"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_payday_clock_portfolio_payday_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaydayClock"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_workload_portfolio_workload_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workload"];
                 };
             };
             /** @description Validation Error */

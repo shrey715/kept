@@ -3391,7 +3391,7 @@ html {
 }
 
 /* review panel: what is being approved, before the buttons; tinted by the release tier */
-.k-brief {
+.k-ab {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3401,30 +3401,30 @@ html {
   background: var(--t-bg, var(--gray-a2));
   border: 1px solid color-mix(in srgb, var(--t-2, var(--gray-a5)) 70%, transparent);
 }
-.k-brief-h {
+.k-ab-h {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
   font-weight: 700;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-title {
+.k-ab-title {
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin-top: -4px;
 }
-.k-brief-title span {
+.k-ab-title span {
   font-weight: 400;
   color: var(--gray-11);
 }
-.k-brief-chips {
+.k-ab-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.k-brief-chips span {
+.k-ab-chips span {
   font-size: 12.5px;
   font-weight: 500;
   padding: 4px 11px;
@@ -3432,7 +3432,7 @@ html {
   background: var(--t-2, var(--gray-a3));
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why {
+.k-ab-why {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -3440,23 +3440,23 @@ html {
   border-radius: 14px;
   background: color-mix(in srgb, var(--t-2, var(--gray-a3)) 45%, transparent);
 }
-.k-brief-why svg {
+.k-ab-why svg {
   flex: none;
   width: 18px;
   height: 18px;
   margin-top: 1px;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-why b {
+.k-ab-why b {
   font-size: 13.5px;
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why p {
+.k-ab-why p {
   margin: 3px 0 0;
   font-size: 13.5px;
   line-height: 1.5;
 }
-.k-brief-note {
+.k-ab-note {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
@@ -3637,6 +3637,490 @@ html {
   margin-top: -6px;
   max-width: 68ch;
   line-height: 1.5;
+}
+
+/* StoryTimeline (#106): the case's swim lanes; scrolls sideways inside its card only on a very long case */
+.k-story {
+  overflow-x: auto;
+  overflow-y: hidden;
+  contain: inline-size; /* a wide case scrolls here instead of widening the page */
+}
+.k-story svg {
+  display: block;
+}
+.k-story-band {
+  fill: var(--k-chip);
+  opacity: 0.55;
+}
+.k-story-lane {
+  font: 500 11.5px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-story-axis {
+  font: 500 10.5px var(--default-font-family);
+  fill: var(--gray-10);
+}
+.k-story-grid {
+  stroke: var(--k-line);
+}
+.k-story-payday {
+  stroke: var(--k-butter-ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.k-story-dpd {
+  fill: color-mix(in oklab, var(--k-red) 16%, transparent);
+  stroke: var(--k-red);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.k-story-contact {
+  fill: var(--k-card);
+  stroke: var(--gray-11);
+  stroke-width: 1.5;
+}
+.k-story-contact[data-reached="true"] {
+  fill: var(--gray-12);
+  stroke: var(--gray-12);
+}
+.k-story-promise {
+  outline: none;
+  cursor: default;
+}
+.k-story-promise line {
+  stroke: var(--gray-8);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.k-story-promise .k-story-hit {
+  fill: transparent;
+  stroke: none;
+}
+.k-story-mark {
+  fill: var(--k-card);
+  stroke: var(--gray-10);
+  stroke-width: 2;
+}
+.k-story-mark path {
+  fill: var(--amber-10);
+  stroke: none;
+}
+.k-story-promise[data-status="kept"] .k-story-mark {
+  fill: var(--grass-10);
+  stroke: var(--grass-10);
+}
+.k-story-promise[data-status="broken"] .k-story-mark path {
+  fill: none;
+  stroke: var(--red-10);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.k-story-promise[data-status="partially_kept"] .k-story-ring {
+  stroke: var(--amber-10);
+}
+.k-story-promise:is(:hover, :focus-visible) line {
+  stroke: var(--gray-12);
+}
+.k-story-promise:focus-visible .k-story-mark {
+  stroke-width: 3;
+}
+.k-story-bracket {
+  fill: none;
+  stroke: var(--k-butter-ink);
+  stroke-width: 1.5;
+}
+.k-story-pay {
+  fill: var(--gray-12);
+}
+.k-story-pay[data-promise="true"] {
+  fill: var(--grass-10);
+}
+.k-story-note {
+  fill: var(--gray-9);
+  outline: none;
+}
+.k-story-note[data-hardship="true"] {
+  fill: var(--k-rose-2);
+  stroke: var(--k-rose-ink);
+  stroke-width: 1.5;
+}
+.k-story-note:is(:hover, :focus-visible),
+.k-story-contact:hover,
+.k-story-pay:hover {
+  stroke: var(--gray-12);
+  stroke-width: 2.5;
+}
+.k-story-tip {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, calc(-100% - 8px));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+  max-width: 280px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: var(--k-strong);
+  color: var(--k-on-strong);
+  font: 400 12px/1.4 var(--default-font-family);
+  pointer-events: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5);
+}
+.k-story-tip[data-below="true"] {
+  transform: translate(-50%, 8px);
+}
+.k-story-tip b {
+  font-weight: 600;
+}
+.k-story-legend {
+  font: 400 12px var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-story-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-story-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.k-story-key.kept {
+  background: var(--grass-10);
+}
+.k-story-key.broken {
+  background: var(--red-10);
+  border-radius: 0;
+  clip-path: polygon(20% 0, 50% 30%, 80% 0, 100% 20%, 70% 50%, 100% 80%, 80% 100%, 50% 70%, 20% 100%, 0 80%, 30% 50%, 0 20%);
+}
+.k-story-key.partial {
+  background: linear-gradient(90deg, transparent 50%, var(--amber-10) 50%);
+  box-shadow: inset 0 0 0 1.5px var(--amber-10);
+}
+.k-story-key.hardship {
+  background: var(--k-rose-2);
+  box-shadow: inset 0 0 0 1.5px var(--k-rose-ink);
+}
+.k-story-key.payday {
+  width: 0;
+  height: 12px;
+  border-radius: 0;
+  border-left: 1.5px dashed var(--k-butter-ink);
+}
+
+/* PaydayClock (#105): the pay-cycle face on an ice panel; payday's arc in maple */
+.k-clock {
+  border-radius: 22px;
+  background: var(--t-bg);
+  padding: 8px;
+  max-width: 340px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.k-clock svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.k-clock-ring {
+  fill: none;
+  stroke: var(--k-dash);
+  stroke-width: 0.8;
+}
+.k-clock-mean {
+  fill: none;
+  stroke: var(--t-ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+.k-clock-scale {
+  font: 500 9.5px var(--default-font-family);
+  fill: var(--gray-11);
+  paint-order: stroke;
+  stroke: var(--t-bg);
+  stroke-width: 4px;
+}
+.k-clock-label {
+  font: 500 11px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-clock-label[data-on="true"] {
+  fill: var(--gray-12);
+  font-weight: 700;
+}
+.k-clock-arc {
+  fill: none;
+  stroke: var(--t-ink);
+  stroke-linecap: butt;
+  outline: none;
+  transition: opacity 150ms;
+}
+.k-clock-arc[data-payday="true"] {
+  stroke: var(--k-red);
+}
+.k-clock-arc[data-dim="true"] {
+  opacity: 0.35;
+}
+.k-clock-big {
+  font: 600 26px var(--default-font-family);
+  letter-spacing: -0.02em;
+  fill: var(--gray-12);
+}
+.k-clock-sub {
+  font: 400 11px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-clock-stat {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--k-chip);
+}
+.k-clock-stat[data-strong="true"] {
+  box-shadow: inset 3px 0 0 var(--k-red);
+}
+.k-clock-stat[data-dashed="true"] {
+  box-shadow: inset 3px 0 0 var(--k-ice-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-clock-arc {
+    transition: none;
+  }
+}
+/* flows (Sankey): bands, node labels with a halo in the card's tint, the value in bold */
+.k-sankey-band {
+  cursor: default;
+  mix-blend-mode: multiply;
+}
+.dark .k-sankey-band {
+  mix-blend-mode: screen;
+}
+.k-sankey-label {
+  font-size: 12px;
+  fill: var(--gray-12);
+  paint-order: stroke;
+  stroke: var(--t-bg, var(--k-card));
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.k-sankey-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* WorkloadHeatmap (portfolio): weekday x hour, shade = share of call capacity used, hatched = over capacity */
+.k-load {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+}
+.k-load-hour {
+  font-size: 10px;
+}
+.k-load-day {
+  font-size: 11px;
+}
+.k-load-cell {
+  height: 24px;
+  border-radius: 5px;
+  background: var(--k-chip);
+  transition: box-shadow 0.15s;
+}
+.k-load-cell[data-none="true"],
+.k-load-swatch {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--k-dash);
+}
+.k-load-cell[data-over="true"],
+.k-load-swatch[data-over="true"] {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--k-rose-ink) 55%, transparent) 0 1.5px, transparent 1.5px 6px),
+    var(--k-rose-2);
+  box-shadow: none;
+}
+.k-load-cell[data-hover="true"] {
+  box-shadow: 0 0 0 2px var(--k-strong);
+}
+.k-load-swatch {
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+}
+.k-load-scale {
+  width: 110px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(to right, color-mix(in srgb, var(--k-ice-ink) 8%, var(--k-chip)), color-mix(in srgb, var(--k-ice-ink) 92%, var(--k-chip)));
+}
+@media (max-width: 640px) {
+  .k-load-hour:nth-child(even) {
+    visibility: hidden; /* every other hour label on a phone */
+  }
+  .k-load-cell {
+    height: 18px;
+  }
+}
+
+/* Heartbeat (model panels): the last kept nightly, one Gantt row per step, badges above */
+.k-beat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  background: var(--k-chip);
+  max-width: 100%;
+}
+.k-beat-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--k-line);
+}
+.k-beat-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.k-beat-badge[data-tone="ok"] .k-beat-icon {
+  background: var(--k-mint-2);
+  color: var(--k-mint-ink);
+}
+.k-beat-badge[data-tone="bad"] .k-beat-icon {
+  background: var(--k-rose-2);
+  color: var(--k-rose-ink);
+}
+.k-beat {
+  display: grid;
+  gap: 6px;
+}
+.k-beat-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 190px) minmax(0, 1fr) 84px;
+  gap: 12px;
+  align-items: center;
+}
+.k-beat-row[data-idle="true"] > :first-child {
+  color: var(--gray-10);
+}
+.k-beat-track {
+  height: 12px;
+}
+.k-beat-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: var(--k-ice-ink);
+  transform-origin: left center;
+}
+.k-beat-bar[data-bad="true"] {
+  background: var(--k-red);
+}
+.k-beat-live {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--k-ice-ink);
+  animation: k-beat-pulse 1.2s ease-in-out infinite;
+}
+@keyframes k-beat-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-beat-live {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  .k-beat-row {
+    grid-template-columns: 96px minmax(0, 1fr) 64px;
+    gap: 8px;
+  }
+}
+
+/* uplift panel: Qini curves per arm with a random band and a share slider */
+.k-qini {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  display: block;
+  margin: 4px auto 0;
+}
+.k-qini .band {
+  fill: var(--gray-a4);
+}
+.k-qini .axis {
+  stroke: var(--k-line);
+}
+.k-qini polyline {
+  fill: none;
+  stroke-linejoin: round;
+}
+.k-qini .model {
+  stroke: var(--k-red);
+  stroke-width: 2.2;
+}
+.k-qini .bank {
+  stroke: var(--gray-11);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+}
+.k-qini .cursor {
+  stroke: var(--gray-8);
+  stroke-dasharray: 2 3;
+}
+.k-qini .dot {
+  fill: var(--k-red);
+}
+.k-qini-head {
+  margin: 4px 0 6px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.k-qini-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-11);
+}
+.k-qini-legend span::before {
+  content: "";
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--k-red);
+}
+.k-qini-legend span[data-k="bank"]::before {
+  background: repeating-linear-gradient(90deg, var(--gray-11) 0 5px, transparent 5px 9px);
+}
+.k-qini-legend span[data-k="band"]::before {
+  height: 10px;
+  background: var(--gray-a5);
+}
+.k-qini-slider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.k-qini-slider input {
+  flex: 1;
+  accent-color: var(--k-red);
 }
 
 /* Insights page: flat province maps (insight-maps.tsx) */

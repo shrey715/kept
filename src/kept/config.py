@@ -36,6 +36,7 @@ FRESHNESS_WARN: Final = timedelta(hours=26)
 FRESHNESS_BLOCK: Final = timedelta(hours=48)
 ROW_COUNT_TOLERANCE: Final = 0.10  # vs the last load
 PUBLISH_DEADLINE_ET: Final = time(6, 0)  # nightly, America/Toronto
+OPERATING_TZ: Final = "America/Toronto"  # the bank's operating time zone: agents' shifts, the nightly
 CONSENT_CHANGE_SLA: Final = timedelta(minutes=15)  # consent/cease/hold via online store
 
 # ------------------------------------------------------------ Layer 2: Ask

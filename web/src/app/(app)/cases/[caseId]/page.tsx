@@ -15,7 +15,7 @@ import { TierBadge } from "@/components/bits";
 import { BriefCard } from "@/components/brief-card";
 import { NoteComposer } from "@/components/note-composer";
 import { HistoryPanel, WhyChart } from "@/components/case-insights";
-import { ApiError, api, money, type AuditEvent, type CaseHistory, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
+import { ApiError, api, money, type AuditEvent, type CaseHistory, type CaseStory, type CallOut, type Customer, type NBACard, type NoteExtraction } from "@/lib/api";
 import { useServerClock } from "@/lib/clock";
 import { invalidate, keys, load, peek, set } from "@/lib/live";
 import { useSession } from "@/lib/session";
@@ -23,6 +23,7 @@ import { useSession } from "@/lib/session";
 // below the fold or behind a tab: their code loads when they first render
 const AuditTimeline = dynamic(() => import("@/components/audit-timeline").then((m) => m.AuditTimeline), { loading: () => <Skeleton height="160px" /> });
 const CallsPanel = dynamic(() => import("@/components/calls-panel").then((m) => m.CallsPanel), { loading: () => <Skeleton height="160px" /> });
+const StoryTimeline = dynamic(() => import("@/components/story-timeline").then((m) => m.StoryTimeline), { loading: () => <Skeleton height="260px" /> });
 const ExtractionPanel = dynamic(() => import("@/components/extraction-panel").then((m) => m.ExtractionPanel), {
   loading: () => <Skeleton height="160px" />,
 });
@@ -53,6 +54,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
   };
   const [notes, setNotes] = useState<NoteExtraction[]>([]);
   const [calls, setCalls] = useState<CallOut[]>([]);
+  const [story, setStory] = useState<CaseStory | null>(null);
   const [history, setHistory] = useState<CaseHistory | null>(() => (me ? (peek<CaseHistory>(keys.history(caseId, me.userId)) ?? null) : null));
 
   const loadAudit = useCallback(() => {
@@ -94,6 +96,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
         loadNotes();
         if (!demo) api.calls(caseId, me).then(setCalls, () => setCalls([])); // no recordings here: no panel
         if (!demo) load(keys.history(caseId, me.userId), () => api.history(caseId, me)).then(setHistory, () => setHistory(null));
+        if (!demo) api.story(caseId, me).then(setStory, () => setStory(null));
       },
       (e: Error) => {
         if (!live) return;
@@ -207,6 +210,7 @@ export default function CasePage({ params }: { params: Promise<{ caseId: string 
             {health && <NoteComposer value={note} onChange={setNote} onSave={() => void addNote()} saving={noting} demo={demo} />}
             <ExtractionPanel items={notes} agentId={me.userId} demo={demo} onSaved={() => setNonce((n) => n + 1)} />
             <CallsPanel calls={calls} who={me} />
+            {story && <StoryTimeline s={story} />}
             {history && <HistoryPanel h={history} />}
           </Flex>
           <Card size="3" style={{ position: "sticky", top: 84 }}>
