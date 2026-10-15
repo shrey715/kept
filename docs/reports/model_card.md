@@ -1,6 +1,6 @@
 # Model card: the promise model and the uplift model
 
-Written by `scripts/model_card.py` on 2026-10-14 from held-out data the models never saw (the JSON behind the Portfolio page's models panel is `data/exports/reports/model_card.json`).
+Written by `scripts/model_card.py` on 2026-10-15 from held-out data the models never saw (the JSON behind the Portfolio page's models panel is `data/exports/reports/model_card.json`).
 
 ## Promise model: will this promise be kept?
 
@@ -44,7 +44,7 @@ A LightGBM T-learner: one model per action against waiting, on paid-within-14-da
 | Measure | Value |
 |---|---:|
 | Qini, any contact against waiting | 0.0008 |
-| Spread of Qini over 30 random rankings | 0.0005 |
+| Spread of Qini over 30 random rankings | 0.0004 |
 
 The signal is small and the gate treats it that way: a challenger replaces the champion only if it beats it by more than the noise on held-out decisions (`docs/reports/tuning.md`: a 40-candidate search did not).
 
