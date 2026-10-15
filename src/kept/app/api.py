@@ -37,6 +37,7 @@ from kept.app.briefs import write as write_brief
 from kept.app.calendar_events import CalendarFeed, to_ics
 from kept.app.charts import ChartChoice, ChartRequest, choose_chart
 from kept.app.history import CaseHistory
+from kept.app.insights import CallingHours, CollectionsMap, Insights, StressMap, UpliftLandscape
 from kept.app.notifications import KINDS, NotificationFeed, ReadState, build
 from kept.app.portfolio import CasePage, Portfolio, Sort
 from kept.app.voice import CallOut, VoiceCalls
@@ -100,6 +101,7 @@ class Services:
     portfolio: Callable[[], Portfolio] | None = None  # real: tonight's cards and the bank's A/B test
     portfolio_cases: Callable[..., CasePage] | None = None  # real: one sorted, filtered page of nba.cards
     governance: Callable[[], dict[str, Any]] | None = None  # real: model card, fairness, drift (report JSON)
+    insights: Insights | None = None  # real: the Insights page's maps and the uplift surface, aggregated
     brief_llm: LLMGateway | None = None  # real: the local model writes cited briefs; None: template briefs
     demo: bool = False
 
@@ -245,6 +247,9 @@ def create_app(services: Services) -> FastAPI:
                                                   insights with their SQL); analysts and case-wide roles
     GET  /portfolio/cases?user_id&role[&offset&limit&sort&tier&action&bucket&q]
                                                   200 CasePage of nba.cards; case-wide roles, names masked
+    GET  /insights/{calling-hours|stress|map|uplift}?user_id&role
+                                                  200 the Insights page's aggregates (groups of 50 or more);
+                                                  analysts and case-wide roles; 503 demo
     GET  /notifications?user_id&role[&limit]      200 NotificationFeed: audit events for this person, newest
                                                   first, plus what waits at their approval stage
     POST /notifications/read                      200 {"status": "ok"}; read_upto never moves back
@@ -527,6 +532,32 @@ def create_app(services: Services) -> FastAPI:
         if role is not Role.COMPLIANCE:
             page.rows = [r.model_copy(update={"display_name": mask_name(r.display_name)}) for r in page.rows]
         return page
+
+    def insights(role: Role) -> Insights:
+        if role not in (*CASE_WIDE_ROLES, Role.ANALYST):
+            raise HTTPException(403, "insights are for analysts, specialists, team leads and compliance")
+        if services.insights is None:
+            raise HTTPException(503, "insights need the warehouse")
+        return services.insights
+
+    @app.get("/insights/calling-hours", response_model=CallingHours)
+    def insights_calling_hours(user_id: str, role: Role) -> CallingHours:
+        return insights(role).calling_hours()
+
+    @app.get("/insights/stress", response_model=StressMap)
+    def insights_stress(user_id: str, role: Role) -> StressMap:
+        return insights(role).stress()
+
+    @app.get("/insights/map", response_model=CollectionsMap)
+    def insights_map(user_id: str, role: Role) -> CollectionsMap:
+        return insights(role).map()
+
+    @app.get("/insights/uplift", response_model=UpliftLandscape)
+    def insights_uplift(user_id: str, role: Role) -> UpliftLandscape:
+        try:
+            return insights(role).uplift()
+        except LookupError as e:
+            raise HTTPException(503, str(e)) from e
 
     @app.get("/notifications", response_model=NotificationFeed)
     def notifications(user_id: str, role: Role, limit: int = Query(30, ge=1, le=100)) -> NotificationFeed:
