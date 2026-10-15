@@ -16,8 +16,8 @@ don't move promises; payday timing does.
 ## 2 · The problem
 **Say:** five systems, five keys per person; promises dated by the calendar; more contact doesn't help; hardship gets
 missed in free text.
-**How do you know?** `docs/reports/evidence.md` §1 (the bank's four randomised cells) and §2 (+6.1 pts when due just
-after payday, 95% CI 2.8–10.6).
+**How do you know?** `docs/reports/evidence.md` §1 (the bank's four randomised cells) and §2 (+6.1 pts when due within two
+days of payday, 95% CI 2.8–10.6), §2a (the peak is payday itself).
 
 ## 3 · System design
 **Say:** four layers, one decision; nightly batch, live release; three places a person is in the loop.
@@ -35,7 +35,7 @@ extraction F1, uplift Qini. A layer can be replaced without touching the others.
 (`docs/reports/identity_recall.md`).
 
 ## 6 · Decide and release
-**Say:** seven checked steps; uplift not propensity; dated after payday; people release.
+**Say:** seven checked steps; uplift not propensity; due on payday; people release.
 **If asked "what if the model is wrong?":** it can't send anything. Hard stops run before it, the release rechecks on
 fresh data, Red needs two people, and one switch reverts everyone to the bank's strategy.
 
@@ -71,7 +71,7 @@ Qwen3.8-27B (Aug 2026, Apache 2.0) is the strongest open model that fits 16 GB a
 
 ## 13 · Jane
 **Say:** one customer, end to end: pay due in 3 days, down 27%, answers after 18:00, shifts cut. Her card: a call in the
-evening slot, $140 × 3 due the day after payday, Red because of hardship.
+evening slot, $140 × 3 due on payday, Red because of hardship.
 **How do you know?** It's case CS-2026-118204 in the guided demo; the reasons are the card's TreeSHAP drivers.
 
 ## 14 · The product

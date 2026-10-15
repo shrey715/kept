@@ -24,7 +24,7 @@
     \fill[ink] (current page.north west) rectangle ([xshift=-0.42\paperwidth]current page.south east);
     \node[anchor=north west, text=white, font=\displayfont\fontsize{40}{44}\selectfont] at ([xshift=1.4cm, yshift=-2.2cm]current page.north west) {Kept};
     \node[anchor=north west, text=white!85, text width=6.5cm, font=\large] at ([xshift=1.4cm, yshift=-3.6cm]current page.north west)
-      {Promises customers can keep: one guarded action, dated after payday, released by a person.};
+      {Promises customers can keep: one guarded action, due on payday, released by a person.};
     \node[anchor=south west, text=white!70, font=\scriptsize, text width=6.2cm] at ([xshift=1.4cm, yshift=1.1cm]current page.south west) {Team Sharpe Shooters\\CIBC Collections Hackathon · 16 October 2026};
     \node[anchor=center, scale=1.25] at ([xshift=-0.21\paperwidth]current page.east) {%
       \begin{tikzpicture}[scale=0.9]
@@ -52,7 +52,7 @@
         \item \textbf{Five systems, five keys per person.} Each files the same customer differently, so nobody sees
           the whole person.
         \item \textbf{Promises are dated by the calendar, not by pay.} A promise due before payday breaks; the bank's own
-          data shows promised money paid is \textbf{\KpayMoney\ pts} higher when the due date falls just after payday.
+          data shows promised money paid is \textbf{\KpayMoney\ pts} higher when the due date falls within two days of payday.
         \item \textbf{More contact doesn't help.} The bank's randomised champion, two challengers and a hold-out keep
           promises at the same rate.
         \item \textbf{Hardship gets missed} in notes and calls, so vulnerable customers are pushed like anyone.
@@ -141,7 +141,7 @@
   \end{tikzpicture}\\[0.8em]
   \begin{columns}[T]
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{Uplift, not propensity}LightGBM T-learner: one model per action against waiting. Contact whoever a contact changes, not whoever pays anyway.}\end{column}
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Dated after payday}Next payday rolled forward from deposits or asked on the pay page; the promise falls due 1--2 days after, inside spare cash.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Due on payday}Next payday rolled forward from deposits or asked on the pay page; the promise falls due that day, the measured peak, inside spare cash.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{People release}Green in a sampled team-lead batch; Amber by the agent; Red by a hardship specialist and a second person. Every release rechecks on fresh data.}\end{column}
   \end{columns}
 \end{frame}
@@ -302,7 +302,7 @@
     \begin{column}{0.46\textwidth}
       \kcard{\cardtitle{Kept's card for Jane}
         Call, Tue 18:00--20:00\\
-        \$140 a month × 3, due the day after payday, inside \textasciitilde\$160 spare cash\\[0.3em]
+        \$140 a month × 3, due on payday, inside \textasciitilde\$160 spare cash\\[0.3em]
         {\color{muted}\scriptsize Why: pay lands in 3 days (+9 pts) · pay down 27\% (+6) · answers after 18:00 (+4)}\\[0.3em]
         \pill{Red} {\scriptsize hardship: a specialist and a second person release it}}
     \end{column}
@@ -454,7 +454,7 @@
   \begin{tikzpicture}[remember picture, overlay]
     \fill[ink] (current page.north west) rectangle (current page.south east);
     \node[text=white, text width=11cm, align=center, font=\displayfont\fontsize{24}{30}\selectfont] at (current page.center)
-      {Jane's promise lands the day after payday, inside what she can spare, and her hardship was heard the first time she said it.};
+      {Jane's promise falls due on her payday, inside what she can spare, and her hardship was heard the first time she said it.};
     \node[text=white!70, font=\scriptsize, anchor=south] at ([yshift=1cm]current page.south) {Kept · Team Sharpe Shooters · github.com/shrey715/kept};
   \end{tikzpicture}
 \end{frame}

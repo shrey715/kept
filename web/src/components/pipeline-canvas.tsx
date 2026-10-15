@@ -26,7 +26,7 @@ const NODES: { id: NodeId; x: number; y: number; name: string; sub: string; deta
   { id: "features", x: 355, y: 150, name: "Features", sub: "dbt · Feast", detail: "Point-in-time features: payroll timing, cash flow, contact history, hardship.", tint: "ice", icon: <LayersIcon /> },
   { id: "models", x: 495, y: 150, name: "Models", sub: "Uplift · promise", detail: "LightGBM uplift per action against waiting, and a calibrated promise model.", tint: "lilac", icon: <MixIcon /> },
   { id: "ask", x: 635, y: 44, name: "Ask", sub: "LangGraph · Qwen3.8", detail: "Questions answered from certified metrics, reviewed templates or checked SQL, with sources.", tint: "lilac", icon: <ChatBubbleIcon /> },
-  { id: "decide", x: 635, y: 150, name: "Decision", sub: "Rules · tiers", detail: "Hard stops before scoring; promises dated after payday and sized to spare cash; Red, Amber or Green.", tint: "butter", icon: <LightningBoltIcon /> },
+  { id: "decide", x: 635, y: 150, name: "Decision", sub: "Rules · tiers", detail: "Hard stops before scoring; promises due on payday and sized to spare cash; Red, Amber or Green.", tint: "butter", icon: <LightningBoltIcon /> },
   { id: "release", x: 775, y: 150, name: "Release", sub: "Two-person rule", detail: "Red needs a hardship specialist and a second approver; every rule is rechecked at release.", tint: "rose", icon: <CheckCircledIcon /> },
   { id: "audit", x: 915, y: 150, name: "Audit", sub: "Hash chain", detail: "Every recommendation, model call and decision, append-only and hash-chained.", tint: "mint", icon: <ReaderIcon /> },
 ];
