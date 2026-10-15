@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -121,9 +121,20 @@ def test_duckdb_case_reader(tmp_path: Path) -> None:
         c.execute("create schema silver")
         c.execute("""create table silver.collections_cases as select 'CS-1' as case_id, 1617.643 as total_overdue,
                      2 as contact_cap_7d, 'sms_payment_link' as nba_recommendation_last, false as cease_contact_flag,
-                     true as insolvency_hold_flag, null::boolean as deceased_hold_flag""")
+                     true as insolvency_hold_flag, null::boolean as deceased_hold_flag,
+                     date '2026-09-01' as hardship_plan_start, date '2026-12-01' as hardship_plan_end""")
     row = duckdb_case_reader(db)("CS-1")
-    assert row == CaseRow("CS-1", Decimal("1617.64"), 2, "sms_payment_link", False, True, False)
+    assert row == CaseRow(
+        "CS-1",
+        Decimal("1617.64"),
+        2,
+        "sms_payment_link",
+        False,
+        True,
+        False,
+        date(2026, 9, 1),
+        date(2026, 12, 1),
+    )
     with pytest.raises(KeyError):
         duckdb_case_reader(db)("CS-2")
 
