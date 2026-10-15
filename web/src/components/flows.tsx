@@ -158,7 +158,7 @@ function Sankey({ nodes, links, height, unit, label }: { nodes: SNode[]; links: 
         ))}
       </svg>
       <Text as="p" size="1" color="gray" mt="2" aria-live="polite" style={{ minHeight: "1.5em" }}>
-        {band ? band.note : node ? `${node.n.label}: ${unit(node.v)}` : "Hover a band or a node to follow it."}
+        {band ? band.note : node ? `${node.n.label}: ${unit(node.v)}` : "\u00a0"}
       </Text>
       <VisuallyHidden>
         <ul>
