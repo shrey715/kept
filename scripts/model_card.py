@@ -116,7 +116,11 @@ def arm_curves(late, lift, contacts, rng, steps: int = 41, draws: int = 30) -> d
         lo, hi = np.percentile(rand, [5, 95], axis=0)
         mix = late.action[arm].value_counts()
         cost = sum(float(DEFAULT_CONTACT_COST[Action(a)]) * n for a, n in mix.items()) / int(t.sum())
+        recommended = np.isin(legacy[both], members)  # where the bank's strategy picks this arm
         out[name] = {
+            "bank_recommended": int(recommended.sum()),
+            # of those, the share the model expects to add under half a point of payment chance
+            "bank_low_uplift_share": float((model[recommended] < 0.005).mean()) if recommended.any() else None,
             "decisions": int(both.sum()),
             "contacts": int(t.sum()),
             "cost_per_contact": round(cost, 4),  # the engine's contact costs, over this arm's actual mix
