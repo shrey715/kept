@@ -29,7 +29,7 @@ const CHAPTERS = [
   { at: 0.12, n: "01", title: "Five systems. Five keys. One person.", body: "Cards, loans, deposits, CRM and collections each file Jane under a different customer key. None of them knows the others." },
   { at: 0.32, n: "02", title: "Kept resolves them into one golden ID.", body: "Exact links first, then probabilistic matching. Every customer becomes one point of light, with its match confidence and lineage. Hover one." },
   { at: 0.56, n: "03", title: "Meet Jane.", body: "Her pay is due in three days and is down 27% on her average. She answers calls after six. Her last promise fell due before payday, and broke." },
-  { at: 0.76, n: "04", title: "A promise she can keep.", body: "Dated the day after payday, sized to her spare cash, checked against every rule, and released only when two people sign." },
+  { at: 0.76, n: "04", title: "A promise she can keep.", body: "Dated to her payday, sized to her spare cash, checked against every rule, and released only when two people sign." },
 ];
 const REASONS: [string, number][] = [
   ["Pay lands in 3 days", 9],
@@ -157,7 +157,7 @@ export default function Landing() {
                 </Heading>
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2, duration: 0.8 }} style={{ pointerEvents: "auto" }}>
                   <Text as="p" size="5" mt="5" style={{ maxWidth: 560, color: "var(--gray-11)" }}>
-                    Collections that start from the customer: one view of them, one guarded action, dated after payday and
+                    Collections that start from the customer: one view of them, one guarded action, dated to payday and
                     released by a person.
                   </Text>
                   <Flex gap="3" mt="6" wrap="wrap">
@@ -281,7 +281,7 @@ function JaneCard({ p }: { p: MotionValue<number> }) {
     <Paper>
       <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", color: "#78716c" }}>CASE CS-2026-118204 · G-910001</div>
       <div className="serif" style={{ fontSize: 26, fontWeight: 700, lineHeight: "32px", marginTop: 4 }}>Call, Tue 18:00–20:00</div>
-      <div style={{ fontSize: 14, color: "#57534e" }}>$140 a month × 3 · due the day after payday · fits ~$160 spare cash</div>
+      <div style={{ fontSize: 14, color: "#57534e" }}>$140 a month × 3 · due on payday · fits ~$160 spare cash</div>
       <div style={{ marginTop: 8 }}>
         {REASONS.map(([r, pts], i) => (
           <motion.div key={r} initial={false} animate={{ opacity: stage > i ? 1 : 0.15, x: stage > i ? 0 : -8 }} transition={{ type: "spring", stiffness: 300, damping: 26 }}
@@ -380,8 +380,8 @@ function PromiseNote({ onDemo, onEnter }: { onDemo: () => void; onEnter: () => v
         <Paper style={{ padding: "40px 40px 40px 80px", fontSize: 20 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.14em", color: "#78716c" }}>PROMISE TO PAY · NO. 00418</div>
           <div className="serif" style={{ fontSize: "clamp(26px, 4vw, 40px)", fontWeight: 700, lineHeight: 1.15, marginTop: 10 }}>
-            I promise to pay <u style={{ textDecorationColor: "#c8102e" }}>$140</u> on <u style={{ textDecorationColor: "#c8102e" }}>Saturday, October 3</u>,
-            the day after my payday.
+            I promise to pay <u style={{ textDecorationColor: "#c8102e" }}>$140</u> on <u style={{ textDecorationColor: "#c8102e" }}>Friday, October 2</u>,
+            my payday.
           </div>
           <div style={{ display: "flex", alignItems: "end", justifyContent: "space-between", marginTop: 28, gap: 20, flexWrap: "wrap" }}>
             <div style={{ borderTop: "1px solid #a8a29e", minWidth: 220 }}>

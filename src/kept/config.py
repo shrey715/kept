@@ -62,7 +62,9 @@ PAID_WINDOW_DAYS: Final = 14  # outcome: paid within 14 days (paid_14d)
 CALLING_HOURS_START: Final = time(7, 0)  # local, inclusive
 CALLING_HOURS_END: Final = time(21, 0)  # local, exclusive
 CONTACT_CAP_7D: Final = 3  # default only; each case carries collections_cases.contact_cap_7d
-PROMISE_DAYS_AFTER_PAYDAY: Final = (1, 2)  # promises due 1-2 days after expected payday
+# promises fall due on the expected payday (offset 0): kept most there, and the day after does no better than
+# the day before (docs/reports/evidence.md §2a); offset 1 is allowed when a payday is uncertain
+PROMISE_DAYS_AFTER_PAYDAY: Final = (0, 1)
 TOP_REASONS: Final = 3  # TreeSHAP top 3
 MAX_DRIVERS: Final = 12  # the case page's full "why" chart: the largest contributions, either sign
 CLOSE_CALL_MARGIN: Final = 0.02  # top two scores within 2% of the top: "close" (D: 7% of real cases)
