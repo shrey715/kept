@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -347,6 +347,10 @@ def test_protected_case_is_offered_a_hardship_review_even_when_waiting_scores_be
     assert protected.proposal.tier is ReleaseTier.RED
     # still no review when a hard stop blocks contact
     assert card(hardship_status=hardship, hard_stop_flags=frozenset({HardStop.CEASE})).proposal is None
+    # #93: a hardship plan already running: no new review, the card says it is monitoring the plan
+    on_plan = card(hardship_status=hardship, hardship_plan_until=date(2026, 12, 1))
+    assert on_plan.proposal is None and "Monitoring the hardship plan" in (on_plan.no_action_reason or "")
+    assert all(p.action is not Action.HARDSHIP_REVIEW for p in on_plan.probabilities)
 
 
 def test_similar_cases_line(make_ctx) -> None:  # type: ignore[no-untyped-def]

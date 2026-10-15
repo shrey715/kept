@@ -204,10 +204,13 @@ def load(conn: duckdb.DuckDBPyConnection) -> _Bulk:
             cease_contact_flag=bool(cease),
             insolvency_hold_flag=bool(insolvency),
             deceased_hold_flag=bool(deceased),
+            hardship_plan_start=plan_start,
+            hardship_plan_end=plan_end,
         )
-        for cid, overdue, cap, legacy, cease, insolvency, deceased in conn.execute(
+        for cid, overdue, cap, legacy, cease, insolvency, deceased, plan_start, plan_end in conn.execute(
             "select case_id, total_overdue, contact_cap_7d, nba_recommendation_last, cease_contact_flag,"
-            " insolvency_hold_flag, deceased_hold_flag from silver.collections_cases c"
+            " insolvency_hold_flag, deceased_hold_flag, hardship_plan_start, hardship_plan_end"
+            " from silver.collections_cases c"
             " semi join features.case_features f on f.case_id = c.case_id"
         ).fetchall()
         if cid in vectors

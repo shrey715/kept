@@ -54,6 +54,7 @@ class CaseContext(_Frozen):
     contact_cap_7d: int = Field(default=CONTACT_CAP_7D, ge=0)  # collections_cases.contact_cap_7d
     hardship_status: HardshipStatus
     vulnerable: bool = False  # vulnerability signal: same protection as hardship
+    hardship_plan_until: date | None = None  # a hardship plan is running and ends this day (#93)
     balance_at_risk: Money
     expected_next_payroll_date: date | None = None
     payroll_frequency: PayrollFrequency = PayrollFrequency.UNKNOWN

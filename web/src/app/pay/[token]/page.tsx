@@ -1,6 +1,6 @@
 "use client";
 
-// What the customer's SMS opens (#89). Every option is a plan Kept already sized: due 1-2 days after payday,
+// What the customer's SMS opens (#89). Every option is a plan Kept already sized: due on payday,
 // each instalment within the customer's spare cash. The customer picks one; there's no free date, because a
 // date before payday is the promise that breaks. No sign-in and no name, account or case ID on the page.
 // When the bank doesn't know their payday or spare cash, the page asks (next payday, how often, what they can
@@ -23,7 +23,7 @@ const FREQUENCIES: [StatedPay["frequency"], string][] = [
 ];
 
 function describe(o: PromiseSizing): string {
-  if (o.installments === 1) return `${money(o.amount)} on ${day(o.due_date)}, the day after your pay`;
+  if (o.installments === 1) return `${money(o.amount)} on ${day(o.due_date)}, your payday`;
   return `${o.installments} × ${money(o.amount)}, starting ${day(o.due_date)}, one each payday`;
 }
 

@@ -26,7 +26,7 @@ SIZE = {
 def test_options_fit_spare_cash_and_payday_and_match_size_promise() -> None:
     opts = promise_options(**SIZE)
     assert [o.installments for o in opts] == [2, 3]  # 300 > ~184 per pay; 150 and 100 fit
-    assert all(o.amount <= o.spare_cash_estimate and (o.due_date - o.payday).days in (1, 2) for o in opts)
+    assert all(o.amount <= o.spare_cash_estimate and o.due_date == o.payday for o in opts)  # on payday
     assert size_promise(**SIZE) == opts[0]
 
 
@@ -101,7 +101,7 @@ def test_the_customer_answers_size_the_plan_and_are_audited() -> None:
     offer = client.post("/pay/P1/plans", json=stated).json()
     assert [o["installments"] for o in offer["options"]] == [3] and not offer["ask"]  # 150 > 120 >= 100
     assert (
-        offer["options"][0]["due_date"] == "2026-10-17"
+        offer["options"][0]["due_date"] == "2026-10-16"
         and "said they can afford" in offer["options"][0]["rationale"]
     )
     assert client.post("/pay/P1", json={"installments": 2, "stated": stated}).status_code == 422
