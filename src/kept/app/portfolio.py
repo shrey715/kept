@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 import duckdb
 from pydantic import BaseModel
@@ -55,6 +55,15 @@ class Insight(BaseModel):
     sql: str
 
 
+class FlowLink(BaseModel):
+    """One band of a Sankey: cases, and their money, from one node to the next."""
+
+    source: str
+    target: str
+    cases: float
+    amount: float
+
+
 class Portfolio(BaseModel):
     as_of: datetime | None
     cases: int
@@ -70,6 +79,20 @@ class Portfolio(BaseModel):
     ab_test: list[Cell]
     cohorts: list[CohortCell]
     insights: list[Insight]
+    flow: list[FlowLink] = []  # tonight's run, gate by gate (_flow)
+
+
+class MoneyFlow(BaseModel):
+    """A year of cases entering at 1-30 days past due (scripts/business_case.py), as bands of their overdue at
+    entry: today, and with Kept's base case. Cases are at the year's average overdue per case."""
+
+    cases: int
+    overdue: float
+    written_off: float  # charged-off balance a year: rolled cases x charge-off rate x average charge-off
+    written_off_kept: float
+    gain: float  # base case: promised money paid more a year (promises dated to payday)
+    today: list[FlowLink]
+    with_kept: list[FlowLink]
 
 
 class CaseRow(BaseModel):
@@ -128,6 +151,16 @@ SQL_COHORT = (
     " silver.collections_cases) - interval 2 year group by 1, 2 order by 1, 2"
 )
 
+SQL_FLOW = (
+    "select hard_stop, hardship, tier, no_action_reason, json_extract(card, '$.hard_stop.fired')::varchar[],"
+    " count(*), sum(total_overdue) from nba.cards group by all"
+)
+STOPS = ("deceased", "bankruptcy", "insolvency", "cease")  # strongest first: a case shows under one stop
+SQL_CURED = (  # cases that don't roll (business_case.py's roll query): cured, or still 1-30 dpd at day 30
+    "select count(*) filter (where dpd_at_day_30 = 0), count(*) filter (where dpd_at_day_30 between 1 and 30)"
+    " from silver.collections_cases where entry_dpd between 1 and 30"
+)
+
 
 def wilson(k: int, n: int) -> tuple[float, float, float]:
     """Rate and Wilson 95% interval (0, 0, 0 when n is 0)."""
@@ -143,6 +176,81 @@ def wilson(k: int, n: int) -> tuple[float, float, float]:
 def _slices(cur: duckdb.DuckDBPyConnection, col: str) -> list[Slice]:
     rows = cur.execute(SQL_SLICES.format(col=col)).fetchall()
     return [Slice(key=str(k), cases=n, balance=float(b or 0), expected=float(e or 0)) for k, n, b, e in rows]
+
+
+def _no_action(reason: str | None) -> str:
+    r = reason or ""  # the engine's own wording (kept.nba.engine)
+    if r.startswith("Best action is to wait"):
+        return "wait"
+    return "holdout" if r.startswith("No action: old strategy") else "no_action"
+
+
+def _flow(cur: duckdb.DuckDBPyConnection) -> list[FlowLink]:
+    """Tonight's run as Sankey bands: open cases, the hard-stop gate (each stopped case under its strongest
+    stop), the hardship screen, then the card: a tier or why there is no action."""
+    bands: dict[tuple[str, str], list[float]] = {}
+
+    def add(s: str, t: str, n: int, b: float) -> None:
+        x = bands.setdefault((s, t), [0, 0.0])
+        x[0] += n
+        x[1] += b
+
+    for stop, hardship, tier, reason, fired, n, bal in cur.execute(SQL_FLOW).fetchall():
+        b = float(bal or 0)
+        if stop:
+            add("open", "hard_stop", n, b)
+            add("hard_stop", next((s for s in STOPS if s in (fired or ())), "other_stop"), n, b)
+            continue
+        screen = "hardship" if hardship else "no_hardship"
+        add("open", "contactable", n, b)
+        add("contactable", screen, n, b)
+        add(screen, tier or _no_action(reason), n, b)
+    return [FlowLink(source=s, target=t, cases=n, amount=b) for (s, t), (n, b) in bands.items()]
+
+
+def money_flow(conn: duckdb.DuckDBPyConnection, business: dict[str, Any]) -> MoneyFlow:
+    """The business case's roll funnel (business_data.json) as overdue bands; the warehouse splits the cases
+    that don't roll into cured and partly paid. With Kept: the base case's payday gain moves from rolled to
+    paid, and its roll-rate cut (none in the base case) lowers the roll rate and the charge-offs with it."""
+    r, base = business["roll"], business["scenarios"]["Base"]
+    n, overdue, rate, co = r["inflow_cases"], r["inflow_overdue"], r["rate"], r["chargeoff_if_rolled"]
+    per_case = overdue / n
+    cur = conn.cursor()
+    try:
+        cured, partly = cur.execute(SQL_CURED).fetchone() or (0, 0)
+    finally:
+        cur.close()
+    share = cured / (cured + partly) if cured + partly else 1.0
+    gain = float(base["Promises dated to payday"])
+    pts = (
+        base["Roll-rate cut: charge-offs avoided"] / base["_rolled_per_pt"] if base["_rolled_per_pt"] else 0.0
+    )
+
+    def link(s: str, t: str, amount: float) -> FlowLink:
+        return FlowLink(source=s, target=t, cases=amount / per_case, amount=amount)
+
+    def bands(rate: float, moved: float) -> list[FlowLink]:
+        rolled = overdue * rate - moved
+        off = overdue * rate * co
+        paid = overdue - rolled
+        return [
+            link("entered", "cured", paid * share),
+            link("entered", "partly_paid", paid * (1 - share)),
+            link("entered", "rolled", rolled),
+            link("rolled", "charged_off", off),
+            link("rolled", "not_charged_off", rolled - off),
+        ]
+
+    kept_rate = rate - pts / 100
+    return MoneyFlow(
+        cases=n,
+        overdue=overdue,
+        written_off=n * rate * co * r["avg_chargeoff"],
+        written_off_kept=n * kept_rate * co * r["avg_chargeoff"],
+        gain=gain,
+        today=bands(rate, 0.0),
+        with_kept=bands(kept_rate, gain),
+    )
 
 
 def _insights(p: Portfolio) -> list[Insight]:
@@ -259,6 +367,7 @@ def overview(conn: duckdb.DuckDBPyConnection) -> Portfolio:
             ab_test=ab,
             cohorts=cohorts,
             insights=[],
+            flow=_flow(cur),
         )
     finally:
         cur.close()

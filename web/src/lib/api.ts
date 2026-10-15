@@ -7,6 +7,7 @@ export type NBACard = S["NBACard"];
 export type Notification = S["Notification"];
 export type CaseHistory = S["CaseHistory"];
 export type Portfolio = S["Portfolio"];
+export type MoneyFlow = S["MoneyFlow"];
 export type Brief = S["Brief"];
 export type { Governance } from "@/components/model-panels";
 import type { Governance } from "@/components/model-panels";
@@ -83,6 +84,7 @@ export const api = {
   portfolioModels: (w: Who) => call<Governance>(`/portfolio/models?${q(w)}`),
   portfolioBrief: (w: Who) => call<Brief>(`/portfolio/brief?${q(w)}`),
   portfolio: (w: Who) => call<Portfolio>(`/portfolio?${q(w)}`),
+  portfolioMoney: (w: Who) => call<MoneyFlow>(`/portfolio/money?${q(w)}`),
   portfolioWorkload: (w: Who) => call<Workload>(`/portfolio/workload?${q(w)}`),
   portfolioCases: (w: Who, f: Record<string, string>) => call<PortfolioPage>(`/portfolio/cases?${q(w, f)}`),
   history: (caseId: string, w: Who) => call<CaseHistory>(`/cases/${encodeURIComponent(caseId)}/history?${q(w)}`),

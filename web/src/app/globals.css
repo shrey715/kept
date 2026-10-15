@@ -3639,6 +3639,28 @@ html {
   line-height: 1.5;
 }
 
+/* flows (Sankey): bands, node labels with a halo in the card's tint, the value in bold */
+.k-sankey-band {
+  cursor: default;
+  mix-blend-mode: multiply;
+}
+.dark .k-sankey-band {
+  mix-blend-mode: screen;
+}
+.k-sankey-label {
+  font-size: 12px;
+  fill: var(--gray-12);
+  paint-order: stroke;
+  stroke: var(--t-bg, var(--k-card));
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.k-sankey-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* WorkloadHeatmap (portfolio): weekday x hour, shade = share of call capacity used, hatched = over capacity */
 .k-load {
   display: grid;
