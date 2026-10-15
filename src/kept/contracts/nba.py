@@ -221,6 +221,7 @@ class NBACard(_Frozen):
     sizing_text: str | None = None
     similar_cases_text: str | None = None  # "(descriptive, not causal)"
     legacy_text: str | None = None  # the bank's current strategy for this case, next to ours
+    why_not_text: str | None = None  # the chosen action against the runner-up: payment chance, net value
     checks: tuple[CheckResult, ...] = ()
     hardship_banner: str | None = None
     hard_stop: HardStopResult | None = None

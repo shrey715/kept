@@ -3619,3 +3619,10 @@ html {
   font-size: 14px;
   color: var(--gray-11);
 }
+
+/* "why this, not that" under the drivers' title */
+.k-whynot {
+  margin-top: -6px;
+  max-width: 68ch;
+  line-height: 1.5;
+}
