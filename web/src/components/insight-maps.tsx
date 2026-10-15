@@ -109,9 +109,9 @@ function LiveMap({
               className="k-live-shape"
               data-hover={hover === p.code}
               data-dim={hover !== null && hover !== p.code}
-              onPointerEnter={() => setHover(p.code)}
+              onPointerEnter={() => setHover(known(p.code) ? p.code : null)}
               tabIndex={known(p.code) ? 0 : -1}
-              onFocus={() => setHover(p.code)}
+              onFocus={() => known(p.code) && setHover(p.code)}
               onBlur={() => setHover(null)}
               aria-label={p.name}
             />
@@ -129,7 +129,7 @@ function LiveMap({
       ) : (
         <div className="k-geo-empty" />
       )}
-      {hover && name && at && (
+      {hover && name && at && known(hover) && (
         <div className="k-live-tip" style={tipAt(at)}>
           {tip(hover, name)}
         </div>
