@@ -126,7 +126,7 @@ export function PaydayClock({ c }: { c: Clock }) {
           </Flex>
           <Text as="p" size="1" color="gray" mb="2">
             {when(shown.days)}: {pct(shown.kept_rate)} kept in full
-            {shown.money_rate != null && <>, {pct(shown.money_rate)} of the promised money paid</>}. Hover or focus an arc for its day.
+            {shown.money_rate != null && <>, {pct(shown.money_rate)} of the promised money paid</>}.
           </Text>
           <Text as="p" size="1" color="gray">
             Resolved promises with a recorded payday within 40 days on both sides; days with under 50 customers are left out. The spikes at 7 and 14 days are

@@ -46,7 +46,7 @@ export function WorkloadHeatmap() {
   const readout = hover
     ? `${DAYS[hd]} ${hh(hr)}–${hh(hr + 1)} · ${n0(h?.calls ?? 0)} calls proposed · ` +
       (h && h.capacity > 0 ? `capacity ${n0(h.capacity)} (${Math.round((100 * h.calls) / h.capacity)}% used)` : "no call capacity in this hour")
-    : "Point at an hour to see its calls and capacity.";
+    : "\u00a0";
   return (
     <div className="k-card t-ice" style={{ padding: 22, marginTop: "var(--space-5)" }}>
       <SectionTitle eyebrow="Agent workload" title="Proposed calls against call capacity" />
