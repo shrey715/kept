@@ -14,6 +14,10 @@ export type Brief = S["Brief"];
 export type { Governance } from "@/components/model-panels";
 import type { Governance } from "@/components/model-panels";
 export type PortfolioPage = S["CasePage"];
+export type CallingHours = S["CallingHours"];
+export type StressMap = S["StressMap"];
+export type CollectionsMap = S["CollectionsMap"];
+export type UpliftLandscape = S["UpliftLandscape"];
 export type Workload = S["Workload"];
 export type CalendarFeed = S["CalendarFeed"];
 export type CalendarEvent = S["CalendarEvent"];
@@ -89,6 +93,10 @@ export const api = {
   portfolioMoney: (w: Who) => call<MoneyFlow>(`/portfolio/money?${q(w)}`),
   portfolioWorkload: (w: Who) => call<Workload>(`/portfolio/workload?${q(w)}`),
   portfolioCases: (w: Who, f: Record<string, string>) => call<PortfolioPage>(`/portfolio/cases?${q(w, f)}`),
+  callingHours: (w: Who) => call<CallingHours>(`/insights/calling-hours?${q(w)}`),
+  stressMap: (w: Who) => call<StressMap>(`/insights/stress?${q(w)}`),
+  collectionsMap: (w: Who) => call<CollectionsMap>(`/insights/map?${q(w)}`),
+  upliftLandscape: (w: Who) => call<UpliftLandscape>(`/insights/uplift?${q(w)}`),
   history: (caseId: string, w: Who) => call<CaseHistory>(`/cases/${encodeURIComponent(caseId)}/history?${q(w)}`),
   story: (caseId: string, w: Who) => call<CaseStory>(`/cases/${encodeURIComponent(caseId)}/story?${q(w)}`),
   paydayClock: (w: Who) => call<PaydayClock>(`/portfolio/payday?${q(w)}`),

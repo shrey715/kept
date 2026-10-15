@@ -7,6 +7,7 @@ import {
   CheckCircledIcon,
   DashboardIcon,
   ExitIcon,
+  GlobeIcon,
   LayersIcon,
   MixerHorizontalIcon,
   MoonIcon,
@@ -30,6 +31,7 @@ import { NotificationCenter } from "./notifications";
 export const NAV = [
   { href: "/queue", tint: "ice" as const, label: "Queue", icon: LayersIcon, blurb: "Today's cases, ranked by expected recovery", show: can.queue },
   { href: "/portfolio", tint: "butter" as const, label: "Portfolio", icon: DashboardIcon, blurb: "Portfolio balances, outcomes and model monitoring", show: can.portfolio },
+  { href: "/insights", tint: "lilac" as const, label: "Insights", icon: GlobeIcon, blurb: "Calling hours, stress and balances by place; the uplift surface", show: can.portfolio },
   { href: "/approvals", tint: "rose" as const, label: "Approvals", icon: CheckCircledIcon, blurb: "Recommended actions awaiting release", show: can.approvals },
   { href: "/calendar", tint: "butter" as const, label: "Calendar", icon: CalendarIcon, blurb: "Promises, contact windows, deadlines and paydays", show: () => true },
   { href: "/audit", tint: "mint" as const, label: "Audit", icon: ReaderIcon, blurb: "Recommendations, releases and overrides", show: can.audit },

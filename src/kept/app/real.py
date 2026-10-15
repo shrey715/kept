@@ -20,6 +20,7 @@ import duckdb
 from kept.app.api import QueueItem, Services
 from kept.app.calendar_events import calendar_feed
 from kept.app.history import case_history, case_story
+from kept.app.insights import Insights
 from kept.app.notifications import ReadState
 from kept.app.portfolio import MoneyFlow, case_page, money_flow, overview, payday_clock, workload
 from kept.app.voice import VoiceCalls
@@ -78,10 +79,11 @@ def real_services(
         extractions=store,
     )
     proposals: dict = {}  # type: ignore[type-arg]
+    scorer = pickle.loads(model.read_bytes())  # our own file, written by kept train
     engine = KeptEngine(
         context=context,
         features=features,
-        scorer=pickle.loads(model.read_bytes()),  # our own file, written by kept train
+        scorer=scorer,
         audit_log=audit_log,
         proposals=proposals,
         programs=_programs(conn),
@@ -139,6 +141,7 @@ def real_services(
         governance=_governance,
         money_flow=lambda: _money_flow(conn),
         portfolio_cases=lambda **kw: case_page(conn, **kw),
+        insights=Insights(conn, scorer),
         workload=lambda: workload(conn),
         reads=ReadState(warehouse.parent / "app_state.duckdb"),  # not the warehouse: kept score writes that
     )
