@@ -3638,3 +3638,255 @@ html {
   max-width: 68ch;
   line-height: 1.5;
 }
+
+/* StoryTimeline (#106): the case's swim lanes; scrolls sideways inside its card only on a very long case */
+.k-story {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.k-story svg {
+  display: block;
+}
+.k-story-band {
+  fill: var(--k-chip);
+  opacity: 0.55;
+}
+.k-story-lane {
+  font: 500 11.5px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-story-axis {
+  font: 500 10.5px var(--default-font-family);
+  fill: var(--gray-10);
+}
+.k-story-grid {
+  stroke: var(--k-line);
+}
+.k-story-payday {
+  stroke: var(--k-butter-ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.k-story-dpd {
+  fill: color-mix(in oklab, var(--k-red) 16%, transparent);
+  stroke: var(--k-red);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.k-story-contact {
+  fill: var(--k-card);
+  stroke: var(--gray-11);
+  stroke-width: 1.5;
+}
+.k-story-contact[data-reached="true"] {
+  fill: var(--gray-12);
+  stroke: var(--gray-12);
+}
+.k-story-promise {
+  outline: none;
+  cursor: default;
+}
+.k-story-promise line {
+  stroke: var(--gray-8);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.k-story-promise .k-story-hit {
+  fill: transparent;
+  stroke: none;
+}
+.k-story-mark {
+  fill: var(--k-card);
+  stroke: var(--gray-10);
+  stroke-width: 2;
+}
+.k-story-mark path {
+  fill: var(--amber-10);
+  stroke: none;
+}
+.k-story-promise[data-status="kept"] .k-story-mark {
+  fill: var(--grass-10);
+  stroke: var(--grass-10);
+}
+.k-story-promise[data-status="broken"] .k-story-mark path {
+  fill: none;
+  stroke: var(--red-10);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.k-story-promise[data-status="partially_kept"] .k-story-ring {
+  stroke: var(--amber-10);
+}
+.k-story-promise:is(:hover, :focus-visible) line {
+  stroke: var(--gray-12);
+}
+.k-story-promise:focus-visible .k-story-mark {
+  stroke-width: 3;
+}
+.k-story-bracket {
+  fill: none;
+  stroke: var(--k-butter-ink);
+  stroke-width: 1.5;
+}
+.k-story-pay {
+  fill: var(--gray-12);
+}
+.k-story-pay[data-promise="true"] {
+  fill: var(--grass-10);
+}
+.k-story-note {
+  fill: var(--gray-9);
+  outline: none;
+}
+.k-story-note[data-hardship="true"] {
+  fill: var(--k-rose-2);
+  stroke: var(--k-rose-ink);
+  stroke-width: 1.5;
+}
+.k-story-note:is(:hover, :focus-visible),
+.k-story-contact:hover,
+.k-story-pay:hover {
+  stroke: var(--gray-12);
+  stroke-width: 2.5;
+}
+.k-story-tip {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, calc(-100% - 8px));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: max-content;
+  max-width: 280px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  background: var(--k-strong);
+  color: var(--k-on-strong);
+  font: 400 12px/1.4 var(--default-font-family);
+  pointer-events: none;
+  box-shadow: 0 10px 24px -12px rgba(0, 0, 0, 0.5);
+}
+.k-story-tip[data-below="true"] {
+  transform: translate(-50%, 8px);
+}
+.k-story-tip b {
+  font-weight: 600;
+}
+.k-story-legend {
+  font: 400 12px var(--default-font-family);
+  color: var(--gray-11);
+}
+.k-story-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-story-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+.k-story-key.kept {
+  background: var(--grass-10);
+}
+.k-story-key.broken {
+  background: var(--red-10);
+  border-radius: 0;
+  clip-path: polygon(20% 0, 50% 30%, 80% 0, 100% 20%, 70% 50%, 100% 80%, 80% 100%, 50% 70%, 20% 100%, 0 80%, 30% 50%, 0 20%);
+}
+.k-story-key.partial {
+  background: linear-gradient(90deg, transparent 50%, var(--amber-10) 50%);
+  box-shadow: inset 0 0 0 1.5px var(--amber-10);
+}
+.k-story-key.hardship {
+  background: var(--k-rose-2);
+  box-shadow: inset 0 0 0 1.5px var(--k-rose-ink);
+}
+.k-story-key.payday {
+  width: 0;
+  height: 12px;
+  border-radius: 0;
+  border-left: 1.5px dashed var(--k-butter-ink);
+}
+
+/* PaydayClock (#105): the pay-cycle face on an ice panel; payday's arc in maple */
+.k-clock {
+  border-radius: 22px;
+  background: var(--t-bg);
+  padding: 8px;
+  max-width: 340px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.k-clock svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.k-clock-ring {
+  fill: none;
+  stroke: var(--k-dash);
+  stroke-width: 0.8;
+}
+.k-clock-mean {
+  fill: none;
+  stroke: var(--t-ink);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+}
+.k-clock-scale {
+  font: 500 9.5px var(--default-font-family);
+  fill: var(--gray-11);
+  paint-order: stroke;
+  stroke: var(--t-bg);
+  stroke-width: 4px;
+}
+.k-clock-label {
+  font: 500 11px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-clock-label[data-on="true"] {
+  fill: var(--gray-12);
+  font-weight: 700;
+}
+.k-clock-arc {
+  fill: none;
+  stroke: var(--t-ink);
+  stroke-linecap: butt;
+  outline: none;
+  transition: opacity 150ms;
+}
+.k-clock-arc[data-payday="true"] {
+  stroke: var(--k-red);
+}
+.k-clock-arc[data-dim="true"] {
+  opacity: 0.35;
+}
+.k-clock-big {
+  font: 600 26px var(--default-font-family);
+  letter-spacing: -0.02em;
+  fill: var(--gray-12);
+}
+.k-clock-sub {
+  font: 400 11px var(--default-font-family);
+  fill: var(--gray-11);
+}
+.k-clock-stat {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--k-chip);
+}
+.k-clock-stat[data-strong="true"] {
+  box-shadow: inset 3px 0 0 var(--k-red);
+}
+.k-clock-stat[data-dashed="true"] {
+  box-shadow: inset 3px 0 0 var(--k-ice-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-clock-arc {
+    transition: none;
+  }
+}

@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/story": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Story */
+        get: operations["get_story_cases__case_id__story_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/customer": {
         parameters: {
             query?: never;
@@ -187,7 +204,7 @@ export interface paths {
         };
         /**
          * Portfolio Models
-         * @description The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+         * @description The model card (scripts/model_card.py), fairness, drift and invariance reports as written:
          *     the page shows exactly what the reports say.
          */
         get: operations["portfolio_models_portfolio_models_get"];
@@ -208,6 +225,23 @@ export interface paths {
         };
         /** Get Portfolio */
         get: operations["get_portfolio_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/payday": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Payday Clock */
+        get: operations["get_payday_clock_portfolio_payday_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -867,6 +901,29 @@ export interface components {
             /** Hard Stop */
             hard_stop: boolean;
         };
+        /** CaseStory */
+        CaseStory: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Contacts */
+            contacts: components["schemas"]["StoryContact"][];
+            /** Promises */
+            promises: components["schemas"]["StoryPromise"][];
+            /** Payments */
+            payments: components["schemas"]["StoryPayment"][];
+            /** Notes */
+            notes: components["schemas"]["StoryNote"][];
+            /** Paydays */
+            paydays: string[];
+        };
         /**
          * Cell
          * @description One arm of the bank's randomised test: promise-kept rate and cure rate with Wilson 95% intervals.
@@ -1498,6 +1555,26 @@ export interface components {
              */
             ask: boolean;
         };
+        /** PaydayBucket */
+        PaydayBucket: {
+            /** Days */
+            days: number;
+            /** Promises */
+            promises: number;
+            /** Kept Rate */
+            kept_rate: number;
+            /** Money Rate */
+            money_rate: number | null;
+        };
+        /** PaydayClock */
+        PaydayClock: {
+            /** Buckets */
+            buckets: components["schemas"]["PaydayBucket"][];
+            /** Kept Rate */
+            kept_rate: number;
+            /** Sql */
+            sql: string;
+        };
         /**
          * PayrollFrequency
          * @enum {string}
@@ -1826,6 +1903,73 @@ export interface components {
             /** Steward Id */
             steward_id: string;
         };
+        /** StoryContact */
+        StoryContact: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Channel */
+            channel: string;
+            /** Reached */
+            reached: boolean;
+            /** Dpd */
+            dpd: number | null;
+        };
+        /** StoryNote */
+        StoryNote: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Source */
+            source: string;
+            /** Hardship */
+            hardship: string;
+            /** Reason */
+            reason: string | null;
+            /** Quote */
+            quote: string | null;
+            /** Text */
+            text: string | null;
+        };
+        /** StoryPayment */
+        StoryPayment: {
+            /**
+             * On
+             * Format: date
+             */
+            on: string;
+            /** Amount */
+            amount: string;
+            /** Against Promise */
+            against_promise: boolean;
+        };
+        /** StoryPromise */
+        StoryPromise: {
+            /**
+             * Made
+             * Format: date-time
+             */
+            made: string;
+            /**
+             * Due
+             * Format: date
+             */
+            due: string;
+            /** Status */
+            status: string;
+            /** Amount */
+            amount: string;
+            /** Paid */
+            paid: string | null;
+            /** Paid Date */
+            paid_date: string | null;
+            /** Payday Days */
+            payday_days: number | null;
+        };
         /**
          * TextExtraction
          * @description What the LLM (or SetFit backfill) returns for one note or call transcript.
@@ -2008,6 +2152,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_story_cases__case_id__story_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseStory"];
                 };
             };
             /** @description Validation Error */
@@ -2273,6 +2451,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Portfolio"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_payday_clock_portfolio_payday_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaydayClock"];
                 };
             };
             /** @description Validation Error */

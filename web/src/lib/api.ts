@@ -6,6 +6,8 @@ type S = components["schemas"];
 export type NBACard = S["NBACard"];
 export type Notification = S["Notification"];
 export type CaseHistory = S["CaseHistory"];
+export type CaseStory = S["CaseStory"];
+export type PaydayClock = S["PaydayClock"];
 export type Portfolio = S["Portfolio"];
 export type Brief = S["Brief"];
 export type { Governance } from "@/components/model-panels";
@@ -84,6 +86,8 @@ export const api = {
   portfolio: (w: Who) => call<Portfolio>(`/portfolio?${q(w)}`),
   portfolioCases: (w: Who, f: Record<string, string>) => call<PortfolioPage>(`/portfolio/cases?${q(w, f)}`),
   history: (caseId: string, w: Who) => call<CaseHistory>(`/cases/${encodeURIComponent(caseId)}/history?${q(w)}`),
+  story: (caseId: string, w: Who) => call<CaseStory>(`/cases/${encodeURIComponent(caseId)}/story?${q(w)}`),
+  paydayClock: (w: Who) => call<PaydayClock>(`/portfolio/payday?${q(w)}`),
   notifications: (w: Who) => call<NotificationFeed>(`/notifications?${q(w)}`),
   markRead: (userId: string, upto: string) => call<{ status: string }>("/notifications/read", post({ user_id: userId, upto })),
   card: (caseId: string, w: Who) => call<NBACard>(`/cases/${encodeURIComponent(caseId)}/nba?${q(w)}`),

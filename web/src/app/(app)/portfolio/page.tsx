@@ -20,10 +20,11 @@ import { TierBadge, initials, tierTint } from "@/components/bits";
 import { CountUp, Donut, Rise, Stagger } from "@/components/motion";
 import { BriefCard } from "@/components/brief-card";
 import { ModelPanels } from "@/components/model-panels";
+import { PaydayClock } from "@/components/payday-clock";
 import { PageHeader, SectionTitle, TablePanel } from "@/components/page-header";
 import { SqlBlock } from "@/components/sql-block";
 import { download, toCsv } from "@/lib/csv";
-import { ACTION_LABEL, api, money, type Action, type Governance, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
+import { ACTION_LABEL, api, money, type Action, type Governance, type PaydayClock as Clock, type Portfolio, type PortfolioPage, type Tier } from "@/lib/api";
 import { keys, load, peek } from "@/lib/live";
 import { can, useSession } from "@/lib/session";
 
@@ -39,6 +40,7 @@ export default function PortfolioPage() {
   const { me } = useSession();
   const [p, setP] = useState<Portfolio | null>(() => (me ? (peek<Portfolio>(keys.portfolio(me.userId)) ?? null) : null));
   const [error, setError] = useState<string | null>(null);
+  const [clock, setClock] = useState<Clock | null>(null);
 
   useEffect(() => {
     if (!me) return;
@@ -46,6 +48,10 @@ export default function PortfolioPage() {
     load(keys.portfolio(me.userId), () => api.portfolio(me), { fresh: 0 }).then(
       (x) => live && setP(x),
       (e: Error) => live && setError(e.message),
+    );
+    api.paydayClock(me).then(
+      (x) => live && setClock(x),
+      () => live && setClock(null), // demo mode has no warehouse: no clock
     );
     return () => {
       live = false;
@@ -168,6 +174,14 @@ export default function PortfolioPage() {
             ))}
           </Grid>
         )
+      )}
+
+      {clock && clock.buckets.length > 0 && (
+        <Box mt="5">
+          <Rise>
+            <PaydayClock c={clock} />
+          </Rise>
+        </Box>
       )}
 
       <ModelsSection />
