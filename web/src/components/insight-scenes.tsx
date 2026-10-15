@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BufferAttribute, BufferGeometry, CatmullRomCurve3, Color, CylinderGeometry, DoubleSide, Vector3 } from "three";
 import { ACTION_LABEL, money, type Action, type CollectionsMap, type UpliftLandscape } from "@/lib/api";
 import { bounds, loadProvinces, project, type Province } from "@/lib/geo";
+import { ACTION_COLOR } from "./insight-maps";
 
 const pct = (v: number, d = 0) => `${(v * 100).toFixed(d)}%`;
 const n = (v: number) => Math.round(v).toLocaleString("en-CA");
@@ -242,16 +243,6 @@ function FlyIn({ focus, still }: { focus: Vector3; still: boolean }) {
 }
 
 // ------------------------------------------------------------------ uplift surface (#109)
-const ACTION_COLOR: Record<string, string> = {
-  call: "#e5484d",
-  email: "#3e63dd",
-  sms_payment_link: "#12a594",
-  push: "#8e4ec6",
-  hardship_review: "#f76b15",
-  promise_request: "#d6a400",
-  payment_plan: "#46a758",
-  none: "#8d8d86",
-};
 const SX = 6; // days past due across
 const SZ = 4; // answer rate deep
 const SY = 2.2; // the largest uplift's height

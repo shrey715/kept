@@ -4324,3 +4324,399 @@ html {
     height: 360px;
   }
 }
+
+/* Insights: the live calling-hours map (CallingHoursMap): layers, hover lift, dimming and a slight tilt */
+.k-live-map,
+.k-live-side,
+.k-live-tip,
+.k-geo-swatch {
+  --k-open: color-mix(in oklab, var(--k-mint-2) 88%, #3fbf7f);
+  --k-closed: color-mix(in oklab, var(--k-strong) 12%, var(--k-card));
+}
+.k-live-map {
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  border-radius: 20px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--k-card) 70%, var(--k-frame));
+  overflow: hidden;
+  perspective: 1200px;
+}
+.k-live-svg {
+  max-height: 480px;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.k-live-shape {
+  stroke: var(--k-frame);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.5s ease, opacity 0.2s ease, transform 0.2s ease, stroke-width 0.2s ease;
+  outline: none;
+  cursor: pointer;
+}
+.k-live-shape[data-hover="true"] {
+  stroke: var(--k-strong);
+  stroke-width: 1.6;
+  transform: translateY(-3px) scale(1.012);
+}
+.k-live-shape[data-dim="true"] {
+  opacity: 0.5;
+}
+.k-live-shape:focus-visible {
+  stroke: var(--accent-9);
+  stroke-width: 2;
+}
+.k-live-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  fill: var(--gray-12);
+  paint-order: stroke;
+  stroke: color-mix(in oklab, var(--k-card) 80%, transparent);
+  stroke-width: 3px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.k-live-label[data-hover="true"] {
+  opacity: 1;
+}
+.k-live-tip {
+  position: absolute;
+  z-index: 2;
+  width: 272px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--k-chip);
+  box-shadow: 0 0 0 1px var(--k-line);
+  pointer-events: none;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.k-live-tip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+.k-live-tip-row {
+  color: var(--gray-11);
+}
+.k-live-tip .k-geo-pill[data-status="open"] {
+  background: var(--k-mint-2);
+  color: var(--k-mint-ink);
+}
+.k-live-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--gray-11);
+}
+.k-live-clock .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gray-8);
+}
+.k-live-clock[data-live="true"] .dot {
+  background: #2fb36f;
+}
+.k-live-heatkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-11);
+}
+.k-live-heatkey i {
+  width: 90px;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--k-red) 8%, var(--k-card)), var(--k-red));
+}
+.k-live-row {
+  display: grid;
+  grid-template-columns: 36px minmax(48px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 10px;
+  transition: background-color 0.15s ease;
+}
+.k-live-row[data-hover="true"] {
+  background: var(--k-card-hover);
+}
+.k-live-row .code {
+  font-weight: 600;
+  font-size: 13px;
+}
+.k-live-row .time {
+  font-size: 12px;
+  color: var(--gray-11);
+}
+.k-live-row[data-status="closed"] .code {
+  color: var(--gray-10);
+}
+.k-hstrip {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 1.5px;
+  height: 14px;
+}
+.k-hstrip[data-big="true"] {
+  height: 18px;
+  margin-top: 8px;
+}
+.k-hstrip i {
+  border-radius: 2px;
+  background: var(--k-closed, var(--gray-a4));
+}
+.k-hstrip i[data-now="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--gray-12);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-live-svg,
+  .k-live-shape[data-hover="true"] {
+    transform: none;
+  }
+}
+
+/* Insights: the uplift heatmap (UpliftExplorer) */
+.k-uplift {
+  cursor: crosshair;
+}
+.k-uplift-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.k-uplift-cell {
+  transition: opacity 0.15s ease;
+}
+.k-uplift-cell[data-dim="true"] {
+  opacity: 0.55;
+}
+.k-uplift-cross line {
+  stroke: var(--gray-12);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.6;
+}
+.k-uplift-dot {
+  stroke: var(--k-card);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+.k-uplift-dot[data-hover="true"] {
+  transform: scale(1.35);
+  stroke: var(--gray-12);
+}
+.k-uplift-dot[data-dim="true"] {
+  opacity: 0.35;
+}
+.k-uplift-curve {
+  fill: none;
+  stroke: var(--gray-12);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.k-uplift-curve-dot {
+  fill: var(--gray-12);
+}
+.k-uplift-zero {
+  stroke: var(--k-line);
+}
+.k-axis-text {
+  font-size: 11px;
+  fill: var(--gray-10);
+  font-variant-numeric: tabular-nums;
+}
+.k-axis-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: var(--gray-11);
+}
+.k-uplift-keydot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.k-diverge i {
+  background: linear-gradient(90deg, var(--k-red), var(--k-card), #2f8f57) !important;
+}
+/* the 3D views' cards match the maps' */
+.k-scene-tip {
+  box-shadow: 0 0 0 1px var(--k-line);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-uplift-dot[data-hover="true"] {
+    transform: none;
+  }
+}
+
+/* Insights: overdue by postal district (DistrictMap) */
+.k-district {
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+.k-district[data-zoomed="true"]:active {
+  cursor: grabbing;
+}
+.k-district-svg {
+  max-height: 520px;
+}
+.k-district-land {
+  fill: var(--k-closed);
+  stroke: var(--k-frame);
+}
+.k-district-dot {
+  stroke: var(--k-card);
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.k-district-dot[data-hover="true"] {
+  stroke: var(--gray-12);
+}
+.k-district-dot[data-dim="true"] {
+  opacity: 0.4;
+}
+.k-zoom {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 2;
+}
+.k-zoom .k-round-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+  line-height: 1;
+}
+.k-tierbar {
+  display: flex;
+  gap: 1.5px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.k-tierbar i {
+  min-width: 2px;
+}
+.k-tierbar-sm {
+  margin-top: 0;
+  height: 10px;
+}
+.k-live-heatkey[data-traffic="true"] i {
+  background: linear-gradient(90deg, #3e9b5c, #e2a336, #c8102e);
+}
+.k-district-dot {
+  opacity: 0.92;
+}
+
+/* Insights: the uplift explorer's profile panel and slices */
+.k-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--k-card) 70%, var(--k-frame));
+}
+.k-profile .k-ab-h {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-11);
+}
+.k-profile-range {
+  width: 100%;
+  accent-color: var(--k-red);
+}
+.k-profile-read {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--k-chip);
+}
+.k-profile-read .v {
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.k-profile-read .k {
+  font-size: 13px;
+  font-weight: 600;
+}
+.k-profile-read[data-sign="up"] .v,
+.k-profile-read[data-sign="up"] .k {
+  color: #2f8f57;
+}
+.k-profile-read[data-sign="down"] .v,
+.k-profile-read[data-sign="down"] .k {
+  color: var(--k-red);
+}
+.k-profile-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gray-11);
+}
+.k-slice {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--k-card) 70%, var(--k-frame));
+}
+.k-slice-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 6px;
+}
+.k-slice-up {
+  fill: color-mix(in oklab, #2f8f57 30%, transparent);
+}
+.k-slice-down {
+  fill: color-mix(in oklab, var(--k-red) 30%, transparent);
+}
+.k-slice-sel {
+  stroke: var(--gray-12);
+  stroke-dasharray: 3 3;
+  opacity: 0.7;
+}
+.k-slice-pin {
+  fill: var(--gray-12);
+  stroke: var(--k-card);
+  stroke-width: 2;
+}
+.k-uplift-pin line {
+  stroke: var(--gray-12);
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+.k-uplift-pin circle {
+  fill: none;
+  stroke: var(--gray-12);
+  stroke-width: 2.4;
+}
+.k-uplift-dot {
+  opacity: 0.85;
+}
