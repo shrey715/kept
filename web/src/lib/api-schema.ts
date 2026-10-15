@@ -187,7 +187,7 @@ export interface paths {
         };
         /**
          * Portfolio Models
-         * @description The model card (scripts/model_card.py), fairness and drift reports as their scripts wrote them:
+         * @description The model card (scripts/model_card.py), fairness, drift and invariance reports as written:
          *     the page shows exactly what the reports say.
          */
         get: operations["portfolio_models_portfolio_models_get"];
@@ -208,6 +208,23 @@ export interface paths {
         };
         /** Get Portfolio */
         get: operations["get_portfolio_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/workload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Workload */
+        get: operations["get_portfolio_workload_portfolio_workload_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1891,6 +1908,33 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Workload
+         * @description #115: tonight's proposed calls by weekday and hour against the call team's capacity.
+         */
+        Workload: {
+            /** Time Zone */
+            time_zone: string;
+            /** Calls */
+            calls: number;
+            /** Capacity From */
+            capacity_from: string | null;
+            /** Capacity To */
+            capacity_to: string | null;
+            /** Cells */
+            cells: components["schemas"]["WorkloadCell"][];
+        };
+        /** WorkloadCell */
+        WorkloadCell: {
+            /** Weekday */
+            weekday: number;
+            /** Hour */
+            hour: number;
+            /** Calls */
+            calls: number;
+            /** Capacity */
+            capacity: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -2273,6 +2317,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Portfolio"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_workload_portfolio_workload_get: {
+        parameters: {
+            query: {
+                user_id: string;
+                role: components["schemas"]["Role"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workload"];
                 };
             };
             /** @description Validation Error */

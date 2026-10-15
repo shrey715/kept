@@ -20,7 +20,7 @@ from kept.app.api import QueueItem, Services
 from kept.app.calendar_events import calendar_feed
 from kept.app.history import case_history
 from kept.app.notifications import ReadState
-from kept.app.portfolio import case_page, overview
+from kept.app.portfolio import case_page, overview, workload
 from kept.app.voice import VoiceCalls
 from kept.common.audit import DuckDBAuditLog
 from kept.common.db import connect
@@ -134,6 +134,7 @@ def real_services(
         brief_llm=_brief_llm(audit_log),
         governance=_governance,
         portfolio_cases=lambda **kw: case_page(conn, **kw),
+        workload=lambda: workload(conn),
         reads=ReadState(warehouse.parent / "app_state.duckdb"),  # not the warehouse: kept score writes that
     )
 
@@ -172,6 +173,7 @@ def _governance() -> dict[str, object]:
         ("fairness", "fairness_data"),
         ("drift", "drift_data"),
         ("invariance", "invariance_protected"),  # the nightly's scramble test (`kept invariance`)
+        ("nightly", "nightly_run"),  # the last `kept nightly`, step by step (#114)
     ):
         path = EXPORT_DIR / "reports" / f"{name}.json"
         out[key] = json.loads(path.read_text()) if path.exists() else None
