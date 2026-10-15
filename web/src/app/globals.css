@@ -3391,7 +3391,7 @@ html {
 }
 
 /* review panel: what is being approved, before the buttons; tinted by the release tier */
-.k-brief {
+.k-ab {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3401,30 +3401,30 @@ html {
   background: var(--t-bg, var(--gray-a2));
   border: 1px solid color-mix(in srgb, var(--t-2, var(--gray-a5)) 70%, transparent);
 }
-.k-brief-h {
+.k-ab-h {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
   font-weight: 700;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-title {
+.k-ab-title {
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
   margin-top: -4px;
 }
-.k-brief-title span {
+.k-ab-title span {
   font-weight: 400;
   color: var(--gray-11);
 }
-.k-brief-chips {
+.k-ab-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.k-brief-chips span {
+.k-ab-chips span {
   font-size: 12.5px;
   font-weight: 500;
   padding: 4px 11px;
@@ -3432,7 +3432,7 @@ html {
   background: var(--t-2, var(--gray-a3));
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why {
+.k-ab-why {
   display: flex;
   gap: 12px;
   align-items: flex-start;
@@ -3440,23 +3440,23 @@ html {
   border-radius: 14px;
   background: color-mix(in srgb, var(--t-2, var(--gray-a3)) 45%, transparent);
 }
-.k-brief-why svg {
+.k-ab-why svg {
   flex: none;
   width: 18px;
   height: 18px;
   margin-top: 1px;
   color: var(--t-ink, var(--gray-11));
 }
-.k-brief-why b {
+.k-ab-why b {
   font-size: 13.5px;
   color: var(--t-ink, var(--gray-12));
 }
-.k-brief-why p {
+.k-ab-why p {
   margin: 3px 0 0;
   font-size: 13.5px;
   line-height: 1.5;
 }
-.k-brief-note {
+.k-ab-note {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;

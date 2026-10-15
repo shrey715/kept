@@ -50,9 +50,8 @@ export function CustomerPanel({ c }: { c: Customer }) {
 
       {unlinked && (
         <p className="k-cust-note">
-          This record exists only in {c.source_keys.length === 1 ? "one system" : `${c.source_keys.length} systems`} and has not been matched to
-          the customer&apos;s other records, so name, contact details and consent are not available here. Matching runs nightly;
-          uncertain pairs are confirmed by a data steward.
+          This record exists only in {c.source_keys.length === 1 ? "one system" : `${c.source_keys.length} systems`} and is not yet matched to
+          the customer&apos;s other records, so name, contact details and consent are unavailable.
         </p>
       )}
 
