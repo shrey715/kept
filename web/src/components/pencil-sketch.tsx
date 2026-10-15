@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 
-// A pencil sketch of the idea, drawn stroke by stroke: a calendar with payday circled, an arrow to the day after,
+// A pencil sketch of the idea, drawn stroke by stroke: a calendar with payday circled and ticked,
 // and a promise note that gets its tick. Graphite strokes, one maple accent; slight wobble so it reads hand-drawn.
 const INK = "var(--k-sketch)";
 const RED = "var(--k-red)";
@@ -32,9 +32,8 @@ const STROKES: Stroke[] = [
   { d: "M238 214 C 214 212, 200 236, 214 252 C 230 268, 268 262, 274 240 C 280 218, 256 204, 232 210 C 220 214, 214 222, 214 226", at: 3.7, dur: 0.9, red: true, w: 2.2 },
   // the 2nd: payday
   { d: "M233 229 C 236 221, 249 220, 249 229 C 249 237, 236 243, 232 250 L 251 250", at: 3.5, dur: 0.5, w: 1.6 },
-  { d: "M286 232 C 300 226, 314 226, 322 236 M 312 226 L 322 236 L 310 242", at: 4.6, dur: 0.6, red: true, w: 2 },
-  // the day after, ticked
-  { d: "M296 248 L 306 260 L 326 236", at: 5.1, dur: 0.5, red: true, w: 2.4 },
+  // payday itself, ticked: the promise falls due that day
+  { d: "M268 214 L 278 226 L 298 200", at: 4.8, dur: 0.5, red: true, w: 2.4 },
   // "payday" label with a little leader line
   { d: "M220 268 C 210 290, 196 300, 176 304", at: 5.4, dur: 0.5, w: 1 },
   // promise note, tilted, overlapping the calendar corner
@@ -53,7 +52,7 @@ const STROKES: Stroke[] = [
 export function PencilSketch() {
   const still = useReducedMotion() ?? false;
   return (
-    <svg viewBox="40 60 480 440" role="img" aria-label="A pencil sketch: a calendar with payday circled, the day after ticked, and a promise note stamped Kept" style={{ width: "100%", height: "100%", overflow: "visible" }}>
+    <svg viewBox="40 60 480 440" role="img" aria-label="A pencil sketch: a calendar with payday circled and ticked, and a promise note stamped Kept" style={{ width: "100%", height: "100%", overflow: "visible" }}>
       <defs>
         {/* graphite grain: a little turbulence on the strokes */}
         <filter id="graphite" x="-5%" y="-5%" width="110%" height="110%">

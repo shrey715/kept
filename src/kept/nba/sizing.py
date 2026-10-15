@@ -1,4 +1,4 @@
-"""Stage 5: Kept sizing. Plain arithmetic: due 1-2 days after payday, within spare cash."""
+"""Stage 5: Kept sizing. Plain arithmetic: due on payday, within spare cash."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def next_payday(expected: date | None, frequency: PayrollFrequency, *, today: da
     return expected
 
 
-def promise_due_date(expected_payday: date, *, today: date, offset_days: int = 1) -> date | None:
-    """expected_payday + offset_days (offset in {1, 2}, else ValueError). If that is
+def promise_due_date(expected_payday: date, *, today: date, offset_days: int = 0) -> date | None:
+    """expected_payday + offset_days (offset in PROMISE_DAYS_AFTER_PAYDAY, else ValueError). If that is
     before today + 1, roll forward to the next payday is NOT our job: return None
     (no payday-dated promise possible; caller falls back)."""
     if offset_days not in PROMISE_DAYS_AFTER_PAYDAY:
@@ -104,6 +104,10 @@ def promise_options(
         per_period = (spare_cash_monthly * 12 / periods).quantize(CENT, rounding=ROUND_DOWN)
     if expected_payday is None or balance_due <= 0:
         return []
+    if expected_payday == today:  # payday is today: the promise falls due on the next one
+        expected_payday = next_payday(expected_payday, payroll_frequency, today=today + timedelta(days=1))
+        if expected_payday is None or expected_payday <= today:
+            return []
     due = promise_due_date(expected_payday, today=today)
     if per_period <= 0 or due is None:
         return []
@@ -126,22 +130,21 @@ def promise_options(
 
 
 def sizing_text(s: PromiseSizing, *, stated: bool = False) -> str:
-    """'$140 fits inside estimated spare cash of ~$160 a month after rent; due one day after
-    the expected payroll date.' Amounts formatted with $ and no trailing .00."""
-    days = {1: "one day", 2: "two days"}.get(
-        (s.due_date - s.payday).days, f"{(s.due_date - s.payday).days} days"
-    )
+    """'$140 fits inside estimated spare cash of ~$160 a month after rent; due on the expected
+    payroll date.' Amounts formatted with $ and no trailing .00."""
+    gap = (s.due_date - s.payday).days
+    when = "on" if gap == 0 else "one day after" if gap == 1 else f"{gap} days after"
     plan = _money(s.amount) + (
         f" a pay period for {s.installments} pay periods" if s.installments > 1 else ""
     )
     if stated:
         return (
             f"{plan} fits inside the {_money(s.spare_cash_estimate)} a payday the customer said they can "
-            f"afford; due {days} after the payday they gave."
+            f"afford; due {when} the payday they gave."
         )
     return (
         f"{plan} fits inside estimated spare cash of ~{_money(s.spare_cash_estimate)} per pay period "
-        f"after rent, essentials and other lenders; due {days} after the expected payroll date."
+        f"after rent, essentials and other lenders; due {when} the expected payroll date."
     )
 
 

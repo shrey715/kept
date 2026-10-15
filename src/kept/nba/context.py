@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,6 +39,8 @@ class CaseRow:
     cease_contact_flag: bool = False
     insolvency_hold_flag: bool = False
     deceased_hold_flag: bool = False
+    hardship_plan_start: date | None = None
+    hardship_plan_end: date | None = None
 
 
 def duckdb_case_reader(
@@ -51,12 +53,13 @@ def duckdb_case_reader(
         with conn.cursor() if conn is not None else duckdb.connect(str(path), read_only=True) as c:
             row = c.execute(
                 "select case_id, total_overdue, contact_cap_7d, nba_recommendation_last, cease_contact_flag,"
-                " insolvency_hold_flag, deceased_hold_flag from silver.collections_cases where case_id = ?",
+                " insolvency_hold_flag, deceased_hold_flag, hardship_plan_start, hardship_plan_end"
+                " from silver.collections_cases where case_id = ?",
                 [case_id],
             ).fetchone()
         if row is None:
             raise KeyError(case_id)
-        cid, overdue, cap, legacy, cease, insolvency, deceased = row
+        cid, overdue, cap, legacy, cease, insolvency, deceased, plan_start, plan_end = row
         return CaseRow(
             case_id=cid,
             total_overdue=Decimal(str(overdue or 0)).quantize(CENT),
@@ -65,6 +68,8 @@ def duckdb_case_reader(
             cease_contact_flag=bool(cease),
             insolvency_hold_flag=bool(insolvency),
             deceased_hold_flag=bool(deceased),
+            hardship_plan_start=plan_start,
+            hardship_plan_end=plan_end,
         )
 
     return read
@@ -152,6 +157,7 @@ class KeptContextBuilder:
         hardship = max(hardship, text_status, key=_RANK.index)  # text raises gold, never lowers it
 
         cap = case.contact_cap_7d if case.contact_cap_7d is not None else CONTACT_CAP_7D
+        today = now.astimezone(ZoneInfo(customer.time_zone)).date() if customer.time_zone else now.date()
         window = {}
         if customer.permitted_call_start_local and customer.permitted_call_end_local:
             window = {
@@ -174,12 +180,12 @@ class KeptContextBuilder:
             vulnerable=customer.vulnerability_flag,
             balance_at_risk=case.total_overdue,
             expected_next_payroll_date=next_payday(
-                customer.expected_next_payroll_date,
-                customer.payroll_frequency_detected,
-                today=now.astimezone(ZoneInfo(customer.time_zone)).date()
-                if customer.time_zone
-                else now.date(),
+                customer.expected_next_payroll_date, customer.payroll_frequency_detected, today=today
             ),
+            hardship_plan_until=case.hardship_plan_end
+            if case.hardship_plan_start and case.hardship_plan_end
+            and case.hardship_plan_start <= today <= case.hardship_plan_end
+            else None,
             payroll_frequency=customer.payroll_frequency_detected,
             estimated_monthly_spare_cash=fv.estimated_monthly_spare_cash,
             in_holdout=in_holdout(customer.golden_customer_id, salt=self._salt, share=HOLDOUT_SHARE),

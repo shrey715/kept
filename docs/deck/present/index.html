@@ -108,7 +108,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <div class="stagger">
       <div class="eyebrow">Team Sharpe Shooters · CIBC Collections Hackathon</div>
       <h1>Promises<br>customers<br><span style="color:var(--maple)">can keep.</span></h1>
-      <p class="lede">One guarded next best action for collections: dated after payday, sized to spare cash, explained, and released by a person. Built on local models only.</p>
+      <p class="lede">One guarded next best action for collections: due on payday, sized to spare cash, explained, and released by a person. Built on local models only.</p>
     </div>
     <svg class="draw" viewBox="0 0 420 360" style="width:100%;max-height:62vh">
       <g fill="none" stroke="#e9e3da" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".85">
@@ -140,7 +140,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <div class="card"><div class="big">96,000</div><p class="muted small" style="margin-top:8px">open cases tonight</p></div>
     <div class="card"><div class="big">$68.7M</div><p class="muted small" style="margin-top:8px">balance at risk</p></div>
     <div class="card"><div class="big">5 → 1</div><p class="muted small" style="margin-top:8px">systems, keys and views of one person</p></div>
-    <div class="card hot"><div class="big">+6.1 pts</div><p class="muted small" style="margin-top:8px">promised money paid when due just after payday (95% CI 2.8–10.6)</p></div>
+    <div class="card hot"><div class="big">+6.1 pts</div><p class="muted small" style="margin-top:8px">promised money paid when due within two days of payday (95% CI 2.8–10.6)</p></div>
   </div>
   <div class="grid stagger" style="grid-template-columns:repeat(3,1fr);margin-top:14px">
     <div class="card"><h3>Promises dated by the calendar</h3><p class="muted small">A promise that falls due before payday breaks. The bank's own data says timing moves payment.</p></div>
@@ -322,7 +322,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
   <h2>Hypothesis, offline evidence, a gate, then ship or reject.</h2>
   <table style="margin-top:3vh">
     <tr><th>Decision</th><th>Alternative</th><th>Evidence that decided it</th><th>Outcome</th></tr>
-    <tr><td><b>Date promises after payday</b></td><td>more contacts, more channels</td><td class="small">bank's A/B: strategies overlap; payday timing +6.1 pts</td><td><span class="pill ok">core idea</span></td></tr>
+    <tr><td><b>Date promises to payday</b></td><td>more contacts, more channels</td><td class="small">bank's A/B: strategies overlap; payday timing +6.1 pts</td><td><span class="pill ok">core idea</span></td></tr>
     <tr><td><b>DuckDB + dbt + Feast</b></td><td>Spark, Postgres</td><td class="small">one machine, columnar speed, point-in-time joins we can test</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td><b>Splink matching</b></td><td>exact keys only</td><td class="small">99% of 200 injected duplicates found, 0 wrong merges</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td><b>Certified metrics first</b></td><td>model-written SQL for all</td><td class="small">reviewed SQL answers most questions; the model only drafts lookups, voted 3 ways</td><td><span class="pill ok">shipped</span></td></tr>
@@ -359,7 +359,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <div class="card" style="background:#fbf7ef;box-shadow:0 30px 60px -30px rgba(0,0,0,.35)">
       <div class="mono small muted">CASE CS-2026-118204 · G-910001</div>
       <div class="mid" style="margin:8px 0">Call, Tue 18:00–20:00</div>
-      <p class="small">$140 a month × 3 · due the day after payday · inside about $160 of spare cash</p>
+      <p class="small">$140 a month × 3 · due on payday · inside about $160 of spare cash</p>
       <div style="margin-top:14px;display:grid;gap:8px" class="small">
         <div>✓ Pay lands in 3 days <span class="muted">+9.0 pts</span></div>
         <div>✓ Pay down 27% on the 3-month average <span class="muted">+6.0</span></div>
@@ -439,7 +439,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <div class="card"><h3>A randomised due-date cell</h3><p class="small muted">Turns the payday estimate into a trial. Primary metric: promised money paid; guards: complaints, caps, hours, fairness.</p></div>
     <div class="card hot"><h3>Decision rule</h3><p class="small">Stop for harm if any guard worsens beyond its 95% interval; scale if promised money paid beats the hold-out two months running.</p></div>
   </div>
-  <p class="mid" style="margin-top:7vh;max-width:30ch">Jane's promise lands the day after payday, inside what she can spare, and her hardship was heard the first time she said it.</p>
+  <p class="mid" style="margin-top:7vh;max-width:30ch">Jane's promise falls due on her payday, inside what she can spare, and her hardship was heard the first time she said it.</p>
   <div class="foot"><span><b>Kept</b> · github.com/shrey715/kept</span><span>17</span></div>
   <aside>Close on Jane, then stop. Questions go to the appendix slides in the PDF deck (roles, benchmarks, tuning, drift and fairness).</aside>
 </section>

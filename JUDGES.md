@@ -25,7 +25,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 
 | Claim | Where it's shown | Reproduce |
 |---|---|---|
-| Dating a promise to just after payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases | [`docs/reports/evidence.md`](docs/reports/evidence.md) §2 | `uv run python scripts/evidence_report.py` |
+| Dating a promise to payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases | [`docs/reports/evidence.md`](docs/reports/evidence.md) §2 | `uv run python scripts/evidence_report.py` |
 | It is the payday: due on payday vs 1–3 days either side **+7.7 to +8.3 pts** kept; the same customer on vs off payday **+4.0** (CI 1.1–7.4); fake paydays show nothing | evidence §2a | same |
 | The bank's own A/B cells can't tell its strategies apart | evidence §1 | same |
 | Kept's contact policy, off-policy: **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** on the same decisions | evidence §4 | same |
