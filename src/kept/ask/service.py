@@ -75,6 +75,12 @@ _CALL_SUMMARY = re.compile(
     r"\b(?:summari[sz]e|summary of)\b.*?\b(?:most recent|latest|last)\b.*?\bcall\b.*?\bcase\s+(CS?-\d[\w-]*)",
     re.I | re.S,
 )
+# Evaluation only (decision B5): the Ask with its steps switched off, each setting adding to the one before.
+# plain: one SQL prompt with the schema, guarded, run and narrated; route: + the scope classifier, the router,
+# certified metrics, policy search and call summaries; templates: + the reviewed templates, date hints, worked
+# examples and the intent checks; drafts: + three drafts and a vote; lint: + the linter and one repair round;
+# live: + escalation to five drafts and the judge. The product always runs "live" (KEPT_ASK_ABLATION unset).
+ABLATIONS = ("plain", "route", "templates", "drafts", "lint", "live")
 _FALLBACK = "The result is in the table below."  # no numbers, so always grounded
 _ROW_CAP = 50  # rows sent to the narrator
 
@@ -320,7 +326,9 @@ class CollectionsAsk:
         policy_index: PolicyIndex | None,
         audit_log: AuditLog,
         summarise_call: Callable[..., Any] | None = None,
+        ablation: str = "live",
     ) -> None:
+        self._level = ABLATIONS.index(ablation)  # an unknown setting raises ValueError
         self._summarise_call = summarise_call
         self._conn, self._contract, self._llm, self._redactor = conn, contract, llm, redactor
         self._classifier, self._metrics, self._queries = classifier, metrics, certified_queries
@@ -331,6 +339,10 @@ class CollectionsAsk:
         self._allowed = frozenset(t.lower() for t in contract.ask_allowed_tables)
         self._graph = build_graph(self)  # kept.ask.graph: the pipeline below as LangGraph nodes and edges
         self._blocked = frozenset(c.lower() for c in contract.ask_blocked_columns())
+
+    def _on(self, step: str) -> bool:
+        """Whether a pipeline step runs (always, outside the B5 ablation)."""
+        return self._level >= ABLATIONS.index(step)
 
     # ------------------------------------------------------------------ public
     def ask(self, request: AskRequest) -> AskResponse:
@@ -365,14 +377,16 @@ class CollectionsAsk:
         answers the question (a refusal costs the user as much as a wrong answer, and the pick is traced)."""
         policy = self._sql_policy()
         schema = self._schema_doc(policy, as_of)
-        spec = schema + date_hints(question.text, as_of) + examples(question.text)
-        guards, ran = self._drafts(request, question, intent, spec, schema, policy, as_of, SQL_CANDIDATES)
+        spec = schema + (
+            date_hints(question.text, as_of) + examples(question.text) if self._on("templates") else ""
+        )
+        votes = SQL_CANDIDATES if self._on("drafts") else 1
+        guards, ran = self._drafts(request, question, intent, spec, schema, policy, as_of, votes)
         if guards and not any(g.allowed for g in guards):
             return _refuse(RefusalReason.SQL_GUARD, guards[0].reason or "The query is not allowed.")
-        votes = SQL_CANDIDATES
         winner = majority_result([r[1] if r else None for r in ran] + [None] * (votes - len(ran)))
         how = f"{votes} SQL drafts, majority result kept"
-        if winner is None:
+        if winner is None and self._on("live"):
             more_g, more_r = self._drafts(request, question, intent, spec, schema, policy, as_of, SQL_EXTRA)
             guards, ran, votes = guards + more_g, ran + more_r, votes + SQL_EXTRA
             winner = majority_result([r[1] if r else None for r in ran] + [None] * (votes - len(ran)))
@@ -407,6 +421,8 @@ class CollectionsAsk:
         results = [self._try(g) if g.allowed else (None, None) for g in guards]
         ran = [r for r, _ in results]
         for i, (r, error) in enumerate(results):
+            if not self._on("lint"):
+                break
             if r is not None and (issues := lint_sql(question.text, guards[i].sql, dates)):
                 error = "it ran, but it doesn't follow the conventions: " + " ".join(issues)
             if error and (
@@ -740,6 +756,8 @@ def build_ask(
     from kept.common.llm import LiteLLMGateway
     from kept.contracts.data_contract import load_data_contract
 
+    ablation = os.environ.get("KEPT_ASK_ABLATION", "live")  # evaluation only (B5): bench runs set it
+    templates = TEMPLATES if ABLATIONS.index(ablation) >= ABLATIONS.index("templates") else {}
     llm = llm or LiteLLMGateway(
         model=os.environ.get("KEPT_ASK_LLM_MODEL", "llamacpp/qwen3.8-27b"),  # local models only
         audit_log=audit_log,
@@ -760,8 +778,9 @@ def build_ask(
         llm=llm,
         redactor=redactor,
         classifier=make_classifier(llm, redactor, actor_id="system:ask-scope"),
-        metrics=metrics | {k: d for k, (d, _) in TEMPLATES.items()},
-        certified_queries=CERTIFIED_QUERIES | {k: q for k, (_, q) in TEMPLATES.items()},
+        metrics=metrics | {k: d for k, (d, _) in templates.items()},
+        certified_queries=CERTIFIED_QUERIES | {k: q for k, (_, q) in templates.items()},
         policy_index=PolicyIndex(index_dir, local_embedder()) if index_dir.exists() else None,
         audit_log=audit_log,
+        ablation=ablation,
     )
