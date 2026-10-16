@@ -88,17 +88,17 @@
 
 \begin{frame}
   \kicker{Architecture}\frametitle{A small stack that maps onto a bank's}
-  \source{README.md, pyproject.toml, web/package.json}
-  \footnotesize
-  \begin{tabular}{@{}L{3.0cm}L{5.6cm}L{4.6cm}@{}}
+  \source{README.md, pyproject.toml, docs/reports/decisions.md}
+  \footnotesize\renewcommand{\arraystretch}{1.05}
+  \begin{tabular}{@{}L{2.3cm}L{7.7cm}L{3.1cm}@{}}
     \toprule
     \textbf{Piece} & \textbf{Here} & \textbf{At the bank} \\ \midrule
-    Warehouse & DuckDB file, dbt silver/gold, Feast online store & the bank's lakehouse; dbt models carry over \\
-    Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify} & WORM storage, same chain \\
-    Models & LightGBM uplift + promise, MLflow, champion/challenger gate & model risk management sign-off \\
-    Local language models & Qwen3.8-27B on llama.cpp, Whisper, bge-m3 on one machine & an on-prem inference cluster \\
-    The Ask's model & the same local Qwen3.8-27B: no hosted API, no keys & the bank's approved model \\
-    API and app & FastAPI; Next.js workspace; personas & SSO, the bank's design system \\
+    Warehouse & DuckDB file, dbt silver/gold, Feast online store; 20x–40x today's data on 4 GB, never failed & the bank's lakehouse; dbt models carry over \\
+    Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify}; audit page 7.9 s $\to$ 0.04 s & WORM storage, same chain \\
+    Models & LightGBM uplift + promise, MLflow, gate; uplift Qini \KdecBtenT\ vs \KdecBtenResponse\ for a response model; promise AUC \KwideAuc\ vs \KdecBnineSix & model risk management sign-off \\
+    Local language models & Qwen3.8-27B on llama.cpp, Whisper, bge-m3; SetFit reads 760,594 notes in \KdecBsevenSetfitSec\ s, the LLM would take \KdecBsevenLlmDays\ days & an on-prem inference cluster \\
+    The Ask's model & the same local Qwen3.8-27B, no hosted API or keys; \KdecBfiveLive\ of \KdecBfiveOf\ right in the pipeline, \KdecBfivePlain\ with one prompt & the bank's approved model \\
+    API and app & FastAPI; Next.js workspace; personas; portfolio overview \textasciitilde40 ms & SSO, the bank's design system \\
     \bottomrule
   \end{tabular}\\[0.7em]
   {\scriptsize Speed: 96,000 cards in \textasciitilde85 s; portfolio overview \textasciitilde40 ms; audit page 7.9 s $\to$ 0.04 s after moving filters into SQL. 1,322 tests; every change through CI.}
@@ -239,17 +239,19 @@
 
 \begin{frame}
   \kicker{Decisions, and the alternative we rejected}\frametitle{Why it's built this way}
-  \source{docs/reports/evidence.md, extraction\_gate.md; the portfolio's A/B panel}
-  \scriptsize
-  \begin{tabular}{@{}L{3.3cm}L{4.0cm}L{6.0cm}@{}}
+  \source{docs/reports/decisions.md}
+  \scriptsize\renewcommand{\arraystretch}{1.08}
+  \begin{tabular}{@{}L{2.9cm}L{2.9cm}L{7.3cm}@{}}
     \toprule
     \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
-    Uplift per action & a propensity-to-pay score & propensity contacts people who'd pay anyway; uplift finds who a contact changes \\
+    Uplift per action & a propensity-to-pay score & top 30\%: \KdecBtenTopT\ extra payers per 1,000 against \KdecBtenTopResp\ (difference \KdecBtenDiff); the score picks people who pay anyway (\KdecBtenAloneResp\ against \KdecBtenAloneT) \\
     Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts \\
-    Local models for everything & a hosted model & customer words never leave the bank; no per-call cost; no quota or outage mid-demo \\
-    Certified metrics first & free-form SQL from a model & reviewed definitions answer most questions with no model-written SQL \\
-    A graph with checks (LangGraph) & one prompt & each step is testable, traced, and fixable without retuning a prompt \\
-    Two people for Red & one approver or the model & hardship decisions are never one person's or a model's \\
+    Local models for everything & a hosted model & not cost (Haiku 5.5: USD \KdecBfourHaiku\ a year, ours \KdecBfourLocal); customer data stays inside (OSFI B-10, E-23, PIPEDA, Law 25) \\
+    Certified metrics first & free-form SQL from a model & router and certified metrics: \KdecBfivePlain\ to \KdecBfiveRoute\ right of \KdecBfiveOf\ (\KdecBfivePlainPct\ to \KdecBfiveRoutePct) \\
+    A graph with checks (LangGraph) & one prompt & \KdecBfiveLive\ against \KdecBfivePlain\ right; drafts, vote and judge add only \KdecBfiveGainDrafts: insurance \\
+    Two people for Red & one approver or the model & rule recall \KdecCtwoRule, model \KdecCtwoModel\ at the same flag rate: a third is missed, so a person decides \\
+    SetFit for note history & the LLM on every note & hardship F1 \KdecBsevenSetfit\ vs \KdecBsevenLlm; \KdecBsevenSetfitSec\ s for all notes vs about \KdecBsevenLlmDays\ days \\
+    Hybrid policy search (open) & dense only & dense MRR \KdecBsixDense\ vs \KdecBsixHybrid\ for hybrid (French \KdecBsixDenseFr\ vs \KdecBsixHybridFr); hybrid still live \\
     Schema-constrained decoding & parse-and-retry & malformed replies 152 $\to$ 0 of 1,172 calls \\
     Qwen3.8-27B on llama.cpp & Gemma 3 12B on Ollama & Ollama ran a 4k window under a 9k prompt; released 18 $\to$ \KReleased{} \\
     \bottomrule
@@ -351,7 +353,7 @@
 \begin{frame}
   \kicker{Is it real?}\frametitle{Every claim, its test, its 95\% interval}
   \source{evidence.md §2, §2a, §4, §8, §9; business\_case.pdf}
-  \scriptsize\renewcommand{\arraystretch}{1.12}
+  \scriptsize\renewcommand{\arraystretch}{1.08}
   \begin{tabular}{@{}L{4.1cm}L{3.4cm}L{4.1cm}l@{}}
     \toprule
     \textbf{Claim} & \textbf{Test} & \textbf{Result [95\% CI]} & \\ \midrule
@@ -530,6 +532,52 @@
         Each is reviewed: small groups, or explained by recorded hardship. Protected attributes are never model inputs, and scrambling them changes \KinvarianceDiffer\ of \KinvarianceCards\ cards.}
     \end{column}
   \end{columns}
+\end{frame}
+
+\begin{frame}
+  \kicker{Appendix}\frametitle{Backend: one machine to 40x}
+  \source{docs/reports/decisions.md A1 to A3}
+  \footnotesize
+  \begin{tabular}{@{}L{3.2cm}L{2.0cm}L{2.4cm}L{2.6cm}L{2.0cm}@{}}
+    \toprule
+    \textbf{Median, same machine} & \textbf{DuckDB} & \textbf{Polars} & \textbf{PostgreSQL} & \textbf{PySpark} \\ \midrule
+    \KdecAoneRows
+    \bottomrule
+  \end{tabular}\\[0.4em]
+  {\scriptsize 8 GB memory cap; DuckDB limited to 4 GB and spilling to disk. DuckDB reached \KdecAoneMaxScale x on \texttt{roll\_rate} (\KdecAoneRollForty\ s) and extrapolates to about \KdecAoneLimitScale x before the 24 GB limit.}
+  \vspace{0.6em}
+  \begin{columns}[T]
+    \begin{column}{0.46\textwidth}\kcard{\cardtitle{Nightly batch, not hourly}Re-scoring every hour changes \KdecAtwoShare\ of cards by the end of a day (\KdecAtwoCards\ of \KdecAtwoOpen); \KdecAtwoUncovered\ of cards change with no new note, which the live-note path does not cover.}\end{column}
+    \begin{column}{0.46\textwidth}\kcard{\cardtitle{One feature definition}A rewrite with the wrong clock differs on \KdecAthreeClock\ of \KdecAthreeCells\ cells, a wrong time zone on \KdecAthreeZone; the control on \KdecAthreeControl. \texttt{kept parity} stops both; the clock bug would change \KdecAthreeActions\ cards.}\end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}
+  \kicker{Appendix}\frametitle{The Ask: the router and certified metrics carry the gain}
+  \source{docs/reports/decisions.md B5; data/exports/reports/decision\_B5.json}
+  \centering
+  \includegraphics[width=0.78\textwidth]{../reports/figures/dec_B5.png}\\[0.4em]
+  {\scriptsize Same model, \KdecBfiveOf\ graded questions. Router and certified metrics: \KdecBfivePlainPct\ to \KdecBfiveRoutePct, wrong-but-confident answers \KdecBfiveConfPlain\ to \KdecBfiveConfRoute. Templates add 4; drafts, vote, linter and judge add \KdecBfiveGainDrafts.}
+\end{frame}
+
+\begin{frame}
+  \kicker{Appendix}\frametitle{Three model choices, measured}
+  \source{docs/reports/decisions.md B7, B9, B10}
+  \scriptsize
+  \begin{tabular}{@{}L{3.6cm}L{2.8cm}L{2.0cm}L{4.0cm}@{}}
+    \toprule
+    \textbf{Choice} & \textbf{Option} & \textbf{Score} & \textbf{Also} \\ \midrule
+    Reading hardship in notes (B7): F1; hours for 760,594 notes & Keyword rules & \KdecBsevenRules & recall \KdecBsevenRulesRecall; \KdecBsevenRulesHours\ h \\
+    & SetFit (GPU) & \KdecBsevenSetfit & recall \KdecBsevenSetfitRecall; \KdecBsevenSetfitHours\ h \\
+    & LLM & \KdecBsevenLlm & recall \KdecBsevenLlmRecall; \KdecBsevenLlmHours\ h (extrapolated) \\ \midrule
+    Ranking contacts (B10): Qini in noise units; extra payers per 1,000 in the top 30\% & Response model & \KdecBtenResponse & \KdecBtenTopResp\ per 1,000 \\
+    & T-learner (live) & \KdecBtenT & \KdecBtenTopT\ per 1,000 \\
+    & S-learner & \KdecBtenS & \KdecBtenTopS\ per 1,000 (open: pilot decides) \\
+    & Causal forest & \KdecBtenForest & \KdecBtenTopForest\ per 1,000 \\ \midrule
+    Promise model (B9): AUC & Six features & \KdecBnineSix & easy to explain \\
+    & Wide model & \KwideAuc & the bank's score: \KdecBnineBank \\
+    \bottomrule
+  \end{tabular}
 \end{frame}
 
 \end{document}

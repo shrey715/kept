@@ -25,7 +25,7 @@ days of payday, 95% CI 2.8–10.6), §2a (the peak is payday itself).
 extraction F1, uplift Qini. A layer can be replaced without touching the others.
 
 ## 4 · Architecture
-**Say:** a small stack that maps onto a bank's: lakehouse, WORM storage, model risk sign-off, on-prem inference.
+**Say:** a small stack that maps onto a bank's: lakehouse, WORM storage, model risk sign-off, on-prem inference. Every row carries a number we measured: DuckDB ran every workload to 20x to 40x today's data on 4 GB and never failed; uplift Qini 7.9 against 3.2 for a response model; SetFit reads all 760,594 notes in 63 s where the LLM would need about 29 days; the full Ask pipeline gets 86 of 93 right against 36 for one prompt.
 **If asked "does it scale?":** 96,000 cards in about 85 s on one machine; the slow page we found (audit, 7.9 s) went to
 0.04 s by moving filters into SQL.
 
@@ -54,9 +54,8 @@ read as "open"), a deterministic check fixes it without retuning a prompt. Score
 **How do you know?** `data/exports/reports/model_card.json`, from `scripts/model_card.py`, on promises the model never saw.
 
 ## 10 · Decisions
-**Say:** each choice with the alternative we rejected and why.
-**If asked "why local models only?":** customer words never leave the machine, there's no per-call cost, and a quota
-can't stop a demo or a collector mid-shift.
+**Say:** each choice, the alternative we rejected, and the measured number that decided it. Uplift finds 122 extra payers per 1,000 contacts in the top 30% against 81 for a propensity score. Local models are not cheaper: hosted Haiku 5.5 would cost less than our two GPUs, so the reason is privacy and regulation. Certified metrics and the router take the Ask from 36 to 81 of 93 right; the drafts and judge add one, and we call them insurance. Two rows are open: hybrid policy search loses to dense-only (MRR 0.640 against 0.747), and we have not switched yet.
+**If asked "why local models only?":** customer words never leave the machine, which is what OSFI B-10 and E-23, PIPEDA and Quebec Law 25 ask of a third party; a quota can't stop a demo or a collector mid-shift (the free tier covers 500 requests a day, one night is 1,647 extractions). Not cost: `docs/reports/decisions.md` §B4.
 **If asked "why Qwen3.8-27B, and why llama.cpp?":** we measured. The 12B model kept missing conventions; tracing showed
 Ollama ran a 4k window under a 9k-token prompt. llama.cpp sets the window explicitly and runs two requests at once;
 Qwen3.8-27B (Aug 2026, Apache 2.0) is the strongest open model that fits 16 GB at 3-bit, about 51 tokens a second.
@@ -126,3 +125,6 @@ randomised due-date cell; a decision rule that ends it either way.
 - **Benchmarks:** the three suites on the local model, and what counts as right.
 - **Tuning:** the champion against the tuned challenger on held-out decisions.
 - **Drift and fairness:** the largest PSIs and the three flags, each reviewed.
+- **Backend:** **Say:** DuckDB ran `roll_rate` to 40x today's data in 62 s on 4 GB; Polars ran out of memory at 10x, Postgres needs about 33 GB of disk, Spark is four times slower at 10x. Re-scoring hourly would change 3.1% of cards in a day; one feature definition and `kept parity` catch a wrong clock (1,325 of 56,000 cells) that the control never shows. `decisions.md` §A1 to A3.
+- **Ask ablation:** **Say:** same model, one step added at a time. The router and certified metrics take 38.7% to 87.1%; reviewed templates add four answers; drafts, vote, linter and judge add one in 93, so we call them insurance. `decisions.md` §B5.
+- **Model choices:** **Say:** SetFit matches the LLM on hardship (F1 0.87 against 0.88) in 63 s instead of about 29 days; uplift ranking beats a response model on Qini (7.9 against 3.2), and the S-learner scored higher still, so a pilot decides; the wide promise model ranks better (AUC 0.697 against 0.625) and matches the bank's 0.702. `decisions.md` §B7, B9, B10.
