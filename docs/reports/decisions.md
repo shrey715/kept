@@ -38,7 +38,7 @@ the scripts named in each section.
 | Extraction: the LLM for live notes, SetFit for the history | Keyword rules; SetFit alone | Hardship F1 0.88 (LLM), 0.87 (SetFit), 0.63 (rules, recall 0.75 against the 0.90 gate) ([§B7](#b7-extraction-keyword-rules-setfit-or-the-llm)) | Tunstall et al. 2022 | 16 Oct, #214 | kept |
 | Hardship by a cash-flow rule, not a model | LightGBM with and without EI | Recall 0.652 for the rule against 0.672 to 0.678 at the same flag rate, no precision gain ([§C2](#c2-hardship-rules-not-a-model)) | OSFI E-23; 29 CFR 1607.4(D) | 16 Oct, #214 | kept |
 | Fairness: protected attributes and proxies | Scramble the protected list; protected plus proxies | 0 of 96,000 cards change on the protected list; 299 change with proxies, all from `ei_deposit_flag` ([§C3](#c3-fairness-with-and-without-the-stand-in-features); `fairness_report`, #200) | OSFI E-23; 29 CFR 1607.4(D) | 15 Oct #200; 16 Oct, #214 | kept |
-| Scoring on one machine: DuckDB, dbt, Feast | Spark or Snowflake, Redis, Kafka | 96,000 cards scored in about 85 s (deck "A small stack"); [§A1](#a1-warehouse-engine-and-scale-headroom) in progress | none cited | | kept |
+| Scoring on one machine: DuckDB, dbt, Feast | Spark or Snowflake, Redis, Kafka | DuckDB ran every workload to 20x-40x of today's data inside 4 GB (spilling, never failing); `roll_rate` at 10x: DuckDB 9.8 s, PySpark 38.9 s, Polars out of memory at 8 GB, PostgreSQL needs about 33 GB of disk; porting after sqlglot: 2 to 8 hand-changed lines per model ([§A1](#a1-warehouse-engine-and-scale-headroom)); 96,000 cards scored in about 85 s | Raasveldt and Mühleisen, SIGMOD 2019; DuckDB db-benchmark (2023) | design; tested 16 Oct, #214 | kept: one machine to about 40x; Splink, not DuckDB, sets the nightly ceiling |
 | Quantization of the model | not yet defined | [§B2](#b2-quantization) not started | none cited | | open |
 | Which model for each task | not yet defined | [§B1](#b1-llm-bake-off-on-our-three-tasks) in progress | none cited | | open |
 
@@ -46,7 +46,74 @@ the scripts named in each section.
 
 ### A1. Warehouse engine and scale headroom
 
-_Measurement in progress._
+**Question.** Is DuckDB with dbt on one machine the right engine for this portfolio, and at what size does it stop being enough?
+
+**Alternatives.** Polars (in-process), PostgreSQL 16 (server, in a 3 GB container), PySpark 4.2 in local mode (what the bank's lakehouse runs). Snowflake and Databricks appear as literature only.
+
+**Setup.** Three workloads that exist in the repo, read from Parquet exported once from `eval_copy.duckdb` (read-only): (1) the silver build of `contact_history` (2.69M rows, 131 columns, 130 casts); (2) the `roll_rate` certified query from `src/kept/ask/certified.py` (window functions over 12.6M monthly snapshot rows); (3) the history half of `dbt/models/features/account_features.sql` (dpd, 30+ dpd count, cash-flow and utilisation trends; the payroll half was not ported). Scale copies repeat each table with its ids suffixed `_k`, so joins still match. Same machine for all (24 cores, 30 GB shared). Every run is a separate process in a systemd scope with MemoryMax=8G and no swap; DuckDB memory_limit 4 GB and 4 threads; Spark `local[4]`, 4 GB driver (JDK 25 already installed); Postgres 3 GB container, shared_buffers 512 MB, fsync off. Wall time is the job only (not start-up; for Postgres not the load, reported separately), median of 3 runs; a run above 300 s is measured once. Peak RSS is the sum over the process tree sampled every 0.2 s (Postgres: container memory from `docker stats`). Output of every engine was checked against DuckDB's (exact counts, rates within 2e-5): all agree after the ports below. Scale copies were limited by a 25 GB scratch cap.
+
+**Result.** Median seconds / peak RSS in GB (silver build also shows output size in GB).
+
+Silver contact_history build:
+
+| scale | DuckDB | Polars | PostgreSQL | PySpark |
+|---|---|---|---|---|
+| 1x | 11.4 / 3.3 ; out 0.50 | 2.4 / 6.5 ; out 0.14 | 9.5 / 1.5 ; out 1.66 | 10.7 / 2.5 ; out 0.19 |
+| 5x | 52.3 / 4.1 ; out 2.14 | **OOM** at 8.0 GB | 45.9 / 1.1 ; out 8.30 | 61.9 / 3.5 ; out 0.97 |
+| 10x | 94.3 / 4.6 ; out 3.57 | **OOM** at 8.1 GB | skipped (disk) | 96.2 / 3.6 ; out 1.95 |
+| 20x | 174.8 / 4.5 ; out 6.45 | - | - | - |
+
+roll_rate query:
+
+| scale | DuckDB | Polars | PostgreSQL | PySpark |
+|---|---|---|---|---|
+| 1x | 0.9 / 0.9 | 0.5 / 1.5 | 10.4 / 1.3 | 5.3 / 3.1 |
+| 5x | 4.2 / 3.9 | 2.6 / 5.1 | 53.8 / 3.2 | 22.2 / 4.8 |
+| 10x | 9.8 / 4.3 | **OOM** at 8.2 GB | skipped (disk) | 38.9 / 4.9 |
+| 20x | 27.7 / 4.3 | - | - | - |
+| 40x | 61.7 / 4.6 | - | - | - |
+
+Account-history features:
+
+| scale | DuckDB | Polars | PostgreSQL | PySpark |
+|---|---|---|---|---|
+| 1x | 0.3 / 0.7 | 0.3 / 1.3 | 6.3 / 1.0 | 4.4 / 3.6 |
+| 5x | 1.6 / 2.9 | 1.5 / 5.4 | 36.2 / 2.1 | 11.2 / 5.0 |
+| 10x | 4.4 / 4.3 | 2.9 / 7.7 | 80.4 / 1.9 | 19.8 / 5.1 |
+| 20x | 13.7 / 4.2 | - | - | - |
+| 40x | 38.8 / 4.2 | - | - | - |
+
+Porting effort (lines written or changed by hand after `sqlglot` transpiled the DuckDB SQL; `duckdb`=0):
+
+| workload | SQL lines | PostgreSQL | PySpark SQL | Polars (rewrite, code lines) |
+|---|---|---|---|---|
+| silver contact_history | 136 | 8 | 3 | 33 |
+| roll_rate | 15 | 4 | 4 | 24 |
+| account-history features | 57 | 4 | 2 | 46 |
+
+Manual lines for Postgres/Spark: the Python UDF `kept_date` (2 lines, plain cast in every engine here), DuckDB's `select * exclude/replace` (1 line), `TRY_CAST` (Postgres has none: five guarded helper functions), `try_strptime` and `list_extract`, `arg_max`, `ANY_VALUE ... IGNORE NULLS` and `round(double, 9)`. Two traps in the transpile itself: sqlglot turns DuckDB `date_diff('month', ...)` (boundaries crossed) into whole months for Postgres (`AGE`) and Spark (`DATEDIFF`); 31 Jan to 30 Apr then counts 2, not 3, and Postgres returned 30% fewer rows until patched by hand. Polars has no SQL path here, so the three workloads were rewritten in its expression API (counts above are non-blank lines); Polars `sum` of an empty filter gives 0 where SQL gives NULL, which needed a guard.
+
+Disk: Postgres loaded the 0.17 GB snapshot Parquet as a 3.26 GB table (1x), 16.3 GB at 5x; 10x would need about 32.6 GB, above the scratch cap, so Postgres 10x on `roll_rate` was skipped (and on the silver build: 1.82 + 1.66 GB at 1x, 9.11 + 8.30 GB at 5x, about 35 GB at 10x). Postgres load times: 25 s (1x) and 125 s (5x) for the snapshot table. Polars hit the 8 GB cap: the silver build already used 6.5 GB at 1x and was killed at 5x and 10x, and `roll_rate` was killed at 10x (the cap is the rule, it was not raised).
+
+Where DuckDB stops (all from `decision_A1.json`):
+- **Measured.** DuckDB ran every workload to the largest size tried (40x on `roll_rate` and account-history, 20x on the silver build; input 6.8 GB of Parquet at 40x) inside 4 GB of memory, spilling to disk. Time grew with exponent about 1.15 on `roll_rate` (20x to 40x), 1.5 on account-history, 0.9 on the silver build. It never failed.
+- **Memory (extrapolated).** Working set = 4 GB limit + bytes spilled. Measured at 10x, 20x, 40x: 6.4, 11.4, 22.6 GB on `roll_rate` (6.1, 11.0, 22.3 on account-history), a line of about 0.57 GB per 1x. On a 30 GB machine DuckDB's default limit is 80%, 24 GB, which that line reaches at about 42x. Past that DuckDB spills rather than fails; the 4 GB runs above show the cost of spilling is a steeper curve, not a wall.
+- **Time (extrapolated from the last measured step).** One workload alone passes 1 hour at about 600x (silver build), 800x (account-history) and 1,400x (`roll_rate`). The whole nightly run on 3 Oct took 408 s (`nightly_full.log`: silver 96 s, features 29 s, score 81 s, match 63 s); if every stage scaled linearly it would pass 1 hour at about 9x, but the stages that scale linearly are not the DuckDB ones.
+- **First thing that breaks.** Splink on all 3.84M keys already ran out of 30 GB at 1x (known, `NIGHTLY`), and scoring takes 85 s per 96,000 cards, so those, not DuckDB, set the nightly ceiling.
+
+![Wall time by scale for each engine](figures/dec_A1.png)
+
+**Verdict.** Kept. At this portfolio's size one machine is enough and the fastest to build on: DuckDB never ran out of memory and needed no cluster. Polars is faster at 1x (4.7x on the silver build, 1.9x on `roll_rate`) but was killed by the 8 GB cap on the silver build at 5x and on `roll_rate` at 10x; Postgres is 10x to 22x slower on the two queries and needs 3x to 19x the disk; Spark is about 4x slower on the two queries at 10x (5x to 13x at 1x) and ties on the pure cast build, so it pays only past roughly 40x, where the working set no longer fits one machine's RAM. Trade-off: DuckDB's out-of-core path is slower than its in-memory path, and the move to the bank's lakehouse is cheap on the SQL side (2 to 8 lines per model with sqlglot, plus the UDFs) but not free: the date-diff semantics differ silently.
+
+**Outside support.**
+- Raasveldt and Mühleisen, "DuckDB: an embeddable analytical database", SIGMOD 2019 (demo), DOI 10.1145/3299869.3320212: https://duckdb.org/science/duckdb
+- DuckDB Labs, "db-benchmark update", 3 Nov 2023 (H2O.ai db-benchmark; DuckDB fastest on most group-by and join sizes, one of two to finish the 50 GB join): https://duckdb.org/2023/11/03/db-benchmark-update
+- ClickBench (ClickHouse): https://benchmark.clickhouse.com/ ; DuckDB v1.4 LTS results: https://duckdb.org/2025/10/09/benchmark-results-14-lts.html. ClickBench has no Spark or Postgres rows that were verified here.
+- Coiled, TPC-H benchmark of Spark, Dask, DuckDB and Polars: https://tpch.coiled.io
+- dbt adapters: https://docs.getdbt.com/docs/available-adapters (dbt-spark, dbt-databricks, dbt-snowflake); dbt-databricks is built on dbt-spark: https://pypi.org/project/dbt-databricks/
+- Snowflake and Databricks bill by consumption (credits, DBUs) at prices that vary by edition, cloud and region; no accounts were used and no price is quoted here: https://www.snowflake.com/en/pricing-options/ , https://www.databricks.com/product/pricing
+
+**Reproduce.** Needs `polars`, `pyspark`, `psycopg` (the `analysis` extra), a JDK and Docker: `uv run python scripts/decision_A1.py prepare 10`, then `... run 1,5,10 duckdb,polars,postgres,spark roll_rate,account_history,silver_contact_history`, then `... report`. Scratch: `data/a1_scratch/`.
 
 ### A2. Nightly batch plus the live-note path, against hourly re-scoring
 
