@@ -8,6 +8,12 @@ which action, so that comparison is biased. The doubly robust Qini sorts decisio
 AIPW pseudo-outcomes from nuisance models that no candidate uses (one outcome model with the action as an input, one
 propensity model). Candidates are compared on a validation window (15 Jul to 15 Aug, fitted before it); the chosen one
 is then scored once on the test decisions (from 15 Aug), next to the champion and the bank's strategy.
+
+    uv run --extra model --extra analysis python scripts/uplift_learners.py --mode decision   # decision B10
+
+Decision B10 (docs/reports/decisions.md): the same windows and doubly robust Qini, for uplift against a "who will pay"
+response model, an S-learner and a causal forest (econml, the `analysis` extra). Writes
+data/exports/reports/decision_B10.json and docs/reports/figures/dec_B10.png.
 """
 
 from __future__ import annotations
@@ -27,14 +33,14 @@ from kept.contracts.enums import Action
 from kept.contracts.feature_registry import model_inputs
 from kept.nba.legacy import legacy_to_action
 from kept.nba.train import ACTIONS, evaluate, load_rows
-from kept.nba.uplift import TLearnerUplift, _frame
+from kept.nba.uplift import DEFAULT_PARAMS, TLearnerUplift, _frame
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "uplift_learners.md"
 CUTOFF, VALID_FROM = datetime(2026, 8, 15), datetime(2026, 7, 15)
 COLS = list(model_inputs())
 ARMS = ("call", "sms_payment_link", "email")
-NUIS = dict(n_estimators=300, num_leaves=31, min_child_samples=300, learning_rate=0.05, verbose=-1, deterministic=True, force_row_wise=True)
+NUIS = dict(n_jobs=4, n_estimators=300, num_leaves=31, min_child_samples=300, learning_rate=0.05, verbose=-1, deterministic=True, force_row_wise=True)
 REG = dict(n_estimators=300, num_leaves=15, min_child_samples=300, learning_rate=0.03, reg_lambda=5.0, colsample_bytree=0.8, verbose=-1, deterministic=True, force_row_wise=True)
 VARIANTS = {"DR-learner": {}, "DR-learner, more regularised": dict(num_leaves=7, min_child_samples=1000, reg_lambda=20.0)}
 
@@ -77,23 +83,91 @@ class MetaLearner:
         return pd.DataFrame(out, index=features.index)[[a.value for a in ACTIONS]]
 
 
+class ResponseModel:
+    """What a propensity-to-pay score does: one LightGBM (the live tree settings) for paid_14d on contacted decisions.
+    Every arm is ranked by that chance of paying, so `uplift` returns the same score in every column."""
+
+    def fit(self, df: pd.DataFrame) -> ResponseModel:
+        c = df[df.action != "wait"]
+        self.m = LGBMClassifier(**DEFAULT_PARAMS, random_state=0).fit(_frame(c[COLS]), c.paid_14d.astype(int))
+        return self
+
+    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
+        p = self.m.predict_proba(_frame(features[COLS]))[:, 1]
+        return pd.DataFrame({a.value: p for a in ACTIONS}, index=features.index)
+
+
+class SLearner:
+    """One LightGBM with the action as an input; uplift = P(paid | x, action) - P(paid | x, wait)."""
+
+    def __init__(self, params: dict[str, Any]) -> None:
+        self.params = {**DEFAULT_PARAMS, **params, "random_state": 0}
+
+    def fit(self, df: pd.DataFrame) -> SLearner:
+        self.m = LGBMClassifier(**self.params).fit(_arm(_frame(df[COLS]), df.action.to_numpy()), df.paid_14d.astype(int))
+        return self
+
+    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
+        X = _frame(features[COLS])
+        p = {a.value: self.m.predict_proba(_arm(X, a.value))[:, 1] for a in ACTIONS}
+        return pd.DataFrame(p, index=features.index).sub(p["wait"], axis=0)
+
+
+class CausalForest:
+    """econml's CausalForestDML per judged arm against waiting (a generalised random forest on the residualised outcome
+    and treatment). econml's forest defaults apart from `params`. Its trees take no missing values, which LightGBM
+    routes on its own, so a missing input takes the training median plus a 0/1 "was missing" column."""
+
+    def __init__(self, params: dict[str, Any]) -> None:
+        self.params, self.tau = params, {}
+
+    def _num(self, df: pd.DataFrame) -> np.ndarray:
+        X = _frame(df[COLS])
+        X = X.assign(pay_frequency=X.pay_frequency.cat.codes.replace(-1, np.nan)).astype(float)
+        return np.hstack([X.fillna(self.fill).to_numpy(), X[self.miss].isna().to_numpy(float)])
+
+    def fit(self, df: pd.DataFrame) -> CausalForest:
+        from econml.dml import CausalForestDML
+
+        X = _frame(df[COLS]).drop(columns="pay_frequency").astype(float)
+        self.fill = X.median().fillna(0.0).reindex(COLS, fill_value=0.0)  # pay_frequency codes: 0 when missing
+        self.miss = [c for c in COLS if df[c].isna().any() and df[c].notna().any()]
+        Xn, y = self._num(df), df.paid_14d.to_numpy(float)
+        small = dict(n_jobs=4, n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1, random_state=0)
+        for act in ARMS:
+            m = df.action.isin([act, "wait"]).to_numpy()
+            cf = CausalForestDML(model_y=LGBMRegressor(**small), model_t=LGBMClassifier(**small), discrete_treatment=True, inference=False, random_state=0, n_jobs=4, **self.params)
+            self.tau[act] = cf.fit(y[m], (df.action[m] == act).to_numpy(int), X=Xn[m])
+        return self
+
+    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
+        X = self._num(features)
+        out ={"wait": np.zeros(len(X))} | {a: cf.effect(X).ravel() for a, cf in self.tau.items()}
+        return pd.DataFrame(out, index=features.index)
+
+
+def _arm(X: pd.DataFrame, a: Any) -> pd.DataFrame:
+    """X with the action as a categorical input `_a` (one action for every row, or a Series of actions)."""
+    return X.assign(_a=pd.Categorical([a] * len(X) if isinstance(a, str) else a, categories=[x.value for x in ACTIONS]))
+
+
 def nuisance(train: pd.DataFrame) -> tuple[Any, Any]:
-    cats = [a.value for a in ACTIONS]
-    out = LGBMClassifier(**NUIS).fit(_frame(train[COLS]).assign(_a=pd.Categorical(train.action, categories=cats)), train.paid_14d.astype(int))
+    out = LGBMClassifier(**NUIS).fit(_arm(_frame(train[COLS]), train.action.to_numpy()), train.paid_14d.astype(int))
     prop = LGBMClassifier(**NUIS).fit(_frame(train[COLS]), train.action)
     return out, prop
 
 
-def pseudo(ev: pd.DataFrame, out: Any, prop: Any, act: str) -> tuple[np.ndarray, np.ndarray]:
-    cats = [a.value for a in ACTIONS]
+def pseudo(ev: pd.DataFrame, out: Any, prop: Any, act: str, *, means: bool = False) -> Any:
+    """(rows in this arm or waiting, AIPW pseudo-outcomes); means=True also returns the outcome model's m1 and m0."""
     m = ev.action.isin([act, "wait"]).to_numpy()
     e = ev[m]
     Xe = _frame(e[COLS])
-    m1, m0 = (out.predict_proba(Xe.assign(_a=pd.Categorical([x] * len(Xe), categories=cats)))[:, 1] for x in (act, "wait"))
+    m1, m0 = (out.predict_proba(_arm(Xe, x))[:, 1] for x in (act, "wait"))
     P = pd.DataFrame(prop.predict_proba(Xe), columns=prop.classes_)
     ps = np.clip(P[act].to_numpy() / (P[act].to_numpy() + P["wait"].to_numpy()), 0.05, 0.95)
     t, y = (e.action == act).to_numpy(float), e.paid_14d.to_numpy(float)
-    return m, m1 - m0 + t / ps * (y - m1) - (1 - t) / (1 - ps) * (y - m0)
+    phi = m1 - m0 + t / ps * (y - m1) - (1 - t) / (1 - ps) * (y - m0)
+    return (m, phi, m1, m0) if means else (m, phi)
 
 
 def dr_qini(score: np.ndarray, phi: np.ndarray) -> float:
@@ -125,10 +199,119 @@ def table(res: dict[str, dict[str, float]]) -> str:
     return "\n".join(lines)
 
 
+TOPS, SURE = (0.1, 0.3, 0.5), 0.3
+S_VARIANTS = {"S-learner": {}, "S-learner, larger trees": dict(n_estimators=200, num_leaves=15)}
+CF_VARIANTS = {"Causal forest": {}, "Causal forest, larger leaves": dict(min_samples_leaf=200)}
+LIVE = "T-learner (live settings)"
+
+
+def measure(models: dict[str, Any], ev: pd.DataFrame, out: Any, prop: Any) -> tuple[dict[str, Any], dict[str, list[Any]]]:
+    """Per arm and in total: the doubly robust Qini (raw and in noise units); extra payers per 1,000 contacts in the
+    top 10/30/50% (the mean pseudo-outcome there); and contacts on "sure things": the share of the top 30% whose
+    estimated uplift is <= 0, with their mean chance of paying if left alone. The estimated uplift and that chance
+    come from the judge's outcome model (m1 - m0 and m0), which no candidate uses. "Random" is the exact expectation
+    of a random ranking (top k% = everyone, Qini 0). Totals pool the arms: Qini in noise units summed, the rest
+    weighted by rows. Also returns, per name, each arm's (phi, uplift, m0, top sets) for the bootstrap."""
+    rng = np.random.default_rng(0)
+    legacy = ev.nba_recommendation_last.map(lambda c: (a := legacy_to_action(c)) and a.value)
+    res: dict[str, Any] = {}
+    parts: dict[str, list[Any]] = {}
+    for act in ARMS:
+        m, phi, m1, m0 = pseudo(ev, out, prop, act, means=True)
+        ref, n = m1 - m0, len(phi)
+        noise = float(np.std([dr_qini(rng.random(n), phi) for _ in range(100)]))
+        scores = {"Random": None, "The bank's strategy": (legacy[m] == act).to_numpy(float) + 1e-9 * rng.random(n)}
+        scores |= {k: mdl.uplift(ev[m])[act].to_numpy() for k, mdl in models.items()}
+        res[act] = {"rows": n, "noise": noise, "models": {}}
+        for name, s in scores.items():
+            o = np.arange(n) if s is None else np.argsort(-s, kind="stable")
+            top = {k: o if s is None else o[: round(k * n)] for k in TOPS}
+            q = 0.0 if s is None else dr_qini(s, phi)
+            parts.setdefault(name, []).append((phi, ref, m0, top))
+            res[act]["models"][name] = {"qini": q, "qini_noise_units": q / noise} | summarise([(phi, ref, m0, top)])
+    res["total"] = {"rows": sum(res[a]["rows"] for a in ARMS), "models": {
+        n: {"qini_noise_units": sum(res[a]["models"][n]["qini_noise_units"] for a in ARMS)} | summarise(p) for n, p in parts.items()}}
+    return res, parts
+
+
+def summarise(parts: list[Any], w: list[np.ndarray] | None = None) -> dict[str, float]:
+    """Pooled over arms (optionally with bootstrap weights): extra payers per 1,000 in each top set, and the sure-thing
+    share and chance of paying if left alone in the top 30%."""
+    z = list(zip(w or [np.ones(len(p[0])) for p in parts], parts, strict=True))
+
+    def mean(k: float, val: Any) -> float:  # weighted mean of val(phi, ref, m0)[top k] over the pooled arms
+        return float(sum((wi[p[3][k]] * val(*p[:3])[p[3][k]]).sum() for wi, p in z) / sum(wi[p[3][k]].sum() for wi, p in z))
+
+    out = {f"per_1000_top{round(k * 100)}": 1000 * mean(k, lambda phi, ref, m0: phi) for k in TOPS}
+    out["sure_things_top30"] = mean(SURE, lambda phi, ref, m0: (ref <= 0).astype(float))
+    out["p_pay_if_left_top30"] = mean(SURE, lambda phi, ref, m0: m0)
+    return out
+
+
+def paired_boot(parts: dict[str, list[Any]], a: str, b: str, reps: int = 1000) -> dict[str, list[float]]:
+    """95% interval of a minus b, extra payers per 1,000 in the top 30%, all arms: the decisions resampled (the same
+    Poisson weights for both), the models and the judge held fixed."""
+    rng = np.random.default_rng(0)
+    d = {"a": [], "b": [], "diff": []}
+    for _ in range(reps):
+        w = [rng.poisson(1.0, len(p[0])).astype(float) for p in parts[a]]
+        va, vb = (summarise(parts[x], w)["per_1000_top30"] for x in (a, b))
+        d["a"].append(va), d["b"].append(vb), d["diff"].append(va - vb)
+    return {k: [float(x) for x in np.percentile(v, [2.5, 97.5])] for k, v in d.items()}
+
+
+def decision(rows: pd.DataFrame) -> None:
+    import json
+
+    from reportlib import BLUE, KEPT, MUTED, plt, save, style, tidy
+
+    def live(df: pd.DataFrame) -> TLearnerUplift:
+        return TLearnerUplift(ACTIONS).fit(df[COLS], action=df.action, paid_14d=df.paid_14d, is_random_assignment=pd.Series(True, index=df.index))
+
+    tune = rows[rows.decision_at < CUTOFF]
+    fit, val = tune[tune.decision_at < VALID_FROM], tune[tune.decision_at >= VALID_FROM]
+    out, prop = nuisance(fit)
+    cands: dict[str, Any] = {LIVE: live(fit), "Response model": ResponseModel().fit(fit)}
+    cands |= {n: SLearner(p).fit(fit) for n, p in S_VARIANTS.items()} | {n: CausalForest(p).fit(fit) for n, p in CF_VARIANTS.items()}
+    v, _ = measure(cands, val, out, prop)
+    s_best, cf_best = (max(vs, key=lambda n: v["total"]["models"][n]["qini_noise_units"]) for vs in (S_VARIANTS, CF_VARIANTS))
+    full, test = rows[rows.decision_at < CUTOFF], rows[rows.decision_at >= CUTOFF]
+    out, prop = nuisance(full)
+    final: dict[str, Any] = {LIVE: live(full), "Champion (live)": pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes()),
+                             "Response model": ResponseModel().fit(full), s_best: SLearner(S_VARIANTS[s_best]).fit(full), cf_best: CausalForest(CF_VARIANTS[cf_best]).fit(full)}
+    t, parts = measure(final, test, out, prop)
+    res = {"windows": {"validation": "fitted before 15 Jul 2026, scored 15 Jul to 15 Aug", "test": "fitted before 15 Aug 2026, scored from 15 Aug"},
+           "rows": {"fit_validation": len(fit), "validation": len(val), "fit_test": len(full), "test": len(test)},
+           "chosen_on_validation": {"s_learner": s_best, "causal_forest": cf_best}, "validation": v, "test": t,
+           "paired_bootstrap_top30_live_vs_response": paired_boot(parts, LIVE, "Response model")}
+    (REPO / "data" / "exports" / "reports" / "decision_B10.json").write_text(json.dumps(res, indent=1))
+    style()
+    T = t["total"]["models"]
+    names = list(T)
+    fig, axs = plt.subplots(1, 2, figsize=(9.5, 3.4), sharey=True)
+    for ax, key, title, fmt in ((axs[0], "per_1000_top30", "Extra payers per 1,000 contacts, top 30%", "{:+.1f}"),
+                                (axs[1], "sure_things_top30", "Share of the top 30% with estimated uplift ≤ 0", "{:.0%}")):
+        y = list(range(len(names)))[::-1]
+        vals = [T[n][key] for n in names]
+        ax.barh(y, vals, color=[KEPT if n in (LIVE, "Champion (live)") else MUTED if n in ("Random", "The bank's strategy") else BLUE for n in names], height=0.6)
+        for yi, val_ in zip(y, vals, strict=True):
+            ax.text(val_, yi, " " + fmt.format(val_), va="center", fontsize=8)
+        ax.set_yticks(y, names)
+        ax.set_title(title, loc="left")
+        tidy(ax)
+    fig.suptitle(f"Test decisions from 15 Aug ({len(test):,}), call, SMS and email arms pooled; doubly robust", fontsize=8, color=MUTED, x=0.01, ha="left")
+    print(save(fig, "dec_B10"))
+    print(json.dumps({"chosen": res["chosen_on_validation"], "test_total": T, "boot": res["paired_bootstrap_top30_live_vs_response"]}, indent=1))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"))
-    rows = load_rows(duckdb.connect(ap.parse_args().warehouse, read_only=True))
+    ap.add_argument("--mode", choices=("learners", "decision"), default="learners", help="decision: B10, uplift against a response model")
+    args = ap.parse_args()
+    rows = load_rows(duckdb.connect(args.warehouse, read_only=True))
+    if args.mode == "decision":
+        return decision(rows)
     tune = rows[rows.decision_at < CUTOFF]
     fit, val = tune[tune.decision_at < VALID_FROM], tune[tune.decision_at >= VALID_FROM]
     out, prop = nuisance(fit)

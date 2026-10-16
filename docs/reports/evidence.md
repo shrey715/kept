@@ -175,6 +175,19 @@ on the 45 days before the cut; the test promises were scored once.
 
 79 inputs, trained on the 164,363 promises made before the cut, recent ones weighted more (half-life 30 days).
 
+Same promises, the shipped model's family and the wide one with other models and calibrations (decision B9; the calibrated rows refit the base on the first 80% of the training period and calibrate on the last 20%, never on the test):
+
+| Model | Fitted on | AUC [95% CI] | Brier | Calibration gap, pts | Mean predicted (kept 22%) |
+|---|---|---:|---:|---:|---:|
+| Logistic regression, 6 features | full training period | 0.646 [0.636, 0.656] | 0.165 | 0.9 | 0.22 |
+| 6-feature LightGBM, no calibration (as §8) | full training period | 0.625 [0.614, 0.636] | 0.167 | 2.0 | 0.21 |
+| 6-feature LightGBM, no calibration | first 80% | 0.615 [0.604, 0.627] | 0.170 | 4.3 | 0.18 |
+| 6-feature LightGBM, Platt | first 80%, calibrated on the last 20% | 0.615 [0.604, 0.627] | 0.179 | 8.9 | 0.31 |
+| 6-feature LightGBM, isotonic | first 80%, calibrated on the last 20% | 0.614 [0.602, 0.625] | 0.182 | 9.1 | 0.31 |
+| Wide LightGBM, no calibration (as §8) | full training period | 0.696 [0.684, 0.707] | 0.161 | 8.3 | 0.30 |
+| Wide LightGBM, no calibration | first 80% | 0.689 [0.677, 0.701] | 0.161 | 8.1 | 0.30 |
+| Wide LightGBM, isotonic | first 80%, calibrated on the last 20% | 0.688 [0.676, 0.700] | 0.157 | 5.4 | 0.27 |
+
 **Matched, not beaten.** On its own, the wide model ranks promises as well as the bank's score: the gap is a fraction
 of a point and its interval includes zero, both on all promises and on those the bank scored before the due date.
 That is up from 7.8 points behind for the shipped six-feature model. **Together, the two are far better than either:**
