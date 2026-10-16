@@ -31,7 +31,7 @@ import duckdb
 import pandas as pd
 from reportlib import AQUA, KEPT, MUTED, plt, save, style, tidy
 
-from kept.config import DATA_DIR
+from kept.config import CONTACT_CAP_7D, DATA_DIR
 from kept.features.drift import load_alarm
 from kept.nba.context import KeptContextBuilder
 from kept.nba.engine import KeptEngine
@@ -205,6 +205,10 @@ def replay(conn: duckdb.DuckDBPyConnection, day: date, data: Path) -> dict[str, 
             )
         return cache[key]
 
+    def cap_of(cid: str) -> int:
+        cap = bulk.cases[cid].contact_cap_7d
+        return CONTACT_CAP_7D if cap is None else cap
+
     t_score = time.perf_counter()
     rows = []
     for case_id in ever.index[ever]:
@@ -222,6 +226,9 @@ def replay(conn: duckdb.DuckDBPyConnection, day: date, data: Path) -> dict[str, 
                 "tier_changed_by_end": series[-1][1] != first[1],
                 "first_change_hour": next((h for h, a in enumerate(act, 1) if a != first[0]), None),
                 "noted": case_id in noted,
+                # the CONTACT_CAP check (rules.py) removes every contact action, a hardship review included
+                "cap_crossed": (int(feats[0].at[case_id, "contacts_last_7d"]) < cap_of(case_id))
+                != (int(feats[24].at[case_id, "contacts_last_7d"]) < cap_of(case_id)),
                 "changed_hours": [h for h in range(1, 25) if changed_inputs[h][case_id]],
             }
         )
@@ -275,6 +282,10 @@ def replay(conn: duckdb.DuckDBPyConnection, day: date, data: Path) -> dict[str, 
         "changed_with_note_in_window_live_path_covers": covered,
         "changed_without_note_not_covered": len(flips) - covered,
         "changed_cards_hardship_at_nightly": hard,
+        "changed_cards_where_contact_cap_crossed": int(flips.cap_crossed.sum()) if len(df) else 0,
+        "changed_hardship_cards_where_contact_cap_crossed": int((flips.cap_crossed & flips.hardship_0).sum())
+        if len(df)
+        else 0,
         "changes_by_hour_after_nightly": hourly,
         "first_change_hour_histogram": {
             int(k): int(v) for k, v in df.first_change_hour.dropna().value_counts().sort_index().items()
