@@ -30,7 +30,8 @@ More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs
 
 ## Results (real data, 12 Oct)
 
-Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one.
+Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one. Every design decision, the alternatives we measured and
+the number that decided it are in [`docs/reports/decisions.md`](docs/reports/decisions.md).
 
 | Area | Result |
 |---|---|
@@ -227,6 +228,8 @@ cd web && pnpm lint && npx tsc --noEmit
 ```
 
 ## What changed from the design, and why
+
+The evidence behind each change: [`docs/reports/decisions.md`](docs/reports/decisions.md).
 
 - **UI (D):** a Next.js app with Radix Themes instead of the plan's single static page, so the
   demo covers every role's flow (queue, approvals, audit, Ask) and the guided script. It needs
