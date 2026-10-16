@@ -137,8 +137,9 @@ class PolicyIndex:
             table = self._db.create_table("policy", rows)
         table.create_fts_index("search_text", replace=True)
 
-    def search(self, query: str, *, as_of: date, k: int = 3) -> list[Citation]:
-        """Only chunks current on as_of (effective_from <= as_of < effective_to)."""
+    def search(self, query: str, *, as_of: date, k: int = 3, mode: str = "hybrid") -> list[Citation]:
+        """Only chunks current on as_of (effective_from <= as_of < effective_to). `mode` is for the
+        retrieval benchmark (scripts/decision_B6.py): "bm25" or "dense" use one ranking, live is "hybrid"."""
         if not self._has_table():
             return []
         day = as_of.isoformat()  # a date, so safe to put in the filter
@@ -146,8 +147,10 @@ class PolicyIndex:
         table, n = self._db.open_table("policy"), max(k * 6, 20)  # over-fetch, then let authority reorder
         hits: list[dict[str, Any]] = (
             table.search(query, query_type="fts").where(current, prefilter=True).limit(n).to_list()
+            if mode != "dense"
+            else []
         )
-        if self._embed is not None and "vector" in table.schema.names:
+        if mode != "bm25" and self._embed is not None and "vector" in table.schema.names:
             vector = self._embed([query])[0]
             by_vector: Any = table.search(vector)  # a vector query (the stubs type it as the generic builder)
             near = by_vector.distance_type("cosine").where(current, prefilter=True).limit(n).to_list()
