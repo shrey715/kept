@@ -1,0 +1,60 @@
+question_id,lang,as_of,question,gold,origin
+BQ-002,en,2026-09-28,How many call attempts can we make on a mid-stage account in a week?,POL-COLL-001 §5.2; POL-COLL-001-FR §5.2,benchmark dev
+BQ-005,en,2026-09-28,Does the National Do Not Call List stop collection calls?,POL-COLL-001 §5.3; FAQ-COLL-001,benchmark dev
+BQ-019,en,2026-09-28,A customer says their hours were cut at work. What must the agent do before asking for payment?,POL-COLL-004 §4.2; POL-COLL-004-FR §4.2,benchmark dev
+BQ-026,en,2026-09-28,"How long does the 3-month reduced payment programme last, and what share of the payment is reduced?",POL-COLL-004 §4.2; POL-COLL-004-FR §4.2; HPT-2026,benchmark dev
+KS-021,en,2026-02-28,"Before the March 2026 policy change, how much did the reduced-payment programme reduce the payment, and for how long?",POL-COLL-004-V4.1 §4.2,stress
+KS-022,en,2026-09-28,Can an agent ask a vulnerable customer for payment before offering hardship options?,SCR-VUL-EN,stress
+KS-023,fr,2026-09-28,Combien de tentatives d'appel sortant sont permises par période de 7 jours ?,POL-COLL-001 §5.2; POL-COLL-001-FR §5.2,stress
+KS-024,en,2026-09-28,A customer says a payment was not applied. What happens to collection on that amount?,PRC-COLL-012 §6.1,stress
+KS-025,en,2026-09-28,Do customers have to prove they paid to get a late fee charged during the 14 September 2026 app outage reversed?,PRC-COLL-012 §6.2; IR-2026-0914,stress
+KS-026,en,2026-09-28,Why is the channel column in contact_history mostly empty from 26 September 2026?,REL-0926,stress
+KS-027,en,2026-09-28,Are collection calls allowed on Sundays for customers in Quebec?,REG-SUM-001-QC,stress
+KS-028,en,2026-09-28,When does a promise count as partially kept rather than kept?,PRC-COLL-010 §3.3,stress
+KS-029,en,2026-09-28,Can we call a customer on 30 September 2026?,POL-COLL-001 §5.1; POL-COLL-001-FR §5.1,stress
+DR-017,en,2026-09-28,"If a card customer is struggling, how low can we take their interest rate, and for how long?",HPT-2026,drill
+DR-018,en,2026-09-28,How long does a complaint stay with the frontline team before it can go to the ombudsman?,POL-COLL-007 §8.2,drill
+DR-019,en,2026-09-28,A customer was charged a late fee because the app didn't post their payment during the September incident. Do they have to prove they paid?,PRC-COLL-012 §6.2,drill
+DR-020,en,2026-09-28,Roughly how many card accounts were wrongly charged a late fee in the mobile payment posting incident?,IR-2026-0914,drill
+DR-021,en,2026-09-28,What share of the balance can a one-time late-stage settlement be?,HPT-2026,drill
+DR-022,en,2026-09-28,By how much can a loan's term be extended for a customer in hardship?,HPT-2026,drill
+DR-023,en,2026-09-28,A customer says a payment they made wasn't applied. What happens to our payment requests?,PRC-COLL-012 §6.1,drill
+DR-024,fr,2026-09-28,À quelles heures peut-on appeler un client?,POL-COLL-001 §5.1; POL-COLL-001-FR §5.1,drill
+RG-01,en,2026-09-28,Can we use the log of calls and messages to pick people for a promotional campaign?,DC-COLL-001,paraphrase
+RG-02,fr,2026-09-28,À quelle heure le journal des contacts est-il mis à jour chaque jour ?,DC-COLL-001,paraphrase
+RG-03,en,2026-09-28,How many working days of slack does a customer get after the date they committed to?,FAQ-COLL-001; PRC-COLL-010 §3.3,paraphrase
+RG-04,fr,2026-09-28,La liste nationale de numéros de télécommunication exclus empêche-t-elle les appels de recouvrement ?,FAQ-COLL-001; POL-COLL-001 §5.3,paraphrase
+RG-05,en,2026-09-28,"What went wrong with in-app payments in mid-September, and how long did it last?",IR-2026-0914,paraphrase
+RG-06,fr,2026-09-28,Quand les frais facturés à tort lors de l'incident du 14 septembre seront-ils annulés ?,IR-2026-0914,paraphrase
+RG-07,en,2026-09-28,"What caused the dip in phone outreach around 23-24 September 2026, and should we read it as customers changing their habits?",IR-2026-0923,paraphrase
+RG-08,fr,2026-09-28,Pourquoi le composeur automatique a-t-il moins appelé les 23 et 24 septembre ?,IR-2026-0923,paraphrase
+RG-09,en,2026-09-28,Do we need opt-in permission under the anti-spam law before texting someone a reminder to pay?,POL-COLL-001 §5.3,paraphrase
+RG-10,fr,2026-09-28,"Dans quelle langue doit-on joindre un client francophone, et depuis quel centre ?",POL-COLL-001 §5.5,paraphrase
+RG-11,en,2026-09-28,"Once a customer goes bust and seeks court protection from creditors, may collectors keep reaching out?",POL-COLL-001 §7.3; POL-COLL-001-FR §7.3,paraphrase
+RG-12,fr,2026-09-28,"Si un client nous envoie une lettre exigeant qu'on le laisse tranquille, que peut-on encore lui faire parvenir ?",POL-COLL-001 §5.4; POL-COLL-001-FR §5.4,paraphrase
+RG-13,en,2026-02-15,Where do we route a customer who is in a fragile situation?,POL-COLL-004-V4.1 §4.5,paraphrase
+RG-14,fr,2026-02-15,Faut-il une preuve de revenu pour accorder un programme d'aide ?,POL-COLL-004-V4.1 §4.2,paraphrase
+RG-15,en,2026-09-28,"After a relief plan is agreed, who looks after the account, and when do they reach out before it finishes?",POL-COLL-004 §4.4,paraphrase
+RG-16,fr,2026-09-28,Doit-on exiger des justificatifs de revenus pour une aide de trois mois ?,POL-COLL-004 §4.3,paraphrase
+RG-17,en,2026-09-28,Is it okay to factor in someone's faith or whether they're married when deciding what to do with their account?,POL-COLL-004 §4.6; POL-COLL-004-FR §4.6,paraphrase
+RG-18,fr,2026-09-28,La fragilité d'un client peut-elle servir à prédire s'il va rembourser ?,POL-COLL-004 §4.5; POL-COLL-004-FR §4.5,paraphrase
+RG-19,en,2026-09-28,"A customer grumbles that they're unhappy with how they were treated. Do we have to log that, and by when?",POL-COLL-007 §8.1,paraphrase
+RG-20,fr,2026-09-28,Quelles sont les étapes si un client n'est pas satisfait de la réponse à sa plainte ?,POL-COLL-007 §8.2,paraphrase
+RG-21,en,2026-09-28,"How far out can the date be when a customer commits to pay, and should it line up with their salary?",PRC-COLL-010 §3.1,paraphrase
+RG-22,fr,2026-09-28,Que doit faire l'agent avant de raccrocher après qu'un client s'est engagé à payer ?,PRC-COLL-010 §3.2,paraphrase
+RG-23,en,2026-09-28,Someone says they never made a purchase on their card and suspects identity theft. Who handles it?,PRC-COLL-012 §6.1,paraphrase
+RG-24,fr,2026-09-28,Les frais causés par une panne de nos systèmes sont-ils annulés sans preuve de paiement ?,PRC-COLL-012 §6.2,paraphrase
+RG-25,en,2026-09-28,In which language should we serve customers in that one francophone province by default?,REG-SUM-001-QC,paraphrase
+RG-26,fr,2026-09-28,Peut-on joindre un débiteur québécois le dimanche après-midi ?,REG-SUM-001-QC,paraphrase
+RG-27,en,2026-09-28,Which internal document should teams apply in place of the various provincial rules?,REG-SUM-001,paraphrase
+RG-28,fr,2026-09-28,Quel document résume les règles des provinces en matière de recouvrement ?,REG-SUM-001,paraphrase
+RG-29,en,2026-09-28,"From late September, which field tells a query whether a contact was a call, an email or a text?",REL-0926,paraphrase
+RG-30,fr,2026-09-28,Pourquoi le type de contact est-il vide dans l'historique depuis la fin septembre ?,REL-0926,paraphrase
+RG-31,en,2026-01-20,"Once the amount owed has been stated, what did the mid-stage script tell agents to ask for?",SCR-MID-STD-EN-V1.0,paraphrase
+RG-32,fr,2026-01-20,Que faisait l'agent avant d'annoncer le montant dû à un client en retard moyen ?,SCR-MID-STD-EN-V1.0,paraphrase
+RG-33,en,2026-09-28,What must an agent tell the customer at the start of a call about it being taped?,SCR-MID-STD-EN,paraphrase
+RG-34,fr,2026-09-28,"Avant de parler de la dette, comment l'agent confirme-t-il qu'il parle au bon client ?",SCR-MID-STD-EN,paraphrase
+RG-35,en,2026-09-28,How should I talk to a customer who seems confused or upset on the phone?,SCR-VUL-EN,paraphrase
+RG-36,fr,2026-09-28,Peut-on proposer au client de faire participer un proche de confiance à l'appel ?,SCR-VUL-EN,paraphrase
+RG-37,en,2026-09-28,What happens to a credit card if its holder goes on a fixed monthly plan for a year?,HPT-2026,paraphrase
+RG-38,fr,2026-09-28,"Comment un client à découvert peut-il rembourser son solde négatif, et sur combien de temps ?",HPT-2026,paraphrase
