@@ -14,7 +14,7 @@ from reportlib import BLUE, INK, KEPT, MUTED, plt, save, style, tidy
 DECISIONS = [
     (date(2026, 10, 3), "T-learner uplift on randomly assigned cases", "Qini against random rankings", "kept"),
     (date(2026, 10, 3), "Exact keys, then Splink, then a steward", "precision 99.3%, recall 198/200", "kept"),
-    (date(2026, 10, 4), "Splink trained on a 1-in-5 sample", "all 3.84M keys ran out of 30 GB", "switched"),
+    (date(2026, 10, 3), "Splink trained on a 1-in-5 sample", "all 3.84M keys ran out of 30 GB", "switched"),
     (date(2026, 10, 4), "Champion/challenger gate on Qini", "tuned model lost, 0.0029 vs 0.0073", "kept"),
     (date(2026, 10, 9), "Leaky promise feature dropped", "AUC 0.92 was amount_ratio; honest 0.63", "switched"),
     (date(2026, 10, 10), "Whisper large-v3-turbo on calls", "WER 9.4% vs the bank's 12.4%", "kept"),
