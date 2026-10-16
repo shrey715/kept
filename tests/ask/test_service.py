@@ -509,7 +509,9 @@ def test_ground_filters_maps_near_misses_and_drops_unknown_values() -> None:
     assert notes == ["Value check: ptp_type 'instalment' -> instalment_1_of_n"]
     gone, _ = ground_filters(i.model_copy(update={"filters": {"ptp_type": "weekly"}}), known.get)
     assert "ptp_type" not in gone.filters  # matches nothing: the comparison covers every group
-    same, n = ground_filters(i.model_copy(update={"filters": {"ptp_type": "single"}, "group_by": ()}), known.get)
+    same, n = ground_filters(
+        i.model_copy(update={"filters": {"ptp_type": "single"}, "group_by": ()}), known.get
+    )
     assert same.filters == {"ptp_type": "single"} and n == []
     one, _ = ground_filters(i.model_copy(update={"filters": {"ptp_type": "instalment"}}), known.get)
     assert "ptp_type" not in one.filters  # grouped by it: the question compares, so every group stays
@@ -674,3 +676,22 @@ def test_daily_questions_group_by_the_day_column_when_the_metric_allows_it() -> 
     assert fixed.group_by == ("contact_date",) and note
     kept_day, _ = repair_intent(i.model_copy(update={"group_by": ("contact_date",)}), q)
     assert kept_day.group_by == ("contact_date",)  # a breakdown column here, not just the date range
+
+
+def test_ablation_is_evaluation_only_and_defaults_to_live(build) -> None:  # type: ignore[no-untyped-def]
+    import inspect
+
+    from kept.ask import service
+
+    assert inspect.signature(CollectionsAsk).parameters["ablation"].default == "live" == service.ABLATIONS[-1]
+    svc, _ = build({})
+    assert all(svc._on(step) for step in service.ABLATIONS)  # the product runs every step
+    assert 'os.environ.get("KEPT_ASK_ABLATION", "live")' in inspect.getsource(service.build_ask)
+
+
+def test_plain_ablation_is_one_sql_prompt(build) -> None:  # type: ignore[no-untyped-def]
+    svc, llm = build({Purpose.ASK_SQL: [GOOD_SQL], Purpose.ASK_NARRATE: ["Shown in the table."]})
+    svc._level = 0  # "plain": no scope, no router, one draft, no lint
+    a = svc.ask(_req("how many cases per product"))
+    assert isinstance(a, AskAnswer) and a.rows == (("credit_card", 30), ("personal_loan", 30))
+    assert llm.purposes() == [Purpose.ASK_SQL, Purpose.ASK_NARRATE]
