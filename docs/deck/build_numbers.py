@@ -118,6 +118,69 @@ def main() -> None:
         "bkEmail": f"{ut['email'][BANK]:+.4f}",
         "weeksFive": f"{weeks(ev['payday_kept'][0] / 100, 0.05):.0f}", "weeksTwenty": f"{weeks(ev['payday_kept'][0] / 100, 0.20):.0f}",
     }
+    # the decision evidence (docs/reports/decisions.md): data/exports/reports/decision_<id>.json
+    d = {i: load(f"decision_{i}.json") for i in ("A1", "A2", "A3", "B4", "B5", "B6", "B7", "B9", "B10", "C2")}
+    A1 = d["A1"]
+
+    def a1(engine: str, wl: str, scale: int) -> str:  # seconds, or why there is no number
+        r = [r for r in A1["runs"] if (r["engine"], r["workload"], r["scale"]) == (engine, wl, scale)]
+        return "skipped (disk)" if not r else f"{r[0]['median_s']:.1f} s" if r[0]["status"] == "ok" else "out of memory"
+
+    def a1row(label: str, wl: str, scale: int) -> str:
+        return f"{label} {scale}x & " + " & ".join(a1(e, wl, scale) for e in ("duckdb", "polars", "postgres", "spark")) + r" \\"
+
+    rr = {s: a1("duckdb", "roll_rate", s).split()[0] for s in (10, 40)}
+    ws = A1["duckdb_working_set"]["roll_rate"]
+    rep, ctl, clk, tz = d["A2"]["replay"], d["A3"]["control_right_as_of"], d["A3"]["clock_snapshot_date_instead_of_as_of"], d["A3"]["timezone_utc_hour_instead_of_local"]
+    sc, hp, bq = d["B4"]["scenarios"]["base"], d["B4"]["hosted_prices_usd_per_mtok"], d["B4"]["quota"]
+    b5, ac, sp = d["B5"]["settings"], d["B7"]["accuracy"], d["B7"]["speed_s_per_1000"]
+    hrs, b9 = d["B7"]["hours_to_label_all_760594"], d["B9"]["models"]
+    b10 = d["B10"]["test"]["total"]["models"]
+    bd, c2, b6 = d["B10"]["paired_bootstrap_top30_live_vs_response"]["diff"], d["C2"]["systems"], d["B6"]["embedders"]["BAAI/bge-m3"]["configs"]
+    pc = lambda x: f"{100 * x:.1f}\\%"  # noqa: E731
+    m |= {
+        "decAoneRollTen": rr[10], "decAoneRollForty": rr[40], "decAoneSparkTen": a1("spark", "roll_rate", 10).split()[0],
+        "decAoneMaxScale": f"{max(r['scale'] for r in A1['runs'] if r['engine'] == 'duckdb')}",
+        "decAoneLimitScale": f"{ws['scale_at_24gb_extrapolated']:.0f}",
+        "decAoneRows": " ".join([a1row("roll\\_rate", "roll_rate", 1), a1row("roll\\_rate", "roll_rate", 10),
+                                 a1row("silver build", "silver_contact_history", 1), a1row("silver build", "silver_contact_history", 10)]),
+        "decAtwoShare": pc(rep["share_changed_by_end_of_day"]), "decAtwoCards": f"{rep['cards_changed_by_end_of_day']:,}",
+        "decAtwoOpen": f"{rep['cases_open_at_nightly']:,}", "decAtwoUncovered": pc(rep["changed_without_note_not_covered"] / rep["cases_open_at_nightly"]),
+        "decAthreeClock": f"{clk['parity_sample']['cells_mismatched']:,}", "decAthreeZone": f"{tz['parity_sample']['cells_mismatched']:,}",
+        "decAthreeControl": f"{ctl['parity_sample']['cells_mismatched']}", "decAthreeCells": f"{ctl['parity_sample']['cells']:,}",
+        "decAthreeActions": f"{clk['cards_best_action_changed']:,}", "decAthreeFeastMs": f"{d['A3']['timing']['feast_online_ms_per_case']}",
+        "decBfourLocal": f"{sc['local_usd_year']:,}", "decBfourHaiku": f"{sc['hosted_usd_year']['Claude Haiku 5.5 (prompt up to 100k)']:,}",
+        "decBfourFlash": f"{sc['hosted_usd_year']['Gemini 3.5 Flash-Lite']:,}", "decBfourGpus": str(sc["local_gpus"]),
+        "decBfourQuotaDays": f"{bq['quota_days_for_one_night']:.1f}", "decBfourNight": f"{bq['extractions_per_night_base']:,.0f}",
+        "decBfivePlain": f"{b5['plain']['all']['right']}", "decBfiveRoute": f"{b5['route']['all']['right']}",
+        "decBfiveLive": f"{b5['live']['all']['right']}", "decBfiveOf": f"{b5['live']['all']['graded']}",
+        "decBfivePlainPct": pc(b5["plain"]["all"]["accuracy"]), "decBfiveRoutePct": pc(b5["route"]["all"]["accuracy"]),
+        "decBfiveLivePct": pc(b5["live"]["all"]["accuracy"]),
+        "decBfiveConfPlain": str(b5["plain"]["all"]["wrong_but_confident"]), "decBfiveConfLive": str(b5["live"]["all"]["wrong_but_confident"]), "decBfiveConfRoute": str(b5["route"]["all"]["wrong_but_confident"]),
+        "decBfiveGainDrafts": str(b5["live"]["all"]["right"] - b5["templates"]["all"]["right"]),
+        "decBsixDense": f"{b6['dense']['all']['mrr']:.3f}", "decBsixHybrid": f"{b6['hybrid']['all']['mrr']:.3f}",
+        "decBsixDenseFr": f"{b6['dense']['fr']['mrr']:.3f}", "decBsixHybridFr": f"{b6['hybrid']['fr']['mrr']:.3f}",
+        "decBsevenRules": f"{ac['keywords']['hardship']['f1']:.2f}", "decBsevenSetfit": f"{ac['setfit']['hardship']['f1']:.2f}",
+        "decBsevenLlm": f"{ac['llm']['hardship']['f1']:.2f}", "decBsevenRulesRecall": f"{ac['keywords']['hardship']['recall']:.2f}",
+        "decBsevenSetfitRecall": f"{ac['setfit']['hardship']['recall']:.2f}", "decBsevenLlmRecall": f"{ac['llm']['hardship']['recall']:.2f}",
+        "decBsevenRulesPromise": f"{ac['keywords']['promise']['f1']:.2f}", "decBsevenLlmPromise": f"{ac['llm']['promise']['f1']:.2f}",
+        "decBsevenRulesHours": f"{hrs['keywords']:.3f}", "decBsevenSetfitHours": f"{hrs['setfit_gpu']:.3f}",
+        "decBsevenLlmHours": f"{hrs['llm_extrapolated']:,.0f}", "decBsevenLlmDays": f"{hrs['llm_days_extrapolated']:.0f}",
+        "decBsevenSetfitSec": f"{d['B7']['parts']['setfit_all_notes']['seconds']:.0f}",
+        "decBsevenRatio": f"{round(speed := sp['llm_2_slots'] / sp['setfit_gpu'], -3):,.0f}",
+        "decBnineSix": f"{b9['6-feature LightGBM, no calibration (as \u00a78)']['auc']:.3f}",
+        "decBnineBank": f"{d['B9']['bank_auc']:.3f}",
+        "decBtenResponse": f"{b10['Response model']['qini_noise_units']:.1f}", "decBtenT": f"{b10['T-learner (live settings)']['qini_noise_units']:.1f}",
+        "decBtenChamp": f"{b10['Champion (live)']['qini_noise_units']:.1f}", "decBtenS": f"{b10['S-learner, larger trees']['qini_noise_units']:.1f}",
+        "decBtenForest": f"{b10['Causal forest, larger leaves']['qini_noise_units']:.1f}", "decBtenBank": f"{b10[BANK]['qini_noise_units']:.1f}".replace("-", "−"),
+        "decBtenTopT": f"{b10['T-learner (live settings)']['per_1000_top30']:.0f}", "decBtenTopResp": f"{b10['Response model']['per_1000_top30']:.0f}",
+        "decBtenTopS": f"{b10['S-learner, larger trees']['per_1000_top30']:.0f}", "decBtenTopForest": f"{b10['Causal forest, larger leaves']['per_1000_top30']:.0f}",
+        "decBtenDiff": f"{bd[0]:.0f} to {bd[1]:.0f}",
+        "decBtenAloneT": pc(b10["T-learner (live settings)"]["p_pay_if_left_top30"]).replace(".0", ""),
+        "decBtenAloneResp": pc(b10["Response model"]["p_pay_if_left_top30"]).replace(".0", ""),
+        "decCtwoRule": f"{c2['rule_noei']['recall']:.3f}", "decCtwoModel": f"{c2['lgbm_noei_same_flag_rate']['recall']:.3f}",
+        "decCtwoModelEi": f"{c2['lgbm_ei_same_flag_rate']['recall']:.3f}",
+    }
     lines = [f"\\newcommand{{\\K{k}}}{{{v}}}" for k, v in m.items()]
     # value drivers, base case, in $k, largest first (for the value-tree bars)
     drivers = sorted(
