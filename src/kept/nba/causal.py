@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (formula-heavy lines)
 """Evaluation and estimation helpers for uplift from non-randomised actions (offline only, never on the serving path).
 
 The bank chose each day's action, so treated and untreated decisions differ. Doubly robust (AIPW) pseudo-outcomes
@@ -41,7 +42,7 @@ class Nuisance:
         d = df[df.action.isin([self.arm, "wait"])]
         X, t, y = _frame(d[self.cols]), (d.action == self.arm).to_numpy(), d[self.outcome].to_numpy(float)
         p = {**NUIS, "random_state": self.seed}
-        out = LGBMClassifier if self.binary else LGBMRegressor
+        out: Any = LGBMClassifier if self.binary else LGBMRegressor
         self.m1 = out(**p).fit(X[t], y[t].astype(int) if self.binary else y[t])
         self.m0 = out(**p).fit(X[~t], y[~t].astype(int) if self.binary else y[~t])
         self.e = LGBMClassifier(**p).fit(X, t.astype(int))
@@ -53,8 +54,8 @@ class Nuisance:
         d = df[mask]
         X = _frame(d[self.cols])
         y, t = d[self.outcome].to_numpy(float), (d.action == self.arm).to_numpy(float)
-        m1, m0 = (m.predict_proba(X)[:, 1] if self.binary else m.predict(X) for m in (self.m1, self.m0))
-        e = self.e.predict_proba(X)[:, 1]
+        m1, m0 = (np.asarray(m.predict_proba(X))[:, 1] if self.binary else np.asarray(m.predict(X)) for m in (self.m1, self.m0))
+        e = np.asarray(self.e.predict_proba(X))[:, 1]
         out = pd.DataFrame({"y": y, "t": t, "m1": m1, "m0": m0, "e": e, "phi": aipw(y, t, m1, m0, e)}, index=d.index)
         return mask, out
 
@@ -119,3 +120,50 @@ def gate_qini(score: np.ndarray, t: np.ndarray, y: np.ndarray, w: np.ndarray | N
     tot = w.sum()
     x, g = np.concatenate([[0.0], np.cumsum(w)]) / tot, gain / tot
     return float(np.trapezoid(g, x) - 0.5 * g[-1])
+
+
+REG: dict[str, Any] = dict(
+    n_estimators=300, num_leaves=7, min_child_samples=1000, learning_rate=0.03, reg_lambda=20.0, colsample_bytree=0.8,
+    subsample=0.8, subsample_freq=1, verbose=-1, deterministic=True, force_row_wise=True,
+)  # fmt: skip
+
+
+class CausalUplift:
+    """DR- and R-learners for each contact arm against WAIT, on one outcome column. Nuisance models are cross-fitted by case, rows
+    whose estimated propensity is outside CLIP are left out of the second stage (overlap), and the second stage is a small, heavily
+    regularised LightGBM. `view(kind)` is a scorer with the gate's surface: .uplift(frame) -> columns per action, zeros for wait."""
+
+    def __init__(self, cols: Sequence[str], arms: Sequence[str], outcome: str, *, binary: bool = True, seed: int = 0, k: int = 3) -> None:
+        self.cols, self.arms, self.outcome, self.binary, self.seed, self.k = list(cols), list(arms), outcome, binary, seed, k
+        self.models: dict[str, dict[str, Any]] = {"dr": {}, "r": {}}
+        self.kept: dict[str, float] = {}
+
+    def fit(self, df: pd.DataFrame) -> CausalUplift:
+        from lightgbm import LGBMRegressor
+
+        for arm in self.arms:
+            d = df[df.action.isin([arm, "wait"])].reset_index(drop=True)
+            ps = crossfit(d, self.cols, arm, k=self.k, seed=self.seed, outcome=self.outcome, binary=self.binary)
+            keep = ((ps.e >= CLIP[0]) & (ps.e <= CLIP[1])).to_numpy()
+            self.kept[arm] = float(keep.mean())
+            X = _frame(d[self.cols])[keep]
+            p = {**REG, "random_state": self.seed}
+            self.models["dr"][arm] = LGBMRegressor(**p).fit(X, ps.phi.to_numpy()[keep])
+            t, e = ps.t.to_numpy()[keep], ps.e.to_numpy()[keep]
+            m = e * ps.m1.to_numpy()[keep] + (1 - e) * ps.m0.to_numpy()[keep]
+            y = ps.y.to_numpy()[keep]
+            self.models["r"][arm] = LGBMRegressor(**p).fit(X, (y - m) / (t - e), sample_weight=(t - e) ** 2)
+        return self
+
+    def view(self, kind: str) -> _View:
+        return _View(self.models[kind], self.cols)
+
+
+class _View:
+    def __init__(self, models: dict[str, Any], cols: Sequence[str]) -> None:
+        self.models, self.cols = models, list(cols)
+
+    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
+        X = _frame(features[self.cols])
+        out = {"wait": np.zeros(len(X))} | {a: m.predict(X) for a, m in self.models.items()}
+        return pd.DataFrame(out, index=features.index)

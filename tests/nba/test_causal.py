@@ -40,3 +40,21 @@ def test_aipw_unbiased_under_confounding_and_blp_finds_heterogeneity() -> None:
     assert dr_qini(tau, phi) > 0 > dr_qini(-tau, phi)
     se = case_bootstrap(cases, lambda w: (w * phi).sum() / w.sum(), reps=50).std()
     assert 0.001 < se < 0.01
+
+
+def test_causal_uplift_ranks_by_the_true_effect() -> None:
+    """Confounded assignment, effect only where x > 0.5: the DR- and R-learners rank by x, a plain difference would not."""
+    pytest.importorskip("lightgbm")
+    from kept.nba.causal import CausalUplift
+
+    rng = np.random.default_rng(0)
+    n = 30_000
+    x = rng.uniform(0, 1, n)
+    act = np.where(rng.uniform(size=n) < 0.2 + 0.6 * x, "call", "wait")
+    y = rng.uniform(size=n) < 0.2 + 0.4 * x + 0.25 * (x > 0.5) * (act == "call")
+    df = pd.DataFrame({"x": x, "action": act, "paid": y, "case_id": np.arange(n)})
+    m = CausalUplift(["x"], ["call"], "paid", k=2).fit(df)
+    grid = pd.DataFrame({"x": [0.1, 0.9]})
+    for kind in ("dr", "r"):
+        lift = m.view(kind).uplift(grid)["call"].to_numpy()
+        assert lift[1] - lift[0] > 0.1

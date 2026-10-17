@@ -1,4 +1,4 @@
-# ruff: noqa: E501  (report prose)
+# ruff: noqa: E501, B023  (report prose; loop variables in bootstrap lambdas are used before the next iteration)
 """Step 0: is there an effect of contact to find, and does the live model's uplift ranking hold up?
 
     uv run python scripts/uplift_diagnostics.py [--warehouse data/warehouse/kept.duckdb]
@@ -28,7 +28,7 @@ from sklearn.metrics import roc_auc_score
 
 from kept.contracts.feature_registry import model_inputs
 from kept.nba.causal import blp, case_bootstrap, crossfit, dr_qini, folds, gate_qini
-from kept.nba.train import ACTIONS, load_rows
+from kept.nba.train import ACTIONS, CONTEXT_COLS, load_rows
 from kept.nba.uplift import TLearnerUplift, _frame
 
 REPO = Path(__file__).resolve().parents[1]
@@ -36,7 +36,6 @@ COLS = list(model_inputs())
 ARMS = ("call", "sms_payment_link", "email")
 CUT = datetime(2026, 8, 15)
 # context at the decision, same sources as the label (contact_history, promises_to_pay); never the decision's own contact
-CONTEXT_COLS = ["pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d", "days_since_contact", "paid_prev7"]
 CONTEXT_SQL = """
 select t.decision_id,
   cast(exists (select 1 from silver.promises_to_pay p where p.crm_customer_id = t.crm_customer_id and p.ptp_created_ts < t.decision_at
@@ -160,7 +159,7 @@ def stability(rows: pd.DataFrame, seeds: tuple[int, ...] = (0, 1, 2)) -> list[di
     return out
 
 
-CTX2 = ["pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d", "days_since_contact", "last_rpc", "last_ptp_made", "paid_prev7", "weekday"]
+CTX2 = CONTEXT_COLS
 # name -> (column, binary, restricted to covered cases, restricted to paid_14d_known rows)
 OUTCOMES = {
     "any payment, contact flags included (old label)": ("paid_14d", True, False, True),

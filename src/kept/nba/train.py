@@ -39,14 +39,22 @@ def pool_nudges(rows: pd.DataFrame) -> pd.DataFrame:
     """Every nudge row (and a legacy nudge recommendation) becomes the one nudge arm."""
     nudge = {a.value: Action.EMAIL.value for a in NUDGES}
     return rows.assign(action=rows.action.replace(nudge))
+# decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
+
+# decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
+CONTEXT_COLS = [
+    "pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d",
+    "days_since_contact", "last_rpc", "last_ptp_made", "paid_prev7", "weekday",
+]  # fmt: skip
 
 
 def load_rows(
     conn: duckdb.DuckDBPyConnection, *, source: str = "training_rows", extras: bool = False
 ) -> pd.DataFrame:
-    """The live model's rows. extras=True (offline studies) adds the account-sourced outcomes (paid_clean_14d, paid_amt_14d,
-    covered), cured_30d and the context at the decision (features_train.decision_context); source="training_weeks" is the
-    one-row-per-case-week table, and then every row is kept, `covered` says whether its "no" can be trusted."""
+    """The live model's rows. extras=True (offline studies) adds the account-sourced outcomes (paid_clean_14d,
+    paid_amt_14d, covered), cured_30d and the context at the decision (features_train.decision_context). With
+    extras every row is kept and `covered` says whether its "no" can be trusted; "training_weeks" is the
+    one-row-per-case-landmark table."""
     cols = ", ".join(f"f.{n}" for n in model_inputs())
     more = ""
     if extras:
