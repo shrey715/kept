@@ -34,7 +34,7 @@ Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has t
 
 | Area | Result |
 |---|---|
-| Evidence | dating a promise to payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases; Kept's contact policy **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** ([evidence](docs/reports/evidence.md)) |
+| Evidence | dating a promise to payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases; choosing whom to contact adds nothing measurable once the outcome is clean (Kept's choice against what the bank did: **0 per 1,000 decisions**, 95% CI −7 to +8); Kept's measured levers are timing: payday dating and the best hour to call ([evidence](docs/reports/evidence.md) §2, §4) |
 | Identity | 3,840,513 source keys → **1,052,300 golden IDs**; precision **99.3%** (300 links by hand), recall **99%** (198 of 200 planted duplicates, no wrong merges) ([quality](QUALITY_REPORT.pdf), [recall](docs/reports/identity_recall.md)) |
 | Data quality | contract gate **PASS** on all 8 rules; 19 data issues found, counted and handled ([quality](QUALITY_REPORT.pdf)) |
 | Privacy | 785,594 notes and calls redacted before any model, **0** leaks in a full scan |

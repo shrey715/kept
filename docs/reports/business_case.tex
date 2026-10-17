@@ -63,13 +63,14 @@ the customer's spare cash for that pay period. A promise that can't be sized tha
 
 \section{A cheaper, kinder contact mix}
 
-\fig[0.85\linewidth]{bc_mix.png}{Tonight's 96,000 open cases: the bank's current strategy vs Kept.}
+\fig[0.85\linewidth]{bc_mix.png}{Tonight's 96,000 open cases: what the bank currently recommends for them vs Kept.}
 
 \textbf{What the chart says.} Kept doesn't simply call less: call-type actions are almost unchanged (40,601 vs 41,574).
 What changes is \emph{which} calls. The current strategy's biggest bar is collection calls (34,326); Kept's is
 \textbf{hardship reviews (37,409)}, because text and cash-flow signals flag far more customers who need a protective
 conversation than the old rule set did. At the cheap end, \$1.10 letters (7,180) disappear in favour of SMS payment links
 (\$0.01), emails and app pushes (\$0.001).
+The bank's side of the chart is its recommendation field read on cases that are still open, which is what an agent sees today; on closed cases the same field records how they ended, so it is not used as an evaluation anywhere here.
 
 \begin{table}[htbp]\small\centering
 \begin{tabular}{@{}lrrr@{}}
@@ -183,10 +184,13 @@ Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
 
 Who gets a call matters more than how many calls are made. On the 141,350 decisions after 15 August that the uplift
 model never saw, calling every one of the 42,369 call candidates brought no more payments within 14 days than waiting
-(25 fewer). Calling only the model's top 42\% brought \textbf{1,446 more payments}; the bank's strategy over the same
-share brought 430. Stopping there leaves about 24,600 calls unmade, about \$59K in contact cost each pass. Actions were
-chosen by the bank, so this compares what happened rather than a trial (the portfolio page shows the curves, from
-\path{data/exports/reports/model_card.json}).
+(25 fewer). Calling only the model's top 42\% brought \textbf{1,446 more payments}. Stopping there leaves about 24,600
+calls unmade, about \$59K in contact cost each pass. Actions were chosen by the bank, so this compares what happened rather
+than a trial, and it is not corrected for who the bank chose to contact (the portfolio page shows the curves, from
+\path{data/exports/reports/model_card.json}). A doubly robust re-check on a clean outcome (account-sourced payments,
+\path{docs/reports/uplift_improvement.md}) finds the call ranking adds less than calling every call decision, so treat the
+saving as an upper estimate; an earlier comparison with the bank's recommendation field is withdrawn, because that field is
+look-ahead.
 
 \section{Channel economics}
 
@@ -205,9 +209,7 @@ Digital nudges (SMS link, email, push) & 25,207 & \$0.05 & 2,705 & \$0.48 \\
 \end{tabular}
 \end{center}
 
-\textbf{Where call capacity goes.} The bank's strategy recommends a call on 55,163 of these decisions; for 36\% of
-them the model expects a call to add under half a point of payment chance: customers who would pay, or not, either way.
-Tonight Kept proposes 35,891 calls (most of them hardship reviews for protected customers), about half of one weekday's
+\textbf{Where call capacity goes.} Tonight Kept proposes 35,891 calls (most of them hardship reviews for protected customers), about half of one weekday's
 call capacity of 69,000 to 74,000 attempts (\path{silver.channel_capacity}), so the volume fits; the portfolio's
 workload view shows how they fall by hour.
 

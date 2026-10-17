@@ -227,12 +227,13 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
 <section class="slide" data-title="Why uplift">
   <div class="glow"></div>
   <div class="eyebrow">Model choice · who to contact</div>
-  <h2>Uplift per action, not a propensity score: contact whoever a contact changes.</h2>
+  <h2>Uplift per action, behind a gate: its signal is small, so timing is the lever.</h2>
   <div class="grid stagger" style="grid-template-columns:1.25fr 1fr;margin-top:3.5vh;align-items:start">
     <table>
       <tr><th>Option</th><th>Verdict</th><th>Why</th></tr>
       <tr><td><b>LightGBM T-learner</b><br><span class="muted small">one model per action vs waiting</span></td><td><span class="pill ok">chosen</span></td><td class="small">Fast on 700k decisions, handles missing payroll data, exact TreeSHAP for the "why" on every card.</td></tr>
       <tr><td>Propensity to pay</td><td><span class="pill no">rejected</span></td><td class="small">Ranks people who'd pay anyway; spends contacts where they change nothing.</td></tr>
+      <tr><td>Uplift study</td><td><span class="pill tie">small signal</span></td><td class="small">A call adds {{KcallEffect}} pts [{{KcallEffectCI}}] on a clean payment; the live call ranking adds {{KliveGain}} per 1,000 decisions against {{KeveryGain}} for calling every call decision. The bank's recommendation field is look-ahead, so it is not a baseline.</td></tr>
       <tr><td>Causal forest / deep uplift</td><td><span class="pill no">rejected</span></td><td class="small">Slower and harder to explain, with no evidence of more signal in this data.</td></tr>
       <tr><td>Tuned LightGBM ({{Ktrials}} candidates)</td><td><span class="pill no">lost</span></td><td class="small">Best on validation, worse than the champion on held-out decisions (Qini 0.0029 vs 0.0073).</td></tr>
       <tr><td>X- and DR-learners</td><td><span class="pill no">mixed</span></td><td class="small">Doubly robust Qini on held-out decisions: SMS {{KdrSms}} vs {{KchSms}}, email {{KdrEmail}} vs {{KchEmail}}. Wins some arms, loses others; the gate keeps the champion.</td></tr>
@@ -242,7 +243,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
       <p class="small muted" style="margin-top:6px">Any contact: {{KqiniAny}} ± {{KqiniNoise}}. Small, and the gate knows it: a worse model can't go live.</p></div>
   </div>
   <div class="foot"><span><b>Kept</b> · model_card.json · tuning.md · uplift_learners.md</span><span>6</span></div>
-  <aside>The rationale: propensity models are the industry default but they target the wrong people. Uplift asks what the contact changes. We tried to beat our own champion with a 40-model search and couldn't: the champion stays, which is the gate working.</aside>
+  <aside>The rationale: propensity models are the industry default but they target the wrong people; uplift asks what the contact changes. Measured honestly, contact itself barely moves payment, so the uplift model stays behind the gate and Kept's levers are timing: the due date and the hour of the call (evening calls reach the right party {{KeveningGap}} pts more often). We also found that the bank's recommendation field is look-ahead and that the gate's noise understated seed spread (call Qini {{KseedLo}} to {{KseedHi}}).</aside>
 </section>
 
 <!-- 7 · promise model -->
@@ -322,7 +323,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
   <h2>Hypothesis, offline evidence, a gate, then ship or reject.</h2>
   <table style="margin-top:3vh">
     <tr><th>Decision</th><th>Alternative</th><th>Evidence that decided it</th><th>Outcome</th></tr>
-    <tr><td><b>Date promises to payday</b></td><td>more contacts, more channels</td><td class="small">bank's A/B: strategies overlap; payday timing +6.1 pts</td><td><span class="pill ok">core idea</span></td></tr>
+    <tr><td><b>Date promises to payday</b></td><td>more contacts, more channels</td><td class="small">bank's A/B: strategies overlap; payday timing +6.1 pts; evening calls reach the right party {{KeveningGap}} pts more</td><td><span class="pill ok">core idea</span></td></tr>
     <tr><td><b>DuckDB + dbt + Feast</b></td><td>Spark, Postgres</td><td class="small">one machine, columnar speed, point-in-time joins we can test</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td><b>Splink matching</b></td><td>exact keys only</td><td class="small">99% of 200 injected duplicates found, 0 wrong merges</td><td><span class="pill ok">shipped</span></td></tr>
     <tr><td><b>Certified metrics first</b></td><td>model-written SQL for all</td><td class="small">reviewed SQL answers most questions; the model only drafts lookups, voted 3 ways</td><td><span class="pill ok">shipped</span></td></tr>
@@ -386,7 +387,7 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <div class="card"><h3>Promise-kept rate by strategy, 95% Wilson interval</h3><svg id="forest" viewBox="0 0 520 210" style="width:100%;margin-top:6px"></svg></div>
     <div class="grid" style="gap:12px">
       <div class="card hot"><div class="big">{{KpayMoney}} pts</div><p class="small" style="margin-top:6px">promised money paid when due 0–2 days after payday (95% CI {{KpayMoneyCI}}), on {{KpayPromises}} promises in the bank's randomised cases</p></div>
-      <div class="card"><div class="mid">{{KoffPolicy}} per 1,000</div><p class="small muted" style="margin-top:6px">more customers paying within 14 days when Kept chooses the action instead of the bank's strategy (95% CI {{KoffPolicyCI}}; off-policy, doubly robust)</p></div>
+      <div class="card"><div class="mid">{{KoffPolicy}} per 1,000</div><p class="small muted" style="margin-top:6px">customers paying within 14 days gained by Kept choosing the action instead of what the bank did, clean outcome (95% CI {{KoffPolicyCI}}): no measurable gain in who to contact</p></div>
     </div>
   </div>
   <div class="foot"><span><b>Kept</b> · evidence.md §1, §2, §4</span><span>14</span></div>
@@ -406,7 +407,8 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
     <tr><td><b>Fake paydays show nothing</b></td><td class="small muted">Every payday moved 3–10 days (placebo)</td><td class="mono">{{KplaceboNull}} intervals include zero</td><td><span class="pill ok">holds</span></td></tr>
     <tr><td><b>Kept's promise model vs the bank's</b></td><td class="small muted">Paired bootstrap, same unseen promises</td><td class="mono">{{KwideAuc}} vs {{KbankAuc}} <span class="muted">[{{KwideGapCI}}]</span></td><td><span class="pill tie">tie</span></td></tr>
     <tr><td><b>The two models together</b></td><td class="small muted">Equal-weight rank average, nothing fitted on the test</td><td class="mono">{{KblendAuc}}, {{KblendGap}} <span class="muted">[{{KblendGapCI}}]</span></td><td><span class="pill ok">holds</span></td></tr>
-    <tr><td><b>Kept's action choice vs the bank's</b></td><td class="small muted">Doubly robust, paired on the same decisions</td><td class="mono">{{KoffPolicy}} payers / 1,000 <span class="muted">[{{KoffPolicyCI}}]</span></td><td><span class="pill ok">holds</span></td></tr>
+    <tr><td><b>Kept's action choice vs what the bank did</b></td><td class="small muted">Doubly robust, clean outcome</td><td class="mono">{{KoffPolicy}} payers / 1,000 <span class="muted">[{{KoffPolicyCI}}]</span></td><td><span class="pill tie">no gain</span></td></tr>
+    <tr><td><b>Evening calls reach the right party</b></td><td class="small muted">Comparable calls</td><td class="mono">{{KeveningGap}} pts <span class="muted">[{{KeveningGapCI}}]</span></td><td><span class="pill ok">holds</span></td></tr>
     <tr><td><b>Targeting by uplift</b></td><td class="small muted">The bank's randomisation only: worked vs held out</td><td class="mono">{{KcellAll}} to {{KcellTop}} per 1,000 cases, CIs include 0</td><td><span class="pill no">unproven</span></td></tr>
     <tr><td><b>Pays back in year one</b></td><td class="small muted">20,000 draws over every assumption</td><td class="mono">{{KpPayback}} of draws <span class="muted">({{KpPaybackTogether}} if all move together)</span></td><td><span class="pill ok">holds</span></td></tr>
   </table>
