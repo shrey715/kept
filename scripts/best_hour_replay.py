@@ -142,6 +142,7 @@ MD = REPO / "docs" / "reports" / "best_hour.md"
 
 def to_markdown(res: dict) -> str:  # type: ignore[type-arg]
     h, tv, rc = res["as_historically_booked"], res["team_volume"], res["recorded_capacity"]
+    h = {**h, "observed_hour_rate_estimate": h["observed_rpc"]}  # the calls' own outcomes
     n = res["calls"]
 
     def row(label: str, r: dict, moved: object = "") -> str:  # type: ignore[type-arg]
@@ -195,9 +196,13 @@ the last column re-values the same bookings with the observed RPC rate by hour b
 {row("Recorded capacity, switch off", rc["off"])}
 {row("Recorded capacity, switch on", rc["on"], f"{100 * rc['share_moved_from_earliest']:.0f}%")}
 
-Switch on against off: **{100 * (tv["on"]["predicted_rpc"] - tv["off"]["predicted_rpc"]):+.1f} points** at team volume ({100 * (tv["on"]["observed_hour_rate_estimate"] - tv["off"]["observed_hour_rate_estimate"]):+.1f} on observed hourly rates),
-{100 * (rc["on"]["predicted_rpc"] - rc["off"]["predicted_rpc"]):+.1f} points at recorded capacity ({100 * (rc["on"]["observed_hour_rate_estimate"] - rc["off"]["observed_hour_rate_estimate"]):+.1f}). The study's capacity-respecting estimate against the hours as booked was +7.4 points.
-Today's booking is not the historical one: with all customers allowed from 07:00 it puts nearly every call into the first hours of the day, which is why "off" is below "as historically booked".
+Switch on against off: **{100 * (tv['on']['predicted_rpc'] - tv['off']['predicted_rpc']):+.1f} points** at team volume ({100 * (tv['on']['observed_hour_rate_estimate'] - tv['off']['observed_hour_rate_estimate']):+.1f} on observed hourly rates),
+{100 * (rc['on']['predicted_rpc'] - rc['off']['predicted_rpc']):+.1f} points at recorded capacity ({100 * (rc['on']['observed_hour_rate_estimate'] - rc['off']['observed_hour_rate_estimate']):+.1f}).
+Against the hours the calls were actually made at: {100 * (tv['on']['predicted_rpc'] - h['predicted_rpc']):+.1f} points at team volume, {100 * (rc['on']['predicted_rpc'] - h['predicted_rpc']):+.1f} at recorded capacity.
+The headline is the team-volume figure, the one that assumes no more staff in the evening than today.
+"Off" is below "as historically booked" because the booking being replaced puts calls into the earliest free hour: with all customers allowed from 07:00 (local), almost every call goes into the first hours of the day at recorded capacity.
+The study's capacity-respecting estimate against the hours as booked was +7.4 points (50.9% against 43.5%); this replay gets less ({100 * (tv['on']['predicted_rpc'] - h['predicted_rpc']):+.1f}) than the study's figure.
+Likely reasons, not separated: the study capped each evening hour by the total handled over the whole window, here the cap is per date; calls here are booked one at a time in decision order through the real booking class; capacity is in bank time while calls are in customer time; and the model here has only inputs available at serving (AUC 0.717, the study's 0.729).
 
 Share of calls by local hour:
 
@@ -227,7 +232,7 @@ Checks, switch on (every booked call; calls with no free slot within a week keep
 - Right-party contact is the outcome, not payment: the study found contact itself barely moves payment, so a payment gain is not claimed.
 - Evening capacity is a staffing question. The recorded capacity book is generous; the team-volume book assumes no more evening staff than today.
 - Calls are replayed in decision order within a day; the nightly orders by balance, so who gets the scarce hours differs.
-- Hours before 08:00 are allowed by every customer record (07:00 to 21:00) but no call was ever made then, so the model has no data there; "off" books the 07:00 hour.
+- Every customer record allows calls from 07:00, but almost no call was ever made before 08:00 local, so the model has little data there (it treats 07:00 like 08:00); the earliest-slot booking uses 07:00.
 """
     )
 
