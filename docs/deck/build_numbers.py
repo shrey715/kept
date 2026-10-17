@@ -132,7 +132,7 @@ def main() -> None:
     rr = {s: a1("duckdb", "roll_rate", s).split()[0] for s in (10, 40)}
     ws = A1["duckdb_working_set"]["roll_rate"]
     rep, ctl, clk, tz = d["A2"]["replay"], d["A3"]["control_right_as_of"], d["A3"]["clock_snapshot_date_instead_of_as_of"], d["A3"]["timezone_utc_hour_instead_of_local"]
-    sc, hp, bq = d["B4"]["scenarios"]["base"], d["B4"]["hosted_prices_usd_per_mtok"], d["B4"]["quota"]
+    sc, bq = d["B4"]["scenarios"]["base"], d["B4"]["quota"]
     b5, ac, sp = d["B5"]["settings"], d["B7"]["accuracy"], d["B7"]["speed_s_per_1000"]
     hrs, b9 = d["B7"]["hours_to_label_all_760594"], d["B9"]["models"]
     b10 = d["B10"]["test"]["total"]["models"]
@@ -167,7 +167,7 @@ def main() -> None:
         "decBsevenRulesHours": f"{hrs['keywords']:.3f}", "decBsevenSetfitHours": f"{hrs['setfit_gpu']:.3f}",
         "decBsevenLlmHours": f"{hrs['llm_extrapolated']:,.0f}", "decBsevenLlmDays": f"{hrs['llm_days_extrapolated']:.0f}",
         "decBsevenSetfitSec": f"{d['B7']['parts']['setfit_all_notes']['seconds']:.0f}",
-        "decBsevenRatio": f"{round(speed := sp['llm_2_slots'] / sp['setfit_gpu'], -3):,.0f}",
+        "decBsevenRatio": f"{round(sp['llm_2_slots'] / sp['setfit_gpu'], -3):,.0f}",
         "decBnineSix": f"{b9['6-feature LightGBM, no calibration (as \u00a78)']['auc']:.3f}",
         "decBnineBank": f"{d['B9']['bank_auc']:.3f}",
         "decBtenResponse": f"{b10['Response model']['qini_noise_units']:.1f}", "decBtenT": f"{b10['T-learner (live settings)']['qini_noise_units']:.1f}",
