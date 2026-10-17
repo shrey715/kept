@@ -156,7 +156,7 @@ def main() -> None:
         "decBfiveLive": f"{b5['live']['all']['right']}", "decBfiveOf": f"{b5['live']['all']['graded']}",
         "decBfivePlainPct": pc(b5["plain"]["all"]["accuracy"]), "decBfiveRoutePct": pc(b5["route"]["all"]["accuracy"]),
         "decBfiveLivePct": pc(b5["live"]["all"]["accuracy"]),
-        "decBfiveConfPlain": str(b5["plain"]["all"]["wrong_but_confident"]), "decBfiveConfRoute": str(b5["route"]["all"]["wrong_but_confident"]),
+        "decBfiveConfPlain": str(b5["plain"]["all"]["wrong_but_confident"]), "decBfiveConfLive": str(b5["live"]["all"]["wrong_but_confident"]), "decBfiveConfRoute": str(b5["route"]["all"]["wrong_but_confident"]),
         "decBfiveGainDrafts": str(b5["live"]["all"]["right"] - b5["templates"]["all"]["right"]),
         "decBsixDense": f"{b6['dense']['all']['mrr']:.3f}", "decBsixHybrid": f"{b6['hybrid']['all']['mrr']:.3f}",
         "decBsixDenseFr": f"{b6['dense']['fr']['mrr']:.3f}", "decBsixHybridFr": f"{b6['hybrid']['fr']['mrr']:.3f}",

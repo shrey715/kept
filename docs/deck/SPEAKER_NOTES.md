@@ -54,7 +54,7 @@ read as "open"), a deterministic check fixes it without retuning a prompt. Score
 **How do you know?** `data/exports/reports/model_card.json`, from `scripts/model_card.py`, on promises the model never saw.
 
 ## 10 · Decisions
-**Say:** each choice, the alternative we rejected, and the measured number that decided it. Uplift finds 122 extra payers per 1,000 contacts in the top 30% against 81 for a propensity score. Local models are not cheaper: hosted Haiku 5.5 would cost less than our two GPUs, so the reason is privacy and regulation. Certified metrics and the router take the Ask from 36 to 81 of 93 right; the drafts and judge add one, and we call them insurance. Two rows are open: hybrid policy search loses to dense-only (MRR 0.640 against 0.747), and we have not switched yet.
+**Say:** each choice, the alternative we rejected, and the measured number that decided it. Uplift finds 122 extra payers per 1,000 contacts in the top 30% against 81 for a propensity score. Local models are not cheaper: hosted Haiku 5.5 would cost less than our two GPUs, so the reason is privacy and regulation. Certified metrics and the router take the Ask from 36 to 81 of 93 right; the drafts and judge add one more, and confident wrong answers fall from 33 to 7. Two rows are open: hybrid policy search loses to dense-only (MRR 0.640 against 0.747), and we have not switched yet.
 **If asked "why local models only?":** customer words never leave the machine, which is what OSFI B-10 and E-23, PIPEDA and Quebec Law 25 ask of a third party; a quota can't stop a demo or a collector mid-shift (the free tier covers 500 requests a day, one night is 1,647 extractions). Not cost: `docs/reports/decisions.md` §B4.
 **If asked "why Qwen3.8-27B, and why llama.cpp?":** we measured. The 12B model kept missing conventions; tracing showed
 Ollama ran a 4k window under a 9k-token prompt. llama.cpp sets the window explicitly and runs two requests at once;
@@ -91,7 +91,7 @@ much better; uplift targeting on the bank's own randomisation is unproven, which
 business case pays back in 99.97% of simulated draws.
 **If asked "did you beat the bank's model?":** not alone, and we don't claim to. A wider model on the same kinds of
 inputs the bank's score uses matches it (0.697 against 0.702, interval −1.9 to +1.0 points). Ours exists the moment a
-promise is made, about nine days before the bank's score, and averaged with it the two reach 0.764 (+6.1 points). The
+promise is made, about nine days before the bank's score, and averaged with it the two reach 0.763 (+6.1 points). The
 bank keeps its model and gains ours.
 **If asked "why is uplift so small?":** the bank's randomised test says contact intensity barely moves outcomes, so a
 small uplift signal is the honest result. We tried X- and doubly robust learners: they win some actions and lose
@@ -126,5 +126,5 @@ randomised due-date cell; a decision rule that ends it either way.
 - **Tuning:** the champion against the tuned challenger on held-out decisions.
 - **Drift and fairness:** the largest PSIs and the three flags, each reviewed.
 - **Backend:** **Say:** DuckDB ran `roll_rate` to 40x today's data in 62 s on 4 GB; Polars ran out of memory at 10x, Postgres needs about 33 GB of disk, Spark is four times slower at 10x. Re-scoring hourly would change 3.1% of cards in a day; one feature definition and `kept parity` catch a wrong clock (1,325 of 56,000 cells) that the control never shows. `decisions.md` §A1 to A3.
-- **Ask ablation:** **Say:** same model, one step added at a time. The router and certified metrics take 38.7% to 87.1%; reviewed templates add four answers; drafts, vote, linter and judge add one in 93, so we call them insurance. `decisions.md` §B5.
+- **Ask ablation:** **Say:** same model, one step added at a time. The router and certified metrics take 38.7% to 87.1%; reviewed templates add four answers; drafts, vote, linter and judge add one in 93 and take confident wrong answers from 8 to 7. `decisions.md` §B5.
 - **Model choices:** **Say:** SetFit matches the LLM on hardship (F1 0.87 against 0.88) in 63 s instead of about 29 days; uplift ranking beats a response model on Qini (7.9 against 3.2), and the S-learner scored higher still, so a pilot decides; the wide promise model ranks better (AUC 0.697 against 0.625) and matches the bank's 0.702. `decisions.md` §B7, B9, B10.
