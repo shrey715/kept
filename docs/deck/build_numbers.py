@@ -49,6 +49,12 @@ def study_macros() -> dict[str, str]:
             "offPolicy": f"{g[0]:+.0f}".replace("+0", "0").replace("-0", "0"), "offPolicyCI": rng_txt(g[1], g[2]),
             "offPolicyOld": f"{o[0]:+.0f}", "offPolicyOldCI": rng_txt(o[1], o[2]),
         }  # fmt: skip
+    if (REPORTS / "uplift_learners.json").exists():  # the DR-learner against the champion, scripts/uplift_learners.py
+        ul = load("uplift_learners.json")
+        best, ut = ul["best"], ul["test"]
+        out |= {"drName": esc(best)}
+        for arm, k in (("call", "Call"), ("sms_payment_link", "Sms"), ("email", "Email")):
+            out |= {f"dr{k}": f"{ut[arm][best]:+.4f}", f"ch{k}": f"{ut[arm]['Champion (live)']:+.4f}"}
     if (REPORTS / "uplift_diagnostics_part2.json").exists():  # the call effect on a clean payment, contact-attempt rows
         c = next(
             r for r in load("uplift_diagnostics_part2.json")["studies"]
@@ -139,7 +145,7 @@ def main() -> None:
         "fairnessAttributes": str(len(fair["attributes"])),
     }
     # the statistics behind each claim (scripts/evidence_report.py, scripts/uplift_learners.py, business_case.py)
-    ev, ul = load("evidence.json"), load("uplift_learners.json")
+    ev = load("evidence.json")
 
     def pt(v: list[float], unit: str = "") -> str:  # "+6.1" and "2.8–10.6"
         return f"{v[0]:+.1f}{unit}"
@@ -151,8 +157,6 @@ def main() -> None:
     wide_fair = ev["auc|Kept, wide: LightGBM + random forest, averaged ranks|before_due"]
     placebo = [v for k, v in ev.items() if k.startswith("placebo_")]
     sim, be = biz["simulation"], biz["breakeven_payday_pts"]
-    best, ut = ul["best"], ul["test"]
-    BANK = "The bank's strategy"
     con = duckdb.connect(str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"), read_only=True)
     per_week = con.execute(
         "select count(*) / 52.0 from silver.promises_to_pay"
@@ -182,12 +186,6 @@ def main() -> None:
         "cellAll": f"\\${ev['cell_top100'][0] / 1e3:+.0f}K", "cellTop": f"\\${ev['cell_top10'][0] / 1e3:+.0f}K",
         "pPayback": f"{100 * sim['p_payback_year1']:.2f}\\%", "pPaybackTogether": f"{100 * sim['p_payback_year1_together']:.1f}\\%",
         "breakevenLow": f"{be['low']:.1f}",
-        "drName": esc(best),
-        "drCall": f"{ut['call'][best]:+.4f}", "drSms": f"{ut['sms_payment_link'][best]:+.4f}", "drEmail": f"{ut['email'][best]:+.4f}",
-        "chCall": f"{ut['call']['Champion (live)']:+.4f}", "chSms": f"{ut['sms_payment_link']['Champion (live)']:+.4f}",
-        "chEmail": f"{ut['email']['Champion (live)']:+.4f}",
-        "bkCall": f"{ut['call'][BANK]:+.4f}", "bkSms": f"{ut['sms_payment_link'][BANK]:+.4f}",
-        "bkEmail": f"{ut['email'][BANK]:+.4f}",
         "weeksFive": f"{weeks(ev['payday_kept'][0] / 100, 0.05):.0f}", "weeksTwenty": f"{weeks(ev['payday_kept'][0] / 100, 0.20):.0f}",
     }
     m |= study_macros()
