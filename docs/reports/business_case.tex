@@ -88,6 +88,8 @@ Email · app push & \$0.001 & 0 & 20,370 \\
 \caption{Channel costs are the release's own averages for September 2026.}
 \end{table}
 
+This is a cost substitution (letters, and some SMS, replaced by email and push), not a gain from targeting: it assumes the cheaper channel pays about as well as the one it replaces. The clean-outcome off-policy test finds no measurable difference in payments between Kept's choice of action and what the bank did (evidence §4: 0 per 1,000 decisions, interval $-$7 to $+$8), so no payment loss is shown, but none is ruled out; the low scenario halves the number of passes.
+
 Each pass over the book saves \textbf{\$9,740}. The open book is worked through roughly weekly under the
 3-contacts-in-7-days cap, so 52 passes a year give \textbf{\$506K}.
 
@@ -180,34 +182,44 @@ Roll-rate points counted & 0 & 0 & 1 & overlaps the payday effect \\
 \caption{The assumptions in the model, with the measured payday effect's interval. Everything else is measured.}
 \end{table}
 
-\section{Same payments, fewer calls}
+\section{What a contact buys}
 
-Who gets a call matters more than how many calls are made. On the 141,350 decisions after 15 August that the uplift
-model never saw, calling every one of the 42,369 call candidates brought no more payments within 14 days than waiting
-(25 fewer). Calling only the model's top 42\% brought \textbf{1,446 more payments}. Stopping there leaves about 24,600
-calls unmade, about \$59K in contact cost each pass. Actions were chosen by the bank, so this compares what happened rather
-than a trial, and it is not corrected for who the bank chose to contact (the portfolio page shows the curves, from
-\path{data/exports/reports/model_card.json}). A doubly robust re-check on a clean outcome (account-sourced payments,
-\path{docs/reports/uplift_improvement.md}) finds the call ranking adds less than calling every call decision, so treat the
-saving as an upper estimate; an earlier comparison with the bank's recommendation field is withdrawn, because that field is
-look-ahead.
+On the 141,350 decisions after 15 August that the uplift model never saw, scored on a clean outcome (account-sourced payments within
+14 days, covered cases) with doubly robust estimates that correct for who the bank chose to contact
+(\path{docs/reports/uplift_improvement.md}): calling every call decision adds \textbf{11.7 paying customers per 1,000
+decisions} (95\% CI 4.5 to 18.1). Calling only the live model's top 44\% adds 6.2 (1.1 to 10.5), so \textbf{stopping early
+costs payments rather than saving calls for free}; a readable depth-3 rule gets 13.4 (9.3 to 17.3) from the same 44\%.
+We therefore claim no payment gain and no saving from calling fewer people. An earlier version of this section
+(``the model's top 42\% brought 1,446 more payments'') used the old label, which counts link and app payments seen only on the
+contact row, and an uncorrected treated-versus-untreated comparison; it is withdrawn, as is the comparison with the bank's
+recommendation field, which is look-ahead.
 
 \section{Channel economics}
 
-What a contact costs against the extra payments it brings, on the same held-out decisions (the bank's own contact
-costs; extra payments are against waiting, as in the uplift curves):
+What a contact costs against the extra paying customers it brings, same decisions and method (the engine's contact costs; extra
+customers are against waiting; the interval is the 95\% case bootstrap):
 
-\begin{center}\small
-\begin{tabular}{@{}lrrrr@{}}
+\begin{center}\footnotesize
+\begin{tabular}{@{}llrrrr@{}}
 \toprule
-\textbf{Channel} & \textbf{Contacts} & \textbf{Cost each} & \textbf{Extra payments} & \textbf{Cost per extra payment} \\
+\textbf{Channel} & \textbf{Contacted} & \textbf{Share} & \textbf{Extra per 1,000 decisions} & \textbf{per 1,000 contacts} & \textbf{Cost per payer} \\
 \midrule
-Calls, every candidate & 42,369 & \$2.40 & none ($-$25) & no return \\
-Calls, the model's top 42\% & 17,800 & \$2.40 & 1,446 & \$29.90 \\
-Digital nudges (SMS link, email, push) & 25,207 & \$0.05 & 2,705 & \$0.48 \\
+Call, \$2.40 & everyone & 100\% & 11.7 [4.5, 18.1] & 11.7 & \$205 \\
+ & live top share & 44\% & 6.2 [1.1, 10.5] & 14.2 & \$169 \\
+ & depth-3 rule & 44\% & 13.4 [9.3, 17.3] & 30.7 & \$78 \\
+SMS link, \$0.10 & everyone & 100\% & 4.2 [$-$1.8, 9.8] & 4.2 & \$24 \\
+ & live top share & 58\% & 8.1 [3.3, 12.7] & 13.9 & \$7 \\
+ & depth-3 rule & 58\% & 12.4 [7.6, 17.6] & 21.3 & \$5 \\
+Email, \$0.01 & everyone & 100\% & 1.0 [$-$5.6, 7.2] & 1.0 & \$10 \\
+ & live top share & 31\% & 3.7 [0.3, 8.3] & 11.8 & \$1 \\
+ & depth-3 rule & 31\% & 3.0 [$-$1.1, 7.4] & 9.7 & \$1 \\
 \bottomrule
 \end{tabular}
 \end{center}
+
+Digital nudges are far cheaper per extra payer than calls, but every estimate here is small and several intervals include zero:
+contact barely moves payment, which is why the main lever is the due date (evidence §2) and, for calls, the hour (the study:
+evening calls reach the right party about 21 points more often).
 
 \textbf{Where call capacity goes.} Tonight Kept proposes 35,891 calls (most of them hardship reviews for protected customers), about half of one weekday's
 call capacity of 69,000 to 74,000 attempts (\path{silver.channel_capacity}), so the volume fits; the portfolio's
@@ -216,7 +228,7 @@ workload view shows how they fall by hour.
 \section{Break-even, and the chance of paying back}
 
 \textbf{Break-even.} The year-one cost is \$450K (build plus a year's running). At base, the contact mix, wrap-up time and
-QA time alone bring in \$0.93M, so \textbf{Kept pays back in year one even if dating promises to payday adds nothing}.
+QA time alone bring in \$0.93M, so \textbf{Kept pays back in year one even if dating promises to payday adds nothing} (the contact-mix block, \$506K of that, assumes the cheaper channels pay as well as the ones they replace; without it the other two bring in \$0.42M, short of the \$450K cost).
 With every one of those at its low end as well, it needs a payday effect of \textbf{0.2 points}; the measured effect is
 2.7 points [0.1, 6.1] (evidence §2).
 
