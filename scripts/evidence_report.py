@@ -345,17 +345,20 @@ def off_policy(con: duckdb.DuckDBPyConnection) -> str:
         run("Old label, every decision with a known outcome (as first published)", "paid_14d", known),
     ]
     EV["offpolicy_per_1000"] = res[0]["gap_per_1000"]  # the headline: clean outcome, overlap rows
-    EV["offpolicy_old_label_per_1000"] = res[2]["gap_per_1000"]
+    EV["offpolicy_old_label_per_1000"] = res[1]["gap_per_1000"]  # same rows, old label
     EV["offpolicy_runs"] = res
     out = [
         f"| Kept's model against what the bank did (decisions from {TRAIN_CUTOFF:%d %b}) | Decisions kept | Bank, observed | Kept, doubly robust | Kept minus bank, per 1,000 decisions [95% CI] | Actions changed |",
         "|---|---:|---:|---:|---:|---:|",
     ]
+    def sg(x: float) -> str:  # signed, and no "-0"
+        return "0" if round(x) == 0 else f"{x:+.0f}"
+
     for r in res:
         b, k_, g = r["bank"], r["kept"], r["gap_per_1000"]
         out.append(
             f"| {r['label']} | {r['kept_rows']:,} of {r['decisions']:,} ({100 * r['share_kept']:.0f}%) | {b[0]:.1f}% [{b[1]:.1f}, {b[2]:.1f}] "
-            f"| {k_[0]:.1f}% [{k_[1]:.1f}, {k_[2]:.1f}] | **{g[0]:+.0f}** [{g[1]:+.0f}, {g[2]:+.0f}] | {100 * r['share_changed']:.0f}% |"
+            f"| {k_[0]:.1f}% [{k_[1]:.1f}, {k_[2]:.1f}] | **{sg(g[0])}** [{sg(g[1])}, {sg(g[2])}] | {100 * r['share_changed']:.0f}% |"
         )
     return "\n".join(out)
 
