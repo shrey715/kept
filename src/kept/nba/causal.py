@@ -93,6 +93,43 @@ def crossfit(
     return pd.concat(parts).sort_index()
 
 
+def policy_value(
+    df: pd.DataFrame,
+    cols: Sequence[str],
+    pi: np.ndarray,
+    outcome: str,
+    *,
+    evaluate: np.ndarray | None = None,
+    k: int = 5,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """Doubly robust value of a fixed multi-action policy `pi` (action per row) against what was actually done.
+
+    psi = mu_pi(x) + 1(a = pi) / e_pi(x) * (y - mu_pi(x)): mean(psi) is the policy's expected outcome, mean(y) the observed
+    value of the logged actions. Outcome models (one per action) and a multinomial propensity are cross-fitted by case over
+    all of `df`, then used on the rows in `evaluate` only (default: all). Returns y, a, pi, e_pi (propensity of the policy's
+    action) and psi for those rows; the caller trims on e_pi and bootstraps by case.
+    """
+    from lightgbm import LGBMClassifier
+
+    ev = np.ones(len(df), bool) if evaluate is None else np.asarray(evaluate, bool)
+    f, X, a, y = folds(df.case_id, k, seed), _frame(df[list(cols)]), df.action.to_numpy(), df[outcome].to_numpy(float)
+    acts = sorted(set(a))
+    p = {**NUIS, "random_state": seed}
+    mu, e = np.zeros((len(df), len(acts))), np.zeros((len(df), len(acts)))
+    for i in range(k):
+        tr, te = f != i, (f == i) & ev
+        for j, act in enumerate(acts):
+            m = tr & (a == act)
+            mu[te, j] = LGBMClassifier(**p).fit(X[m], y[m].astype(int)).predict_proba(X[te])[:, 1]
+        e[te] = LGBMClassifier(**p).fit(X[tr], a[tr]).predict_proba(X[te])  # classes_ are sorted, as `acts`
+    j_pi = pd.Series(pi).map({act: j for j, act in enumerate(acts)}).to_numpy()
+    r = np.arange(len(df))
+    mu_pi, e_pi = mu[r, j_pi], e[r, j_pi]
+    psi = mu_pi + (a == pi) / np.clip(e_pi, 0.01, None) * (y - mu_pi)
+    return pd.DataFrame({"y": y, "a": a, "pi": pi, "e_pi": e_pi, "psi": psi}, index=df.index)[ev]
+
+
 def dr_qini(score: np.ndarray, phi: np.ndarray, w: np.ndarray | None = None) -> float:
     """Area between the doubly robust gain curve in `score` order and the straight line to its end (> 0: better than random)."""
     w = np.ones(len(phi)) if w is None else w

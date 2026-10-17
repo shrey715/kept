@@ -5,7 +5,8 @@ as_of = decision_at - 1 second. Build both with
 `dbt build --select path:models/features --vars '{training_spine: true}'`.
 Time split: fit on decisions before `cutoff`, then on decisions from `cutoff` on: Qini per action vs
 WAIT, and the same for the legacy strategy's recommendation (collections_cases.nba_recommendation_last
-as a 0/1 targeting score), plus "any contact vs WAIT". The plan's check (Q7) is model > legacy.
+as a 0/1 targeting score; a look-ahead field, so that comparison is not fair, see evaluate()), plus "any
+contact vs WAIT". The plan's check (Q7) was model > legacy.
 `noise_*` is the standard deviation of Qini under random rankings: differences below about two of
 those are noise.
 """
@@ -105,6 +106,7 @@ def evaluate(
     early = (rows.decision_at < cutoff).to_numpy()
     late = rows[~early]
     lift = model.uplift(late[X.columns])
+    # qini_legacy_* uses nba_recommendation_last, a look-ahead field: not a fair comparison
     legacy = late["nba_recommendation_last"].map(lambda c: (a := legacy_to_action(c)) and a.value)
     if pooled:
         legacy = legacy.replace({a.value: Action.EMAIL.value for a in NUDGES})
