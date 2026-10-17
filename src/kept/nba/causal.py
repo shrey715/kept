@@ -33,7 +33,9 @@ def aipw(y: np.ndarray, t: np.ndarray, m1: np.ndarray, m0: np.ndarray, e: np.nda
 class Nuisance:
     """Outcome models for the arm and for waiting, plus P(arm | x) among those two, fitted on one frame."""
 
-    def __init__(self, cols: Sequence[str], arm: str, outcome: str = "paid_14d", seed: int = 0, *, binary: bool = True) -> None:
+    def __init__(
+        self, cols: Sequence[str], arm: str, outcome: str = "paid_14d", seed: int = 0, *, binary: bool = True
+    ) -> None:
         self.cols, self.arm, self.outcome, self.seed, self.binary = list(cols), arm, outcome, seed, binary
 
     def fit(self, df: pd.DataFrame) -> Nuisance:
@@ -54,9 +56,14 @@ class Nuisance:
         d = df[mask]
         X = _frame(d[self.cols])
         y, t = d[self.outcome].to_numpy(float), (d.action == self.arm).to_numpy(float)
-        m1, m0 = (np.asarray(m.predict_proba(X))[:, 1] if self.binary else np.asarray(m.predict(X)) for m in (self.m1, self.m0))
+        m1, m0 = (
+            np.asarray(m.predict_proba(X))[:, 1] if self.binary else np.asarray(m.predict(X))
+            for m in (self.m1, self.m0)
+        )
         e = np.asarray(self.e.predict_proba(X))[:, 1]
-        out = pd.DataFrame({"y": y, "t": t, "m1": m1, "m0": m0, "e": e, "phi": aipw(y, t, m1, m0, e)}, index=d.index)
+        out = pd.DataFrame(
+            {"y": y, "t": t, "m1": m1, "m0": m0, "e": e, "phi": aipw(y, t, m1, m0, e)}, index=d.index
+        )
         return mask, out
 
 
@@ -67,7 +74,16 @@ def folds(case_ids: pd.Series, k: int, seed: int = 0) -> np.ndarray:
     return rng.permutation(codes.max() + 1)[codes] % k  # type: ignore[no-any-return]
 
 
-def crossfit(df: pd.DataFrame, cols: Sequence[str], arm: str, *, k: int = 5, seed: int = 0, outcome: str = "paid_14d", binary: bool = True) -> pd.DataFrame:
+def crossfit(
+    df: pd.DataFrame,
+    cols: Sequence[str],
+    arm: str,
+    *,
+    k: int = 5,
+    seed: int = 0,
+    outcome: str = "paid_14d",
+    binary: bool = True,
+) -> pd.DataFrame:
     """Out-of-fold pseudo-outcomes for the rows in arm or wait (nuisance models never see the row's case)."""
     f = folds(df.case_id, k, seed)
     parts = []
@@ -87,12 +103,16 @@ def dr_qini(score: np.ndarray, phi: np.ndarray, w: np.ndarray | None = None) -> 
     return float(np.trapezoid(g, x) - 0.5 * g[-1])
 
 
-def case_bootstrap(case_ids: pd.Series, fn: Callable[[np.ndarray], Any], *, reps: int = 200, seed: int = 0) -> np.ndarray:
+def case_bootstrap(
+    case_ids: pd.Series, fn: Callable[[np.ndarray], Any], *, reps: int = 200, seed: int = 0
+) -> np.ndarray:
     """fn(row_weights) on `reps` resamples of whole cases (weights = how often the row's case was drawn). Returns an array of the results."""
     codes = pd.factorize(case_ids)[0]
     n = codes.max() + 1
     rng = np.random.default_rng(seed)
-    return np.asarray([fn(np.bincount(rng.integers(0, n, n), minlength=n)[codes].astype(float)) for _ in range(reps)])
+    return np.asarray(
+        [fn(np.bincount(rng.integers(0, n, n), minlength=n)[codes].astype(float)) for _ in range(reps)]
+    )
 
 
 def blp(phi: np.ndarray, tau: np.ndarray, case_ids: pd.Series) -> dict[str, float]:
@@ -105,7 +125,13 @@ def blp(phi: np.ndarray, tau: np.ndarray, case_ids: pd.Series) -> dict[str, floa
     cl = pd.DataFrame(u).groupby(pd.factorize(case_ids)[0]).sum().to_numpy()
     cov = xtx_inv @ (cl.T @ cl) @ xtx_inv
     se = np.sqrt(np.diag(cov))
-    return {"ate": float(beta[0]), "ate_se": float(se[0]), "slope": float(beta[1]), "slope_se": float(se[1]), "slope_t": float(beta[1] / se[1])}
+    return {
+        "ate": float(beta[0]),
+        "ate_se": float(se[0]),
+        "slope": float(beta[1]),
+        "slope_se": float(se[1]),
+        "slope_t": float(beta[1] / se[1]),
+    }
 
 
 def gate_qini(score: np.ndarray, t: np.ndarray, y: np.ndarray, w: np.ndarray | None = None) -> float:
@@ -114,7 +140,12 @@ def gate_qini(score: np.ndarray, t: np.ndarray, y: np.ndarray, w: np.ndarray | N
     w = np.ones(len(y)) if w is None else w
     o = np.argsort(-score, kind="stable")
     w, t, y = w[o], t[o].astype(float), y[o].astype(float)
-    n_t, n_c, y_t, y_c = np.cumsum(w * t), np.cumsum(w * (1 - t)), np.cumsum(w * y * t), np.cumsum(w * y * (1 - t))
+    n_t, n_c, y_t, y_c = (
+        np.cumsum(w * t),
+        np.cumsum(w * (1 - t)),
+        np.cumsum(w * y * t),
+        np.cumsum(w * y * (1 - t)),
+    )
     with np.errstate(divide="ignore", invalid="ignore"):
         gain = np.concatenate([[0.0], y_t - np.where(n_c > 0, y_c * n_t / n_c, 0.0)])
     tot = w.sum()
@@ -133,8 +164,24 @@ class CausalUplift:
     whose estimated propensity is outside CLIP are left out of the second stage (overlap), and the second stage is a small, heavily
     regularised LightGBM. `view(kind)` is a scorer with the gate's surface: .uplift(frame) -> columns per action, zeros for wait."""
 
-    def __init__(self, cols: Sequence[str], arms: Sequence[str], outcome: str, *, binary: bool = True, seed: int = 0, k: int = 3) -> None:
-        self.cols, self.arms, self.outcome, self.binary, self.seed, self.k = list(cols), list(arms), outcome, binary, seed, k
+    def __init__(
+        self,
+        cols: Sequence[str],
+        arms: Sequence[str],
+        outcome: str,
+        *,
+        binary: bool = True,
+        seed: int = 0,
+        k: int = 3,
+    ) -> None:
+        self.cols, self.arms, self.outcome, self.binary, self.seed, self.k = (
+            list(cols),
+            list(arms),
+            outcome,
+            binary,
+            seed,
+            k,
+        )
         self.models: dict[str, dict[str, Any]] = {"dr": {}, "r": {}}
         self.kept: dict[str, float] = {}
 
@@ -143,7 +190,9 @@ class CausalUplift:
 
         for arm in self.arms:
             d = df[df.action.isin([arm, "wait"])].reset_index(drop=True)
-            ps = crossfit(d, self.cols, arm, k=self.k, seed=self.seed, outcome=self.outcome, binary=self.binary)
+            ps = crossfit(
+                d, self.cols, arm, k=self.k, seed=self.seed, outcome=self.outcome, binary=self.binary
+            )
             keep = ((ps.e >= CLIP[0]) & (ps.e <= CLIP[1])).to_numpy()
             self.kept[arm] = float(keep.mean())
             X = _frame(d[self.cols])[keep]

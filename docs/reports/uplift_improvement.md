@@ -4,7 +4,7 @@ Written from `scripts/uplift_diagnostics.py` and `scripts/uplift_learners.py --i
 
 ## The short version
 
-1. **On payment that every arm can reach the same way, the bank's own call recommendation beats Kept's uplift model.** Counting extra clean payments (account-sourced, no contact flags) within 14 days against waiting, on the decisions from 15 Aug, restricted to the population where both contacted and waiting decisions exist: the bank's call recommendation adds **+22.6 payments per 1,000 decisions** [+18.1, +26.8], the depth-3 policy tree **+13.4** [+9.3, +17.3], the live model's top rows at the same share **+6.2** [+1.1, +10.6]. The live model's call ranking is the weakest of the three. What follows from it is the team's call; options are in "What this means" below.
+1. **On decision-time information, the live uplift model's call ranking is the weakest rule tested.** Counting extra clean payments (account-sourced, no contact flags) within 14 days against waiting, on the decisions from 15 Aug, restricted to the population where both contacted and waiting decisions exist, per 1,000 decisions: the depth-3 policy tree **+13.4** [+9.3, +17.3], treating every call decision **+11.7** [+4.5, +18.1], the live model's top rows at the same share as the tree **+6.2** [+1.1, +10.5]. The bank's own recommendation field is left out of this comparison on purpose: it is a look-ahead field, not a decision-time rule (see "The bank's recommendation is not a decision-time rule"). The DR nuisance models use the context inputs, which favours the tree.
 2. **The live model's gate numbers are noisier than the gate says.** The gate's noise (0.0003) is the spread under random rankings. Retraining the same model on the same rows with a different seed moves the call Qini between +0.0023 and +0.0063 and the any-contact Qini between -0.0003 and +0.0018.
 3. **Two artefacts inflated the early results.** Payments flagged on the contact row (a link or app payment after an SMS or email) exist only for contacted decisions and leave no trace in transactions, so the old label credits SMS and email with about +5.5 points that no other source confirms. And the contact-attempt rows compare contact days with a weekly grid of quiet days, which have almost no overlap at 30+ days past due; they show a strong "heterogeneity" (calibration slope 1.0, t = 12 to 26) that mostly disappears in a fairer row design (slope 0.0 to 0.5, t = 0 to 4).
 4. **Adding what the bank knew at the moment of deciding to the existing model improves it on the rows it was built for.** The best-scoring is the live T-learner with ten extra context inputs. It is recorded as the next challenger, not promoted: it was not the candidate picked on validation, it does not carry over to the cleanest evaluation set, and the ten inputs are not in the feature registry or the serving path.
@@ -293,25 +293,42 @@ A depth-3 tree on out-of-fold DR scores per arm (clean payment, covered cases, o
 | call | tree (depth 3) | 44% | +13.4 [+9.3, +17.3] | +30.7 |
 | call | live model, same share | 44% | +6.2 [+1.1, +10.5] | +14.2 |
 | call | treat everyone | 100% | +11.7 [+4.5, +18.1] | +11.7 |
-| call | the bank's recommendation | 48% | +22.6 [+18.1, +26.8] | +47.4 |
+| call | not comparable: `nba_recommendation_last` is look-ahead | 48% | +22.6 [+18.1, +26.8] | +47.4 |
 | sms payment link | tree (depth 3) | 58% | +12.4 [+7.6, +17.6] | +21.3 |
 | sms payment link | live model, same share | 58% | +8.1 [+3.3, +12.7] | +13.9 |
 | sms payment link | treat everyone | 100% | +4.2 [-1.8, +9.8] | +4.2 |
-| sms payment link | the bank's recommendation | 15% | -10.9 [-14.9, -7.4] | -73.5 |
+| sms payment link | not comparable: `nba_recommendation_last` is look-ahead | 15% | -10.9 [-14.9, -7.4] | -73.5 |
 | email | tree (depth 3) | 31% | +3.0 [-1.1, +7.4] | +9.7 |
 | email | live model, same share | 31% | +3.7 [+0.3, +8.3] | +11.8 |
 | email | treat everyone | 100% | +1.0 [-5.6, +7.2] | +1.0 |
-| email | the bank's recommendation | 0% | +0.0 [+0.0, +0.0] | +0.0 |
+| email | not comparable: `nba_recommendation_last` is look-ahead | 0% | +0.0 [+0.0, +0.0] | +0.0 |
 
-The bank's own call recommendation is the strongest call rule here, and its SMS recommendation (15% of decisions) loses 10.9 per 1,000. The tree beats the live model on calls and SMS at the same share, and is readable: for calls it treats cases with no contact in the last 7 days whose promise falls due within about 5 days and whose cohort keeps promises; the rules for SMS and email lean on days since the last contact and cohort rates. Leaf values and thresholds are in `data/exports/reports/uplift_policy.json`.
+The "not comparable" rows score `collections_cases.nba_recommendation_last`, which is the last next-best-action shown to the agent as of the 28 Sep snapshot, so it encodes how each case ended (next section). They are kept only to show what the field does when used as a rule; no conclusion about the bank's targeting rests on them. The comparison that holds is among decision-time rules: the tree beats the live model on calls and SMS at the same share (calls +13.4 against +6.2; the live model's top 44% adds less than treating every call decision, +11.7), and the tree is readable: for calls it treats cases with no contact in the last 7 days whose promise falls due within about 5 days and whose cohort keeps promises; the rules for SMS and email lean on days since the last contact and cohort rates. Leaf values and thresholds are in `data/exports/reports/uplift_policy.json`. The DR nuisance models use the same context inputs as the tree, which favours the tree; email shows no rule above the noise.
 
 Call split: 45.5% of calls reach the right party. Against waiting, the DR effect on clean payment is -0.4 pts [-1.2, +0.2] for calls that reached the customer and -0.4 [-0.9, +0.2] for those that did not, on 31% and 38% of rows after trimming. Neither is distinguishable from zero, and reaching the customer is not randomised, so no split of the call effect is claimed.
 
 Not done: payday timing as the action (2.3; `evidence.md` section 2 already measures it, and the rows here have no payday-dating lever); a dollar call-versus-WAIT model (the dollar effect was not confirmed on landmarks); a causal forest.
 
+## The bank's recommendation is not a decision-time rule
+
+`collections_cases.nba_recommendation_last` is, per the data dictionary, the last next-best-action shown to the agent: one value per case, as of the snapshot. On randomly assigned cases it maps onto the case's final state (`select ... from silver.collections_cases where assignment_method = 'random' group by nba_recommendation_last`):
+
+| `nba_recommendation_last` | Cases | Open | Cured |
+|---|---:|---:|---:|
+| sms_payment_link | 97,716 | 11.4% | 87.3% |
+| (none) | 29,348 | 26.3% | 72.7% |
+| call_evening | 8,840 | 100.0% | 0.0% |
+| call_daytime | 4,868 | 100.0% | 0.0% |
+| offer_hardship_plan | 2,917 | 100.0% | 0.0% |
+| send_letter | 2,884 | 100.0% | 0.0% |
+
+Cases whose last recommendation is a call, a hardship plan or a letter never cured; cases whose last recommendation is an SMS link mostly did. As a targeting rule at the time of a decision it looks ahead. An earlier draft of this report read the +22.6 per 1,000 it scores as "the bank beats the live model"; that conclusion is withdrawn. The bank's targeting is not evaluated here.
+
+**Pre-existing issue, same field.** The gate's legacy comparison (`qini_legacy_*` in `src/kept/nba/train.py`, which scores `nba_recommendation_last` as a 0/1 targeting rule), the published "model vs legacy" numbers (for example the Qini against legacy in the deck) and the "The bank's strategy" column of `docs/reports/uplift_learners.md` use this field, so those comparisons share the look-ahead. The gate's champion-versus-challenger decision does not use it (`promote` reads only the models' own Qini). No gate code was changed here.
+
 ## What this means (options, not decisions)
 
-- **Whom to call:** on clean payment the bank's call recommendation beats Kept's call ranking. One option is to keep the bank's targeting for whom to call and use Kept for timing (best hour), payday dating and promise sizing, where the evidence is stronger (`evidence.md` section 2 and the hour result above).
+- **Whom to call:** among decision-time rules the live call ranking is below both treating every call decision and the tree. The bank's own targeting cannot be assessed from this data, because its recommendation field is look-ahead; an assessment would need a recommendation logged at decision time. Timing (best hour, payday dating) is where the evidence is stronger (`evidence.md` section 2 and the hour result above).
 - **Next uplift challenger:** the T-learner with ten context inputs, once the inputs are in the registry, through the live gate on the next window.
 - **Pilot:** delay contact for predicted self-curers in one randomised cell; the holdout cell cannot answer it.
 - **The gate:** it compares treated with untreated directly and its noise ignores seeds and case clustering. A seed-averaged DR metric on the clean outcome, with case-bootstrap noise, is a fairer companion (`scripts/uplift_learners.py --improve` computes both).

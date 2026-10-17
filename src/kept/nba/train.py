@@ -39,7 +39,7 @@ def pool_nudges(rows: pd.DataFrame) -> pd.DataFrame:
     """Every nudge row (and a legacy nudge recommendation) becomes the one nudge arm."""
     nudge = {a.value: Action.EMAIL.value for a in NUDGES}
     return rows.assign(action=rows.action.replace(nudge))
-# decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
+
 
 # decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
 CONTEXT_COLS = [
