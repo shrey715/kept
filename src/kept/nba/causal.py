@@ -32,17 +32,18 @@ def aipw(y: np.ndarray, t: np.ndarray, m1: np.ndarray, m0: np.ndarray, e: np.nda
 class Nuisance:
     """Outcome models for the arm and for waiting, plus P(arm | x) among those two, fitted on one frame."""
 
-    def __init__(self, cols: Sequence[str], arm: str, outcome: str = "paid_14d", seed: int = 0) -> None:
-        self.cols, self.arm, self.outcome, self.seed = list(cols), arm, outcome, seed
+    def __init__(self, cols: Sequence[str], arm: str, outcome: str = "paid_14d", seed: int = 0, *, binary: bool = True) -> None:
+        self.cols, self.arm, self.outcome, self.seed, self.binary = list(cols), arm, outcome, seed, binary
 
     def fit(self, df: pd.DataFrame) -> Nuisance:
-        from lightgbm import LGBMClassifier
+        from lightgbm import LGBMClassifier, LGBMRegressor
 
         d = df[df.action.isin([self.arm, "wait"])]
         X, t, y = _frame(d[self.cols]), (d.action == self.arm).to_numpy(), d[self.outcome].to_numpy(float)
         p = {**NUIS, "random_state": self.seed}
-        self.m1 = LGBMClassifier(**p).fit(X[t], y[t].astype(int))
-        self.m0 = LGBMClassifier(**p).fit(X[~t], y[~t].astype(int))
+        out = LGBMClassifier if self.binary else LGBMRegressor
+        self.m1 = out(**p).fit(X[t], y[t].astype(int) if self.binary else y[t])
+        self.m0 = out(**p).fit(X[~t], y[~t].astype(int) if self.binary else y[~t])
         self.e = LGBMClassifier(**p).fit(X, t.astype(int))
         return self
 
@@ -52,7 +53,8 @@ class Nuisance:
         d = df[mask]
         X = _frame(d[self.cols])
         y, t = d[self.outcome].to_numpy(float), (d.action == self.arm).to_numpy(float)
-        m1, m0, e = (m.predict_proba(X)[:, 1] for m in (self.m1, self.m0, self.e))
+        m1, m0 = (m.predict_proba(X)[:, 1] if self.binary else m.predict(X) for m in (self.m1, self.m0))
+        e = self.e.predict_proba(X)[:, 1]
         out = pd.DataFrame({"y": y, "t": t, "m1": m1, "m0": m0, "e": e, "phi": aipw(y, t, m1, m0, e)}, index=d.index)
         return mask, out
 
@@ -64,12 +66,12 @@ def folds(case_ids: pd.Series, k: int, seed: int = 0) -> np.ndarray:
     return rng.permutation(codes.max() + 1)[codes] % k  # type: ignore[no-any-return]
 
 
-def crossfit(df: pd.DataFrame, cols: Sequence[str], arm: str, *, k: int = 5, seed: int = 0, outcome: str = "paid_14d") -> pd.DataFrame:
+def crossfit(df: pd.DataFrame, cols: Sequence[str], arm: str, *, k: int = 5, seed: int = 0, outcome: str = "paid_14d", binary: bool = True) -> pd.DataFrame:
     """Out-of-fold pseudo-outcomes for the rows in arm or wait (nuisance models never see the row's case)."""
     f = folds(df.case_id, k, seed)
     parts = []
     for i in range(k):
-        n = Nuisance(cols, arm, outcome, seed).fit(df[f != i])
+        n = Nuisance(cols, arm, outcome, seed, binary=binary).fit(df[f != i])
         parts.append(n.pseudo(df[f == i])[1])
     return pd.concat(parts).sort_index()
 

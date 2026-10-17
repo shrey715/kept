@@ -160,13 +160,107 @@ def stability(rows: pd.DataFrame, seeds: tuple[int, ...] = (0, 1, 2)) -> list[di
     return out
 
 
+CTX2 = ["pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d", "days_since_contact", "last_rpc", "last_ptp_made", "paid_prev7", "weekday"]
+# name -> (column, binary, restricted to covered cases, restricted to paid_14d_known rows)
+OUTCOMES = {
+    "any payment, contact flags included (old label)": ("paid_14d", True, False, True),
+    "clean payment (account-sourced, covered cases)": ("paid_clean_14d", True, True, False),
+    "clean dollars paid (account-sourced, covered cases)": ("paid_amt_14d", False, True, False),
+    "cured within 30 days (all cases)": ("cured_30d", True, False, False),
+}
+DPD_BANDS = ((-1, 30), (30, 60), (60, 10_000))
+
+
+def study(df: pd.DataFrame, cols: list[str], arm: str, name: str, label: str) -> dict[str, Any]:
+    """One arm against WAIT on one outcome: average effect before and after trimming to propensity in [0.05, 0.95], then (trimmed only)
+    the BLP test, out-of-fold DR Qini and, for calls, the effect inside dpd bands."""
+    col, binary, cov, known = OUTCOMES[name]
+    d = df[df.action.isin([arm, "wait"])]
+    d = d[d.covered] if cov else d
+    d = d[d.paid_14d_known] if known else d
+    d = d.reset_index(drop=True)
+    if not binary:  # dollars: the top 0.5% are outliers that decide the average
+        d = d.assign(**{col: d[col].clip(upper=d[col].quantile(0.995))})
+    ps = crossfit(d, cols, arm, outcome=col, binary=binary)
+    keep = ((ps.e >= 0.05) & (ps.e <= 0.95)).to_numpy()
+    t_all = ps.t.to_numpy() == 1
+    kept = {"arm_kept": float(keep[t_all].mean()), "wait_kept": float(keep[~t_all].mean()), "rows": len(d)}
+    prof = d.assign(keep=keep, is_arm=t_all).groupby(["is_arm", "keep"])[["max_dpd", "pending_ptp", "n_out_7d"]].mean().round(2)
+    all_ate = case_bootstrap(d.case_id, lambda w: (w * ps.phi.to_numpy()).sum() / w.sum(), reps=200)
+    dk = d[keep].reset_index(drop=True)
+    ps2 = crossfit(dk, cols, arm, outcome=col, binary=binary, seed=1)
+    phi, t = ps2.phi.to_numpy(), ps2.t.to_numpy()
+    y = dk[col].to_numpy(float)
+    ate = case_bootstrap(dk.case_id, lambda w: (w * phi).sum() / w.sum(), reps=300)
+    f = folds(dk.case_id, 5, seed=2)
+    X, tau = _frame(dk[cols]), np.zeros(len(dk))
+    for i in range(5):
+        tau[f == i] = LGBMRegressor(n_estimators=200, num_leaves=7, min_child_samples=1000, learning_rate=0.03, reg_lambda=20.0, colsample_bytree=0.8, verbose=-1).fit(X[f != i], phi[f != i]).predict(X[f == i])
+    q = dr_qini(tau, phi)
+    qs = case_bootstrap(dk.case_id, lambda w: dr_qini(tau, phi, w), reps=200)
+    rng = np.random.default_rng(0)
+    out: dict[str, Any] = {
+        "label": label, "outcome": name, "arm": arm, **kept,
+        "ate_untrimmed": float(ps.phi.mean()), "ate_untrimmed_ci": np.quantile(all_ate, [0.025, 0.975]).tolist(),
+        "naive_trimmed": float(y[t == 1].mean() - y[t == 0].mean()), "ate": float(phi.mean()), "ate_ci": np.quantile(ate, [0.025, 0.975]).tolist(),
+        "mean_outcome_wait": float(y[t == 0].mean()), "blp": blp(phi, tau, dk.case_id),
+        "oof_dr_qini": q, "oof_dr_qini_ci": np.quantile(qs, [0.025, 0.975]).tolist(),
+        "random_noise": float(np.std([dr_qini(rng.random(len(phi)), phi) for _ in range(50)])),
+        "kept_profile": prof.reset_index().to_dict("records"),
+    }  # fmt: skip
+    if arm == "call":
+        out["dpd_bands"] = [
+            {"band": f"{lo + 1}-{hi}", "n": int(m.sum()), "arm_share": float(t[m].mean()), "dr_ate": float(phi[m].mean()), "naive": float(y[m & (t == 1)].mean() - y[m & (t == 0)].mean())}
+            for lo, hi in DPD_BANDS
+            if (m := (dk.max_dpd.to_numpy() > lo) & (dk.max_dpd.to_numpy() <= hi)).sum() > 500 and 0 < t[m].mean() < 1
+        ]
+    print(label, arm, name, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in out.items() if k in ("arm_kept", "wait_kept", "ate_untrimmed", "naive_trimmed", "ate", "ate_ci", "oof_dr_qini", "oof_dr_qini_ci", "random_noise")}, {k: round(v, 3) for k, v in out["blp"].items()}, flush=True)
+    return out
+
+
+def part2(conn: duckdb.DuckDBPyConnection, out_path: str) -> None:
+    res: list[dict[str, Any]] = []
+    for label, source in (("case landmarks", "training_weeks"), ("contact attempts", "training_rows")):
+        df = load_rows(conn, source=source, extras=True)
+        df["last_rpc"] = df.last_rpc.astype(float)
+        df["last_ptp_made"] = df.last_ptp_made.astype(float)
+        for name in OUTCOMES:
+            for arm in ARMS:
+                res.append(study(df, COLS + CTX2, arm, name, label))
+                Path(out_path).write_text(json.dumps(res, indent=1, default=float))
+    # tie-breaker: do link/app payments flagged on the contact move anything recorded for every arm?
+    df = load_rows(conn, source="training_rows", extras=True)
+    h = conn.sql("select contact_id as decision_id, coalesce(link_payment_flag, false) or coalesce(app_payment_after_contact_flag, false) or coalesce(payment_taken_flag, false) as flagged from silver.contact_history").df()
+    df = df.merge(h, on="decision_id")
+    from lightgbm import LGBMClassifier
+
+    tie = []
+    for arm in ("email", "sms_payment_link", "call"):
+        d = df[(df.action == arm)].reset_index(drop=True)
+        f = folds(d.case_id, 5)
+        X = _frame(d[COLS + CTX2])
+        exp = np.zeros(len(d))
+        for i in range(5):
+            tr = (f != i) & ~d.flagged.to_numpy()
+            exp[f == i] = LGBMClassifier(n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1).fit(X[tr], d.cured_30d[tr].astype(int)).predict_proba(X[f == i])[:, 1]
+        fl = d.flagged.to_numpy()
+        diff = case_bootstrap(d.case_id[fl], lambda w, fl=fl, d=d, exp=exp: (w * (d.cured_30d.to_numpy(float)[fl] - exp[fl])).sum() / w.sum(), reps=200)
+        tie.append({"arm": arm, "flagged": int(fl.sum()), "cured_30d_flagged": float(d.cured_30d[fl].mean()), "expected_from_unflagged": float(exp[fl].mean()), "diff": float(d.cured_30d[fl].mean() - exp[fl].mean()), "diff_ci": np.quantile(diff, [0.025, 0.975]).tolist(), "unflagged_rate": float(d.cured_30d[~fl].mean())})
+        print("tiebreak", tie[-1], flush=True)
+    Path(out_path).write_text(json.dumps({"studies": res, "tiebreak_cure": tie}, indent=1, default=float))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(REPO / "data" / "warehouse" / "kept.duckdb"))
     ap.add_argument("--out", default=str(REPO / "data" / "exports" / "reports" / "uplift_diagnostics.json"))
+    ap.add_argument("--part", type=int, default=1, help="1: Step 0 on the old rows; 2: overlap x clean outcome, both row sets")
     args = ap.parse_args()
     conn = duckdb.connect(args.warehouse, read_only=True)
     conn.execute("set memory_limit = '4GB'; set threads = 4")
+    if args.part == 2:
+        part2(conn, args.out.replace(".json", "_part2.json"))
+        return
     rows = load(conn)
     ctx_cols = COLS + CONTEXT_COLS
     res: dict[str, Any] = {}
