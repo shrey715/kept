@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pickle
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -249,14 +250,276 @@ def part2(conn: duckdb.DuckDBPyConnection, out_path: str) -> None:
     Path(out_path).write_text(json.dumps({"studies": res, "tiebreak_cure": tie}, indent=1, default=float))
 
 
+FRAMINGS_JSON = REPO / "data" / "exports" / "reports" / "uplift_framings.json"
+
+
+def self_cure(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Track 2.1. Who cures with little help? P(cure within ~30 days) from the 17 inputs on the first landmark of each randomly
+    assigned case (day 1: nothing about the case's outcome is known), time split on the case open date, then the bank's randomised
+    cells: among cases the model calls likely self-curers, do held-out cases (the bank's no_contact_holdout cell) cure like worked ones?"""
+    from lightgbm import LGBMClassifier
+
+    from kept.nba.causal import NUIS
+
+    lm = load_rows(conn, source="training_weeks", extras=True)
+    meta = conn.sql("""select c.case_id, c.test_cell, c.case_open_date, coalesce(a.attempts, 0) as attempts, coalesce(a.spend, 0) as cost
+        from silver.collections_cases c left join (
+            select h.case_id, count(*) as attempts, sum(h.contact_cost_cad) as spend
+            from silver.contact_history h join silver.collections_cases c2 on c2.case_id = h.case_id
+            where h.direction = 'outbound' and h.contact_ts_utc < c2.case_open_date + 34 group by h.case_id) a using (case_id)""").df()
+    d = lm.merge(meta, on="case_id")
+    d = d[(d.decision_at.dt.normalize() - pd.to_datetime(d.case_open_date)).dt.days == 1]
+    d = d[pd.to_datetime(d.case_open_date) < "2026-08-20"].reset_index(drop=True)
+    fit, test = d[d.case_open_date < pd.Timestamp("2026-06-01")], d[d.case_open_date >= pd.Timestamp("2026-06-01")].copy()
+    X = lambda x: _frame(x[COLS])  # noqa: E731
+    from sklearn.isotonic import IsotonicRegression
+
+    # the last fifth of the fit period (by open date) calibrates the model: the case mix drifts, and raw scores were 10-25 points high
+    cut = fit.case_open_date.quantile(0.8)
+    core, cal = fit[fit.case_open_date <= cut], fit[fit.case_open_date > cut]
+    m = LGBMClassifier(**{**NUIS, "n_estimators": 150}).fit(X(core), core.cured_30d.astype(int))
+    iso = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1).fit(m.predict_proba(X(cal))[:, 1], cal.cured_30d.astype(float))
+    test["p_raw"] = m.predict_proba(X(test))[:, 1]
+    test["p"] = iso.predict(test.p_raw)
+    y = test.cured_30d.to_numpy(float)
+    out: dict[str, Any] = {"fit_cases": len(fit), "test_cases": len(test), "base_rate": float(y.mean()), "auc": float(roc_auc_score(y, test.p)), "brier_raw": float(np.mean((test.p_raw - y) ** 2)), "brier": float(np.mean((test.p - y) ** 2)), "brier_constant": float(np.var(y))}
+    q = pd.qcut(test.p, 10, labels=False, duplicates="drop")
+    out["deciles"] = test.assign(q=q).groupby("q").agg(predicted=("p", "mean"), observed=("cured_30d", "mean"), n=("p", "size")).round(4).reset_index().to_dict("records")
+    # more holdout cases: the same model out of fold over every case (cases grouped), instead of the time split
+    f5 = folds(d.case_id, 5)
+    d = d.assign(p=0.0)
+    for i in range(5):
+        d.loc[f5 == i, "p"] = LGBMClassifier(**{**NUIS, "n_estimators": 150}).fit(X(d[f5 != i]), d.cured_30d[f5 != i].astype(int)).predict_proba(X(d[f5 == i]))[:, 1]
+    out["auc_oof_all"] = float(roc_auc_score(d.cured_30d, d.p))
+    test = d  # the holdout check below uses every case
+    held = test.test_cell == "no_contact_holdout"
+    out["cells"] = test.groupby("test_cell").agg(n=("p", "size"), cure=("cured_30d", "mean"), attempts=("attempts", "mean"), cost=("cost", "mean")).round(4).reset_index().to_dict("records")
+    rows = []
+
+    def compare(sel: pd.Series, label: Any) -> dict[str, Any]:
+        a, b = test[sel & held], test[sel & ~held]
+        diff = a.cured_30d.mean() - b.cured_30d.mean()
+        se = np.sqrt(a.cured_30d.var() / len(a) + b.cured_30d.var() / len(b))  # cases are the units: no clustering to allow for
+        return {"group": label, "n_held": len(a), "n_worked": len(b), "cure_held": float(a.cured_30d.mean()), "cure_worked": float(b.cured_30d.mean()), "diff": float(diff), "diff_se": float(se), "diff_ci": [float(diff - 1.96 * se), float(diff + 1.96 * se)], "attempts_held": float(a.attempts.mean()), "attempts_worked": float(b.attempts.mean()), "cost_worked": float(b.cost.mean()), "cost_held": float(a.cost.mean()), "predicted": float(test.p[sel].mean())}
+
+    for top in (0.5, 0.3, 0.2, 0.1):
+        rows.append({"top_share": top, **compare(test.p >= test.p.quantile(1 - top), f"top {top:.0%}")})
+    bottom = compare(test.p < test.p.quantile(0.5), "bottom 50%")
+    rows.append({"top_share": None, **bottom})
+    top50 = rows[0]
+    inter = top50["diff"] - bottom["diff"]
+    inter_se = float(np.hypot(top50["diff_se"], bottom["diff_se"]))
+    out["interaction_top50_minus_bottom50"] = {"diff_in_diff": float(inter), "ci": [float(inter - 1.96 * inter_se), float(inter + 1.96 * inter_se)]}
+    # what skipping or delaying contact is worth: new cases per day (all cases, last year) x share x attempts and cost avoided
+    per_day = float(conn.sql("select count(*) / 365.0 from silver.collections_cases where case_open_date >= '2025-09-28' and case_open_date < '2026-09-28'").fetchone()[0])  # type: ignore[index]
+    out["cases_per_day"] = per_day
+    out["business"] = [
+        {"share": r["top_share"], "delayed_contacts_per_night": per_day * r["top_share"] * (r["attempts_worked"] - r["attempts_held"]), "delayed_cost_per_year": 365 * per_day * r["top_share"] * (r["cost_worked"] - r["cost_held"]),
+         "skipped_contacts_per_night_if_none": per_day * r["top_share"] * r["attempts_worked"], "skipped_cost_per_year_if_none": 365 * per_day * r["top_share"] * r["cost_worked"]}
+        for r in rows if r["top_share"] in (0.5, 0.3, 0.2)
+    ]
+    out["holdout_check"] = rows
+    print(json.dumps({k: v for k, v in out.items() if k not in ("deciles",)}, indent=1, default=float), flush=True)
+    return out
+
+
+def best_hour(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Track 2.2. P(right-party contact | hour, weekday, case features) for outbound calls on randomly assigned cases; AUC with and without
+    the hour; a within-customer check that the hour effect is not who gets called when; and what booking each call into its best allowed
+    hour would add, with the number of calls per hour band kept as it is (capacity) or not."""
+    from lightgbm import LGBMClassifier
+
+    from kept.nba.causal import NUIS
+
+    calls = load_rows(conn, extras=True)
+    calls = calls[calls.action == "call"]
+    h = conn.sql("""select h.contact_id as decision_id, h.contact_hour_local as hour, coalesce(h.rpc_flag, false) as rpc,
+          cast(split_part(c.permitted_call_start_local, ':', 1) as int) as win_start, cast(split_part(c.permitted_call_end_local, ':', 1) as int) as win_end
+        from silver.contact_history h left join silver.customers c on c.crm_customer_id = h.crm_customer_id""").df()
+    d = calls.merge(h, on="decision_id").dropna(subset=["hour"]).reset_index(drop=True)
+    d["hour"] = d.hour.astype(int)
+    d["win_start"], d["win_end"] = d.win_start.fillna(8).clip(lower=8), d.win_end.fillna(21).clip(upper=21)
+    feats = [*COLS, "n_out_7d", "n_rpc_30d", "days_since_contact", "weekday"]
+
+    def frame(x: pd.DataFrame, hr: Any = None) -> pd.DataFrame:
+        f = _frame(x[feats])
+        if hr is not None:
+            f = f.assign(hour=hr)
+        return f
+
+    fit, test = d[d.decision_at < CUT].reset_index(drop=True), d[d.decision_at >= CUT].reset_index(drop=True)
+    with_h = LGBMClassifier(**NUIS).fit(frame(fit, fit.hour), fit.rpc.astype(int))
+    no_h = LGBMClassifier(**NUIS).fit(frame(fit), fit.rpc.astype(int))
+    p_act = with_h.predict_proba(frame(test, test.hour))[:, 1]
+    out: dict[str, Any] = {"calls_fit": len(fit), "calls_test": len(test), "rpc_rate_test": float(test.rpc.mean()), "auc_with_hour": float(roc_auc_score(test.rpc, p_act)), "auc_without_hour": float(roc_auc_score(test.rpc, no_h.predict_proba(frame(test))[:, 1]))}
+    out["by_hour"] = d.groupby("hour").agg(calls=("rpc", "size"), rpc=("rpc", "mean")).round(4).reset_index().to_dict("records")
+    # the same call placed at every hour from 8 to 20; allowed = inside the customer's own calling window
+    hours = list(range(8, 21))
+    P = np.column_stack([with_h.predict_proba(frame(test, np.full(len(test), hh)))[:, 1] for hh in hours])
+    allowed = np.column_stack([(test.win_start <= hh) & (hh < test.win_end) for hh in hours])
+    allowed[~allowed.any(axis=1)] = True
+    Pm = np.where(allowed, P, -1.0)
+    best = Pm.max(axis=1)
+    eve = np.array(hours) >= 17
+    p_eve, p_day = np.where(eve, Pm, -1).max(axis=1), np.where(~eve, Pm, -1).max(axis=1)
+    k = int((test.hour >= 17).sum())  # evening slots as booked today
+    gain = np.where((p_eve >= 0) & (p_day >= 0), p_eve - p_day, -9)
+    top = np.argsort(-gain)[:k]
+    cap = np.where(p_day >= 0, p_day, p_eve).copy()
+    cap[top] = np.where(gain[top] > -9, p_eve[top], cap[top])
+    # capacity-respecting assignment: an evening hour takes no more calls on a weekday than the team handled in it in this window
+    caps = test[test.hour >= 17].groupby(["weekday", "hour"]).size().to_dict()
+    cap_p = np.where(p_day >= 0, p_day, p_eve).copy()
+    left = dict(caps)
+    chosen = np.full(len(test), -1)
+    for i in np.argsort(-np.where((p_eve >= 0) & (p_day >= 0), p_eve - p_day, -9)):
+        if not ((p_eve[i] >= 0) and (p_day[i] >= 0) and p_eve[i] > p_day[i]):
+            break
+        wd = test.weekday.iloc[i]
+        for j in np.argsort(-Pm[i]):
+            hh = hours[j]
+            if hh >= 17 and Pm[i, j] >= 0 and left.get((wd, hh), 0) > 0:
+                left[(wd, hh)] -= 1
+                cap_p[i], chosen[i] = Pm[i, j], hh
+                break
+    moved = chosen >= 0
+    assert all(test.win_start.to_numpy()[moved] <= chosen[moved]) and all(chosen[moved] < test.win_end.to_numpy()[moved]), "a moved call left the customer's calling window"
+    f = lambda w, v: float((w * v).sum() / w.sum())  # noqa: E731
+    from kept.nba.causal import case_bootstrap
+
+    base, free, capneutral = (case_bootstrap(test.case_id, lambda w, v=v: f(w, v), reps=100) for v in (p_act, best, cap))
+    diff_free = case_bootstrap(test.case_id, lambda w: f(w, best) - f(w, p_act), reps=200)
+    diff_cap = case_bootstrap(test.case_id, lambda w: f(w, cap) - f(w, p_act), reps=200)
+    diff_hourly = case_bootstrap(test.case_id, lambda w: f(w, cap_p) - f(w, p_act), reps=200)
+    out["policy"] = {"predicted_rpc_as_booked": float(p_act.mean()), "predicted_rpc_best_allowed_hour": float(best.mean()), "lift_best_hour": float(best.mean() - p_act.mean()), "lift_best_hour_ci": np.quantile(diff_free, [0.025, 0.975]).tolist(), "predicted_rpc_same_evening_volume": float(cap.mean()), "lift_same_evening_volume": float(cap.mean() - p_act.mean()), "lift_same_evening_volume_ci": np.quantile(diff_cap, [0.025, 0.975]).tolist(), "evening_calls_as_booked": k, "predicted_rpc_hourly_capacity": float(cap_p.mean()), "lift_hourly_capacity": float(cap_p.mean() - p_act.mean()), "lift_hourly_capacity_ci": np.quantile(diff_hourly, [0.025, 0.975]).tolist(), "calls_moved_to_evening": int(moved.sum()), "calls": len(test), "base_sd": float(base.std()), "free_sd": float(free.std()), "cap_sd": float(capneutral.std())}
+    # observed, for comparable calls: deciles of the no-hour model's score, evening against day inside each
+    p0 = no_h.predict_proba(frame(test))[:, 1]
+    dec = pd.qcut(p0, 10, labels=False, duplicates="drop")
+    band = np.where((test.hour >= 17) & (test.hour <= 20), 1, np.where((test.hour >= 8) & (test.hour <= 16), 0, -1))
+    rpc = test.rpc.to_numpy(float)
+
+    def strat(w: np.ndarray) -> float:
+        tot, acc = 0.0, 0.0
+        for q in np.unique(dec):
+            m1, m0 = (dec == q) & (band == 1), (dec == q) & (band == 0)
+            if w[m1].sum() > 0 and w[m0].sum() > 0:
+                n = w[(dec == q)].sum()
+                acc += n * ((w[m1] * rpc[m1]).sum() / w[m1].sum() - (w[m0] * rpc[m0]).sum() / w[m0].sum())
+                tot += n
+        return acc / tot
+
+    sb = case_bootstrap(test.case_id, strat, reps=100)
+    out["comparable_calls"] = {"evening_minus_day_rpc": strat(np.ones(len(test))), "ci": np.quantile(sb, [0.025, 0.975]).tolist(), "evening_calls": int((band == 1).sum()), "day_calls": int((band == 0).sum())}
+    cap_tbl = conn.sql("select time_band, avg(cast(capacity_units as double)) as capacity, avg(cast(used_units as double)) as used from silver.channel_capacity where channel = 'call' group by 1 order by 1").df()
+    out["call_capacity_per_day"] = cap_tbl.round(0).to_dict("records")
+    # within-customer: customers called both in the day (8-16h) and evening (17-20h) within the whole period
+    e = d.assign(eve=(d.hour >= 17) & (d.hour <= 20), day=(d.hour >= 8) & (d.hour <= 16))
+    g = e.groupby("crm_customer_id").apply(lambda x: pd.Series({"day": x.rpc[x.day].mean(), "eve": x.rpc[x.eve].mean(), "n": len(x)}), include_groups=False).dropna()
+    dd = (g.eve - g.day).to_numpy()
+    bs = [dd[np.random.default_rng(i).integers(0, len(dd), len(dd))].mean() for i in range(200)]
+    out["within_customer"] = {"customers": len(dd), "evening_minus_day_rpc": float(dd.mean()), "ci": np.quantile(bs, [0.025, 0.975]).tolist()}
+    print(json.dumps({k: v for k, v in out.items() if k != "by_hour"}, indent=1, default=float), flush=True)
+    return out
+
+
+def part3(conn: duckdb.DuckDBPyConnection) -> None:
+    res = {"self_cure": self_cure(conn)}
+    FRAMINGS_JSON.write_text(json.dumps(res, indent=1, default=float))
+    res["best_hour"] = best_hour(conn)
+    FRAMINGS_JSON.write_text(json.dumps(res, indent=1, default=float))
+
+
+def policy_trees(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Track 2.4 and 2.5. A depth-3 tree on out-of-fold DR scores per arm (clean payment, covered cases, overlap rows): readable segment rules,
+    fitted before 15 Aug and valued on the decisions after it by the DR gain of the rows each rule treats, against treating everyone, the live
+    model's top rows (same share) and the bank's own recommendation. Then the call split into right-party contact and no contact."""
+    from sklearn.tree import DecisionTreeRegressor, export_text
+
+    from kept.nba.causal import CLIP, Nuisance
+    from kept.nba.legacy import legacy_to_action
+
+    df = load_rows(conn, extras=True)
+    df = df[df.covered].reset_index(drop=True)
+    for c in ("last_rpc", "last_ptp_made"):
+        df[c] = df[c].astype(float)
+    df["bank"] = df.nba_recommendation_last.map(lambda c: (a := legacy_to_action(c)) and a.value)
+    fit, test = df[df.decision_at < CUT].reset_index(drop=True), df[df.decision_at >= CUT].reset_index(drop=True)
+    champ = pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes())
+    lift = champ.uplift(test[COLS])
+    cols = [*COLS, *CONTEXT_COLS]
+
+    def num(x: pd.DataFrame) -> pd.DataFrame:  # a tree takes numbers: category columns as their codes, missing as -1
+        f = _frame(x[cols])
+        return f.apply(lambda c: c.cat.codes if isinstance(c.dtype, pd.CategoricalDtype) else c.astype(float).fillna(-1))
+
+    out: dict[str, Any] = {"policies": []}
+    for arm in ("call", "sms_payment_link", "email"):
+        ps = crossfit(fit, cols, arm, outcome="paid_clean_14d")
+        ok = ((ps.e >= CLIP[0]) & (ps.e <= CLIP[1])).to_numpy()
+        d = fit.loc[ps.index][ok]
+        X = num(d)
+        tree = DecisionTreeRegressor(max_depth=3, min_samples_leaf=max(500, len(d) // 100), random_state=0).fit(X, ps.phi.to_numpy()[ok])
+        m, o = Nuisance(cols, arm, "paid_clean_14d").fit(fit).pseudo(test)
+        te = test[m]
+        keep = ((o.e >= CLIP[0]) & (o.e <= CLIP[1])).to_numpy()
+        te, phi = te[keep], o.phi.to_numpy()[keep]
+        rule = tree.predict(num(te)) > 0
+        share = float(rule.mean())
+        top = lift[arm].to_numpy()[m][keep]
+        champ_rule = top >= np.quantile(top, 1 - share) if share > 0 else np.zeros(len(top), bool)
+        rules = {"tree (depth 3)": rule, "live model, same share": champ_rule, "treat everyone": np.ones(len(te), bool), "the bank's recommendation": (te.bank == arm).to_numpy()}
+        for name, r in rules.items():
+            v = case_bootstrap(te.case_id, lambda w, r=r: float((w * phi * r).sum() / w.sum()), reps=200)
+            n_r = float(r.mean())
+            out["policies"].append({"arm": arm, "rule": name, "share_treated": n_r, "gain_per_1000_decisions": 1000 * float((phi * r).mean()), "gain_ci": (1000 * np.quantile(v, [0.025, 0.975])).tolist(), "extra_payers_per_1000_contacts": 1000 * float((phi * r).sum() / max(r.sum(), 1))})
+        out.setdefault("trees", {})[arm] = export_text(tree, feature_names=list(X.columns), decimals=3)
+        out["trees_leaf_value_unit"] = "extra probability of a clean payment within 14 days against waiting (DR, overlap rows)"
+        print(arm, [p for p in out["policies"] if p["arm"] == arm], out["trees"][arm], flush=True)
+    # call = right-party contact x pay: relabel the call arm by whether the call reached the customer
+    h = conn.sql("select contact_id as decision_id, coalesce(rpc_flag, false) as rpc from silver.contact_history").df()
+    c = df.merge(h, on="decision_id", how="left")
+    c["action"] = np.where((c.action == "call") & (c.rpc == True), "call_rpc", np.where(c.action == "call", "call_no_rpc", c.action))  # noqa: E712
+    dec = {"p_rpc_given_call": float(c.rpc[c.action.isin(["call_rpc", "call_no_rpc"])].mean())}
+    for arm in ("call_rpc", "call_no_rpc"):
+        ps = crossfit(c, cols, arm, outcome="paid_clean_14d")
+        ok = ((ps.e >= CLIP[0]) & (ps.e <= CLIP[1])).to_numpy()
+        v = case_bootstrap(c.case_id.loc[ps.index][ok], lambda w, ps=ps, ok=ok: float((w * ps.phi.to_numpy()[ok]).sum() / w.sum()), reps=200)
+        dec[arm] = {"dr_effect_vs_wait": float(ps.phi.to_numpy()[ok].mean()), "ci": np.quantile(v, [0.025, 0.975]).tolist(), "rows_kept_share": float(ok.mean())}
+    out["call_decomposition"] = dec
+    print(dec, flush=True)
+    return out
+
+
+def seed_table(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
+    """`kept train`'s own metrics (cutoff 15 Aug, gate Qini) for four model seeds on identical rows: the spread the gate's noise does not show."""
+    from kept.nba.train import train
+
+    rows = load_rows(conn)
+    out = []
+    for seed in range(4):
+        _, m = train(rows, cutoff=CUT, seed=seed)
+        out.append({"seed": seed, **{k: m[k] for k in ("qini_call", "qini_any_contact", "noise_call", "noise_any_contact", "qini_legacy_call")}})
+        print(out[-1], flush=True)
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(REPO / "data" / "warehouse" / "kept.duckdb"))
     ap.add_argument("--out", default=str(REPO / "data" / "exports" / "reports" / "uplift_diagnostics.json"))
-    ap.add_argument("--part", type=int, default=1, help="1: Step 0 on the old rows; 2: overlap x clean outcome, both row sets")
+    ap.add_argument("--part", type=int, default=1, help="1: Step 0 on the old rows; 2: overlap x clean outcome, both row sets; 3: self-cure and best-hour framings; 4: policy trees and the call split; 5: seed spread of the gate metric")
     args = ap.parse_args()
     conn = duckdb.connect(args.warehouse, read_only=True)
     conn.execute("set memory_limit = '4GB'; set threads = 4")
+    if args.part == 3:
+        part3(conn)
+        return
+    if args.part == 5:
+        (REPO / "data" / "exports" / "reports" / "uplift_seeds.json").write_text(json.dumps(seed_table(conn), indent=1))
+        return
+    if args.part == 4:
+        (REPO / "data" / "exports" / "reports" / "uplift_policy.json").write_text(json.dumps(policy_trees(conn), indent=1, default=float))
+        return
     if args.part == 2:
         part2(conn, args.out.replace(".json", "_part2.json"))
         return

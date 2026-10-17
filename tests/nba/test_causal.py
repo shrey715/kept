@@ -58,3 +58,17 @@ def test_causal_uplift_ranks_by_the_true_effect() -> None:
     for kind in ("dr", "r"):
         lift = m.view(kind).uplift(grid)["call"].to_numpy()
         assert lift[1] - lift[0] > 0.1
+
+
+def test_study_features_are_clean() -> None:
+    """The offline studies' inputs (17 registry inputs + decision context, hour and weekday for the call-hour model) contain no outcome
+    column, no protected attribute and no proxy (age, postal code, language, ...)."""
+    from kept.contracts.data_contract import load_data_contract
+    from kept.contracts.feature_registry import model_inputs
+    from kept.features.store import assert_no_denied
+    from kept.nba.train import CONTEXT_COLS
+
+    cols = [*model_inputs(), *CONTEXT_COLS, "hour"]
+    assert_no_denied(pd.DataFrame(columns=cols))
+    c = load_data_contract()
+    assert not set(cols) & (c.protected_attributes | c.proxy_attributes)
