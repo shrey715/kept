@@ -4,6 +4,7 @@ slot of the earliest bookable local day, inside the customer's hours, with capac
 from __future__ import annotations
 
 from datetime import UTC, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -49,7 +50,10 @@ def test_picks_the_likelier_hour_on_the_same_day_and_ties_go_to_the_earlier_slot
     slot, moved = cap.book_best(Ctx(), THU_8AM, X)  # type: ignore[arg-type]
     assert _local(slot).hour == 18 and _local(slot).minute == 0  # 18:00 and 19:00 tie: the earlier
     assert moved is not None and moved.p_booked == 0.6 and moved.p_earliest == 0.3
-    assert moved.text() == "Booked 18:00: this customer is likelier to answer then (60% chance of reaching them, against 30% at 08:00)."
+    assert (
+        moved.text()
+        == "Booked 18:00: this customer is likelier to answer then (60% chance of reaching them, against 30% at 08:00)."
+    )
 
 
 def test_the_earliest_slot_wins_when_it_is_the_best_and_nothing_is_reported() -> None:
@@ -121,3 +125,55 @@ def test_trained_model_prefers_the_evening_when_the_data_say_so() -> None:
     model, metrics = train(rows)
     p = model.p_rpc(rows.iloc[[0]], [(9, 2), (18, 2)])
     assert p[1] > p[0] + 0.15 and metrics["auc_test"] > 0.6
+
+
+@pytest.mark.parametrize("on", [False, True])
+def test_the_card_says_when_best_hour_moved_the_call(make_ctx: Any, on: bool) -> None:
+    from kept.contracts import FeatureVector
+    from kept.nba.engine import KeptEngine
+
+    from ..fakes import ConstantScorer, FixedContextBuilder, InMemoryAuditLog, StaticFeatureProvider
+
+    now = datetime(2026, 10, 2, 22, 0, tzinfo=UTC)
+    ctx = make_ctx()
+    fv = FeatureVector(
+        case_id=ctx.case_id,
+        golden_customer_id=ctx.golden_customer_id,
+        as_of=ctx.features_as_of,
+        feature_set_version="fs-0",
+        max_dpd=18,
+        days_to_next_payroll=0,
+    )
+    probs = {
+        "wait": 0.22,
+        "email": 0.25,
+        "push": 0.23,
+        "sms_payment_link": 0.30,
+        "call": 0.58,
+        "promise_request": 0.40,
+        "payment_plan": 0.50,
+        "hardship_review": 0.47,
+    }
+    cap = CallCapacity(
+        {(w, h): 50 for w in range(7) for h in range(24)},
+        tz="America/Toronto",
+        length=timedelta(hours=2),
+        best_hour=ByHour({19: 0.7}) if on else None,
+    )  # type: ignore[arg-type]
+    eng = KeptEngine(
+        context=FixedContextBuilder({ctx.case_id: ctx}), features=StaticFeatureProvider({ctx.case_id: fv}),
+        scorer=ConstantScorer(probs, model_version="nba-0.3"), audit_log=InMemoryAuditLog(), call_capacity=cap,
+    )  # fmt: skip
+    card = eng.recommend(ctx.case_id, now)
+    p = card.proposal
+    assert p is not None and p.window_start is not None
+    local = p.window_start.astimezone(ZoneInfo("America/Toronto"))
+    if on:
+        assert (
+            local.hour == 19
+            and "Booked 19:00" in (card.why_not_text or "")
+            and "70%" in (card.why_not_text or "")
+        )
+        assert "19:00" in card.headline
+    else:
+        assert local.hour < 19 and "Booked" not in (card.why_not_text or "")

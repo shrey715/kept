@@ -35,20 +35,21 @@ def slot_columns() -> list[str]:
 
 
 def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
-    """One row per outbound call on a randomly assigned case: the inputs a second before it, its local hour and weekday, and
-    whether it reached the right party."""
-    from kept.nba.train import load_rows
-
-    calls = load_rows(conn)
-    calls = calls[calls.action == "call"]
-    h = conn.sql(
-        "select contact_id as decision_id, contact_hour_local as hour, dayofweek(contact_ts_local) as dow,"
-        " coalesce(rpc_flag, false) as rpc from silver.contact_history where direction = 'outbound'"
-    ).df()
-    d = calls.merge(h, on="decision_id").dropna(subset=["hour", "dow"])
-    d["hour"] = d.hour.astype(int)
+    """One row per outbound call on a randomly assigned case: the inputs a second before it (as `kept train` reads them),
+    its local hour and weekday, and whether it reached the right party. Whether a payment followed is not needed here."""
+    cols = ", ".join(f"f.{n}" for n in model_inputs())
+    d = conn.sql(f"""
+        select t.decision_id, t.case_id, t.decision_at, {cols},
+               h.contact_hour_local as hour, dayofweek(h.contact_ts_local) as dow, coalesce(h.rpc_flag, false) as rpc
+        from features_train.training_rows t
+        join features_train.case_features f
+            on f.case_id = t.case_id and f.as_of = t.decision_at - interval 1 second
+        join silver.contact_history h on h.contact_id = t.decision_id
+        where t.action = 'call' and h.direction = 'outbound' and h.contact_hour_local is not null
+          and h.contact_ts_local is not null
+        order by t.decision_at, t.decision_id""").df()
     d["weekday"] = (d.dow.astype(int) - 1) % 7  # duckdb: Sunday 0 -> Monday 0
-    return d.reset_index(drop=True)
+    return d
 
 
 class BestHourModel:
@@ -62,6 +63,12 @@ class BestHourModel:
         (local hour, weekday) slot."""
         x = pd.concat([features[list(model_inputs())]] * len(slots), ignore_index=True)
         x["hour"], x["weekday"] = [h for h, _ in slots], [w for _, w in slots]
+        return np.asarray(self._model.predict_proba(_frame(x))[:, 1])
+
+    def p_rows(self, features: pd.DataFrame, hours: Sequence[int], weekdays: Sequence[int]) -> np.ndarray:
+        """`p_rpc` for many cases at once: row i of `features` at local hour hours[i] and weekday weekdays[i]."""
+        x = features[list(model_inputs())].reset_index(drop=True)
+        x["hour"], x["weekday"] = list(hours), list(weekdays)
         return np.asarray(self._model.predict_proba(_frame(x))[:, 1])
 
 
@@ -90,4 +97,6 @@ def save(model: BestHourModel, path: Path) -> None:
 
 
 def load_model(path: Path) -> BestHourModel | None:
-    return pickle.loads(path.read_bytes()) if path.exists() else None  # our own file, from kept train-best-hour
+    return (
+        pickle.loads(path.read_bytes()) if path.exists() else None
+    )  # our own file, from kept train-best-hour
