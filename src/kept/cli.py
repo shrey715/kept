@@ -21,6 +21,7 @@ COMMANDS = {
     "extract": "Track C: text extraction on new notes",
     "train": "Track D: train uplift models, log to MLflow",
     "train-promises": "Track D: P(kept | promise) model for the card's promise line (#79)",
+    "train-best-hour": "Track D: P(right-party contact | hour, weekday, case inputs) for --best-hour booking",
     "score": "Track D: score every open case",
     "invariance": "Governance: scramble protected attributes on a warehouse copy; exit 1 if any card moves",
     "benchmark": "Track B: run the Ask scorecard",
@@ -374,6 +375,7 @@ def score(args: argparse.Namespace) -> int:
         holdout_salt=os.environ["KEPT_HOLDOUT_SALT"],
         now=args.now or datetime.now(UTC),
         audit_log=audit,
+        best_hour=args.best_hour,
     )
     took = time.perf_counter() - t0
     print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
@@ -498,6 +500,23 @@ def train_promises(args: argparse.Namespace) -> int:
         rows = pm.load(conn)
     model, metrics = pm.train(rows)
     pm.save(model, args.out)
+    for k, v in metrics.items():
+        print(f"{k:>22}  {v:.4f}")
+    print(f"model -> {args.out}")
+    return 0
+
+
+def train_best_hour(args: argparse.Namespace) -> int:
+    """P(right-party contact | local hour, weekday, case inputs): behind `kept score --best-hour`."""
+    import duckdb
+
+    from kept.nba import best_hour as bh
+
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
+        conn.execute("set memory_limit = '3GB'; set threads = 2")
+        rows = bh.load(conn)
+    model, metrics = bh.train(rows, cutoff=args.cutoff)
+    bh.save(model, args.out)
     for k, v in metrics.items():
         print(f"{k:>22}  {v:.4f}")
     print(f"model -> {args.out}")
@@ -780,6 +799,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
     "score": score,
     "invariance": invariance,
     "train-promises": train_promises,
+    "train-best-hour": train_best_hour,
     "nightly": nightly,
     "map": map_,
     "drift": drift,
@@ -861,8 +881,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             p.add_argument(
                 "--now", type=datetime.fromisoformat, default=None, help="with a UTC offset (default: now)"
             )
+            p.add_argument(
+                "--best-hour",
+                action="store_true",
+                default=os.environ.get("KEPT_BEST_HOUR") == "1",
+                help="book calls into the likeliest-to-answer hour, same day (env KEPT_BEST_HOUR=1)",
+            )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
+        if name == "train-best-hour":
+            p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "best_hour.pkl")
+            p.add_argument("--cutoff", type=datetime.fromisoformat, default=datetime(2026, 8, 15))
         if name == "train":
             p.add_argument(
                 "--cutoff",

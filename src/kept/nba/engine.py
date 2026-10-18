@@ -264,8 +264,11 @@ class KeptEngine:
             hardship_status=_protective_status(ctx),
             close_call=is_close_call(ranked, margin=CLOSE_CALL_MARGIN) or bool(self._drift),
         )
-        slot, checks = self._book(ctx, best.action, slot, checks)
+        slot, checks, booked_note = self._book(ctx, best.action, slot, checks, X)
         proposal = self._proposal(ctx, best.action, tier, slot, sizing if best.action in _SIZED else None)
+        why_not_line = why_not(best, ranked)
+        if booked_note:  # best-hour booking moved the call: say so, with the model's numbers
+            why_not_line = f"{why_not_line} {booked_note}" if why_not_line else booked_note
         return NBACard(
             case_id=ctx.case_id,
             golden_customer_id=ctx.golden_customer_id,
@@ -279,7 +282,7 @@ class KeptEngine:
             sizing_text=self._sizing_text(ctx, fv, proposal.sizing) if proposal.sizing else None,
             similar_cases_text=similar_cases(fv, best.action),
             legacy_text=legacy,
-            why_not_text=why_not(best, ranked),
+            why_not_text=why_not_line,
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
@@ -316,16 +319,21 @@ class KeptEngine:
         action: Action,
         slot: tuple[datetime, datetime] | None,
         checks: Mapping[Action, tuple[CheckResult, ...]],
-    ) -> tuple[tuple[datetime, datetime] | None, Mapping[Action, tuple[CheckResult, ...]]]:
+        features: pd.DataFrame | None = None,
+    ) -> tuple[tuple[datetime, datetime] | None, Mapping[Action, tuple[CheckResult, ...]], str | None]:
         """A call goes into the earliest hour with call capacity (nightly batch only); its checks are
-        rerun at the booked time."""
+        rerun at the booked time. With the best-hour model on the capacity book and the case's `features`, it
+        goes into the likeliest-to-answer hour of that same day; the third value says so when it moved it."""
         if self._calls is None or slot is None or ACTION_CHANNEL[action] is not Channel.CALL:
-            return slot, checks
-        booked = self._calls.book(ctx, slot)
+            return slot, checks, None
+        if self._calls.best_hour is not None and features is not None:
+            booked, moved = self._calls.book_best(ctx, slot, features)
+        else:
+            booked, moved = self._calls.book(ctx, slot), None
         if booked == slot:
-            return slot, checks
+            return slot, checks, None
         rerun = permission_gate(ctx.model_copy(update={"now": booked[0]}), action).checks
-        return booked, {**checks, action: rerun}
+        return booked, {**checks, action: rerun}, moved.text() if moved else None
 
     def _legacy(
         self,
@@ -346,7 +354,7 @@ class KeptEngine:
                 ctx, f"No action: old strategy ({why}) asks for a promise that can't be kept."
             )
         tier = assign_tier(action=a, hard_stopped=False, hardship_status=_protective_status(ctx))
-        slot, checks = self._book(ctx, a, slot, checks)
+        slot, checks, _ = self._book(ctx, a, slot, checks)
         proposal = self._proposal(ctx, a, tier, slot, sizing, legacy=True)
         return NBACard(
             case_id=ctx.case_id,
