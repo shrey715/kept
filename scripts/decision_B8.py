@@ -85,7 +85,7 @@ def snapshot_bytes(model: str) -> int:
     return p.resolve().stat().st_size
 
 
-def run(model: str, limit: int | None, out: str) -> None:
+def run(model: str, limit: int | None, out: str, batch: int = 16) -> None:
     import torch
     from transformers import pipeline
 
@@ -124,7 +124,7 @@ def run(model: str, limit: int | None, out: str) -> None:
     for k, r in enumerate(todo.itertuples(), 1):
         audio = vw.load(vw.VOICE / r.file_path)
         t = time.perf_counter()
-        o = asr({"raw": audio, "sampling_rate": 16000}, chunk_length_s=30, batch_size=16)
+        o = asr({"raw": audio, "sampling_rate": 16000}, chunk_length_s=30, batch_size=batch)
         rows.append(
             {
                 "voice_sample_id": r.voice_sample_id,
@@ -146,6 +146,7 @@ def run(model: str, limit: int | None, out: str) -> None:
         "load_seconds": round(load_s, 2),
         "peak_vram_allocated_mb": round(torch.cuda.max_memory_allocated() / 2**20),
         "peak_vram_nvidia_smi_mb": peak_smi[0],
+        "batch_size": batch,
         "model_file_mb": round(snapshot_bytes(model) / 2**20),
         "torch": torch.__version__,
     }
@@ -173,8 +174,8 @@ def report() -> None:
         if m == TURBO:  # text and seconds from the full 2,000-call run
             t = pd.read_parquet(vw.OUT)
             t = t[t.voice_sample_id.isin(ids)]
-            vm = OUTDIR / f"{stem(m)}.json"  # optional: VRAM / load time from a short `run --limit`
-            meta[m] = json.loads(vm.read_text()) if vm.exists() else {}
+            vm = REPORTS / "smoke" / f"{stem(m)}.json"  # VRAM / load time from a short `run --limit 20 --out smoke`
+            meta[m] = {k: v for k, v in json.loads(vm.read_text()).items() if k != "calls"} if vm.exists() else {}
             meta[m]["model_file_mb"] = round(snapshot_bytes(m) / 2**20)
         else:
             p = OUTDIR / f"{stem(m)}.parquet"
@@ -217,6 +218,10 @@ def report() -> None:
         ax.scatter(v["real_time_factor"], 100 * v["wer"], s=90, color=c, zorder=3)
         ax.annotate(f"{stem(m)}\nWER {100 * v['wer']:.1f}%, {v['real_time_factor']:.0f}x", (v["real_time_factor"], 100 * v["wer"]), textcoords="offset points", xytext=(8, -22), fontsize=8, color=INK)
     ax.set_xscale("log")
+    ax.set_xlim(14, 400)
+    ax.set_ylim(6, 22)
+    ax.set_xticks([20, 50, 100, 200], ["20x", "50x", "100x", "200x"])
+    ax.minorticks_off()
     ax.set_xlabel("speed, audio seconds per transcription second (log scale)")
     ax.set_ylabel("word error rate, % (300 calls)")
     ax.set_title("Word error against speed, by Whisper size", loc="left")
@@ -230,6 +235,7 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["sample", "run", "report"])
     ap.add_argument("model", nargs="?")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--batch", type=int, default=16, help="pipeline batch_size (large-v3 does not fit at 16 on 16 GB)")
     ap.add_argument("--out", default="decision_B8", help="dir under data/exports/reports/ (smoke tests: smoke)")
     a = ap.parse_args()
-    {"sample": sample, "report": report}.get(a.cmd, lambda: run(a.model, a.limit, a.out))()
+    {"sample": sample, "report": report}.get(a.cmd, lambda: run(a.model, a.limit, a.out, a.batch))()

@@ -18,7 +18,7 @@ the scripts named in each section.
 | Local models only, not hosted | Gemini 3.5 Flash-Lite, Claude Haiku 5.5, Sonnet 5.5 at list price; Gemini free tier | Base load USD 2,200 a year on 2 GPUs against 1,386 for Haiku 5.5 and 5,079 for Flash-Lite; the free tier covers 500 requests a day, one base night is 1,647 extractions ([§B4](#b4-local-vs-hosted-llm-cost-quota-and-privacy)) | OSFI E-23 and B-10, PIPEDA, Quebec Law 25 s. 17 | 16 Oct, #214 | kept: the case is privacy and regulation, not cost |
 | Schema-constrained extraction replies | Free-form JSON with parse-and-retry | Malformed replies 152 to 0 of 1,172 calls (deck "What we tried"; `extraction_gate.md` records the re-run with schema decoding) | Willard and Louf 2023, [arXiv 2307.09702](https://arxiv.org/abs/2307.09702); llama.cpp [grammars](https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md) | 12 Oct; #165 (merged 14 Oct) | switched: replies decoded to the JSON schema |
 | SetFit backfill for the note history | Keyword rules; the LLM on every note | Notes F1 0.869, recall 0.977 (`Track_C.md`); in [§B7](#b7-extraction-keyword-rules-setfit-or-the-llm): SetFit 0.87 against rules 0.63 and LLM 0.88, at 1/35,000th of the LLM's time | Tunstall et al. 2022 (SetFit) | | kept |
-| Whisper large-v3-turbo on call recordings | The bank's speech-to-text; other Whisper sizes ([§B8](#b8-speech-to-text-model-size) in progress) | WER 9.4% against 12.4%; 87x real time (`voice_wer.md`) | Radford et al., "Robust Speech Recognition via Large-Scale Weak Supervision", ICML 2023 | 10 Oct #144 | kept |
+| Whisper large-v3-turbo on call recordings | The bank's speech-to-text; other Whisper sizes ([§B8](#b8-speech-to-text-model-size)) | WER 9.4% against 12.4%; 87x real time (`voice_wer.md`); on a 300-call sample large-v3 is no better (8.9% against 9.0%), distil-large-v3 11.8%, small 19.6% ([§B8](#b8-speech-to-text-model-size)) | Radford et al., "Robust Speech Recognition via Large-Scale Weak Supervision", ICML 2023 | 10 Oct #144 | kept |
 | Splink for identity matching, trained on a 1-in-5 sample | Exact keys only; an embedding matcher; training on all 3.84M keys | Precision 99.3% (300 links reviewed), recall 198/200 (`identity_recall.md`, `QUALITY_REPORT.pdf`); the full 3.84M keys ran out of 30 GB, so the sample; [§A4](#a4-identity-exact-keys-only-exact-keys-plus-splink-or-an-embedding-matcher) | Fellegi and Sunter 1969; Linacre et al. 2022 | 3 Oct #14; recall test 12 Oct #156 | switched: trained on a 1-in-5 sample; Splink kept |
 | Exact keys, then Splink, then a steward | Exact keys only; embedding matcher | 987,667 people split across records without Splink; embeddings merge 156 of 200 planted duplicates against Splink's 198 ([§A4](#a4-identity-exact-keys-only-exact-keys-plus-splink-or-an-embedding-matcher)) | Fellegi and Sunter 1969 | 16 Oct, #214 | kept |
 | Champion/challenger gate on Qini | Tuned challenger (40 candidates) | Tuned challenger lost, Qini 0.0029 against 0.0073 (`tuning.md`) | Radcliffe and Surry 2011 | 4 Oct #118 | kept: champion stays |
@@ -490,7 +490,34 @@ The rerank hurts French: hybrid French MRR falls from 0.564 to 0.237 (recall@1 0
 
 ### B8. Speech-to-text model size
 
-_Measurement in progress._
+**Question.** Is `whisper-large-v3-turbo` the right size to transcribe the call recordings, or would a smaller, a distilled or the full large-v3 model do better on the same calls?
+
+**Alternatives.** (1) `openai/whisper-small` (the smaller multilingual model). (2) `distil-whisper/distil-large-v3` (distilled from large-v3). (3) `openai/whisper-large-v3` (the full model). (4) `openai/whisper-large-v3-turbo` (what the pipeline runs).
+
+**Setup.** A fixed sample of 300 of the 2,000 recordings (6.9 hours of audio), drawn proportionally to language x sample rate x background noise with seed `b8`: 253 calls at 8 kHz and 47 at 16 kHz, 39 to 47 calls for each of the seven noise types. All 2,000 recordings are `en-CA`, so there is one language cell and no French audio. Every model runs the same code as `scripts/voice_wer.py` (transformers pipeline, fp16, one RTX 5070 Ti, `chunk_length_s=30`, language auto-detected, the same repeated-sentence collapse) and is scored by the same word error rate against the release's transcripts (mean over calls). One model per process, GPU otherwise idle. Turbo is not re-run: its text and seconds for the 300 ids come from the full 2,000-call run (`data/exports/voice/whisper.parquet`), which is where its speed was measured; its VRAM comes from a separate 20-call run. Speed is audio seconds per transcription second, summed over the sample. The paired difference against turbo is the mean per-call WER difference with a 95% bootstrap interval (2,000 resamples).
+
+**Result.** (`data/exports/reports/decision_B8.json`)
+
+| Model | WER | 8 kHz | 16 kHz | Calls with a looped phrase | Speed | Peak VRAM, allocated (nvidia-smi) | Weights | WER minus turbo (95% interval) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| whisper-small | 19.6% | 20.9% | 12.8% | 1.7% | 62x | 3.7 GB (11.0 GB) | 922 MB | +10.6 points (+7.7, +14.2) |
+| distil-large-v3 | 11.8% | 12.3% | 9.4% | 1.0% | 201x | 2.6 GB (6.6 GB) | 1,443 MB | +2.8 points (+2.1, +3.5) |
+| whisper-large-v3 | 8.9% | 9.2% | 7.3% | 0.0% | 24x (batch 4) | 9.0 GB (10.2 GB) | 2,944 MB | -0.2 points (-0.6, +0.3) |
+| **whisper-large-v3-turbo** | **9.0%** | 9.2% | 8.2% | 4.7% | 89x | 3.1 GB (5.4 GB), 20 calls | 1,543 MB | n/a |
+
+- Large-v3 and turbo are indistinguishable on accuracy: the difference is 0.2 points and the interval spans zero. Distil-large-v3 is 2.8 points worse (interval excludes zero) and whisper-small 10.6 points worse. Small's median call is 13.5% against a mean of 19.6%, so a minority of calls drive its mean.
+- Large-v3 did not fit at the pipeline's batch size of 16 on the 16 GB card (out of memory), so it ran at batch 4; turbo and the other two ran at 16. Its 24x is therefore not a like-for-like speed, and part of the gap to turbo is the smaller batch. The VRAM figures are the process's peak allocation; the nvidia-smi figure in brackets includes the allocator's cache and is larger.
+- Looped phrases (hold music and dead air) are rarest in large-v3 (none) and most common in turbo (14 of 300 calls); the collapse step already removes them from the WER above.
+- `distil-large-v3` is English-only on its model card. Its French accuracy could not be measured: the dataset has no French recordings (all 2,000 are `en-CA`), and French appears only in the written notes.
+- Noise and sample-rate splits are in the JSON. The 16 kHz cell is 47 calls, so its gaps between models are not reliable.
+
+![Word error and speed by Whisper size](figures/dec_B8.png)
+
+**Verdict.** Kept: `whisper-large-v3-turbo`. The full large-v3 is no more accurate on these calls (8.9% against 9.0%, interval -0.6 to +0.3 points), needs about three times the GPU memory (9.0 GB against 3.1 GB) and did not fit at the batch size used. Distil-large-v3 is faster (201x against 89x) but loses 2.8 points of WER, which is about a third more word errors, and it is English only, which matters once French calls arrive. Whisper-small is both less accurate and, as measured here, no faster than turbo. The limits: 300 calls of one synthetic voice set with one language; speed depends on batch size and was not measured at the same batch for large-v3; turbo's VRAM is from 20 calls.
+
+**Outside support.** Radford et al., "Robust Speech Recognition via Large-Scale Weak Supervision", 2022 (arXiv 2212.04356), section 4.1: "With the exception of English speech recognition, performance continues to increase with model size", and the diminishing returns for English "could be due to saturation effects from approaching human-level performance"; this is consistent with large-v3 and turbo scoring alike on English calls. Gandhi et al., "Distil-Whisper" (arXiv 2311.00430): the distilled model is 5.8 times faster with 51% fewer parameters and performs "to within 1% WER on out-of-distribution test data"; the distil-large-v3 model card says it is English-only and about 6x faster than large-v3. On our calls distil-large-v3 is 3.0 points worse than large-v3 and 2.8 worse than turbo; the card's "within 1.5% WER" is for out-of-distribution short-form audio, a different test set. Not checked: the model card of turbo, which we did not read.
+
+**Reproduce.** `.venv/bin/python scripts/decision_B8.py sample`, then `run MODEL` for `openai/whisper-small`, `distil-whisper/distil-large-v3` and `openai/whisper-large-v3 --batch 4`, then `run openai/whisper-large-v3-turbo --limit 20 --out smoke` (VRAM only), then `report`. Models are from the Hugging Face cache (`HF_HUB_OFFLINE=1`).
 
 ### B9. Promise model: which model ships
 

@@ -121,7 +121,7 @@ def main() -> None:
         "weeksFive": f"{weeks(ev['payday_kept'][0] / 100, 0.05):.0f}", "weeksTwenty": f"{weeks(ev['payday_kept'][0] / 100, 0.20):.0f}",
     }
     # the decision evidence (docs/reports/decisions.md): data/exports/reports/decision_<id>.json
-    d = {i: load(f"decision_{i}.json") for i in ("A1", "A2", "A3", "A5", "B1", "B3", "B4", "B5", "B6", "B7", "B9", "B10", "C2")}
+    d = {i: load(f"decision_{i}.json") for i in ("A1", "A2", "A3", "A5", "B1", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "B10", "C2")}
     A1 = d["A1"]
 
     def a1(engine: str, wl: str, scale: int) -> str:  # seconds, or why there is no number
@@ -152,6 +152,13 @@ def main() -> None:
         "decBthreeLlama": f"{b3['llamacpp']['throughput']['parallel_1']['tps_median']:g}", "decBthreeMatched": f"{b3['ollama_matched']['throughput']['parallel_1']['tps_median']:g}",
         "decBthreeLlamaSec": f"{b3['llamacpp']['extraction']['seconds']}", "decBthreeMatchedSec": f"{b3['ollama_matched']['extraction']['seconds']}",
         "decAfiveRefused": str(a5["refused"]), "decAfiveAttacks": str(a5["n_attacks"]), "decAfiveAnswered": str(len(a5["answered_or_clarified"])),
+    }
+    b8 = d["B8"]["models"]
+    m |= {  # B8: Whisper sizes on 300 calls
+        "decBeightCalls": str(d["B8"]["calls"]),
+        **{f"decBeight{k}{what}": v for k, name in (("Turbo", "openai/whisper-large-v3-turbo"), ("Large", "openai/whisper-large-v3"), ("Distil", "distil-whisper/distil-large-v3"), ("Small", "openai/whisper-small"))
+           for what, v in (("Wer", pc(b8[name]["wer"])), ("Speed", f"{b8[name]['real_time_factor']:.0f}"), ("Vram", f"{b8[name]['peak_vram_allocated_mb'] / 1024:.1f}"))},
+        "decBeightLargeGap": f"{100 * b8['openai/whisper-large-v3']['wer_minus_turbo']:+.1f}", "decBeightDistilGap": f"{100 * b8['distil-whisper/distil-large-v3']['wer_minus_turbo']:+.1f}",
     }
     m |= {
         "decAoneRollTen": rr[10], "decAoneRollForty": rr[40], "decAoneSparkTen": a1("spark", "roll_rate", 10).split()[0],
