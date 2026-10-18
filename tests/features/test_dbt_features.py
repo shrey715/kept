@@ -18,12 +18,14 @@ import pytest
 from kept.contracts.feature_registry import FEATURES
 from kept.features.definitions import (
     answer_rate,
+    bank_context,
     broken_promises_90d,
     cohort_rate,
     contacts_last_7d,
     days_to_next_payroll,
     kept_promise_ratio,
 )
+from kept.nba.train import CONTEXT_COLS
 
 pytestmark = [pytest.mark.integration, pytest.mark.track_d]
 
@@ -64,8 +66,12 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "case_id": f"CS-{rng.randrange(600)}",
                 "crm_customer_id": f"CRM-{rng.randrange(60)}",
                 "ptp_due_date": due.date(),
+                "ptp_created_ts": due - timedelta(days=rng.randrange(1, 20), hours=rng.randrange(24)),
                 "status_ts": due + timedelta(days=rng.randrange(-5, 6)),
-                "ptp_status": rng.choice(["open", "kept", "partially_kept", "broken", "cancelled"]),
+                "ptp_status": (status := rng.choice(["open", "kept", "partially_kept", "broken", "cancelled"])),
+                "paid_date": (due + timedelta(days=rng.randrange(-3, 4))).date()
+                if status in ("kept", "partially_kept")
+                else None,
             }
         )
     for _ in range(3000):
@@ -84,6 +90,10 @@ def _fixture(seed: int = 7) -> dict[str, pd.DataFrame]:
                 "contact_hour_local": pd.Timestamp(t, tz="UTC").tz_convert(TZ).hour,
                 "payment_link_id": f"PL-{t:%s}" if channel == "sms" else None,
                 "link_payment_flag": rng.random() < 0.3 if channel == "sms" else None,
+                "rpc_flag": rng.random() < 0.4 if channel == "call" else False,
+                "ptp_made_flag": rng.random() < 0.15 if channel == "call" else False,
+                "payment_taken_flag": rng.random() < 0.05 if channel == "call" else False,
+                "app_payment_after_contact_flag": rng.random() < 0.05 if channel in ("sms", "email") else False,
             }
         )
     notes = []
@@ -283,6 +293,33 @@ def test_sql_matches_python_reference(built: tuple[pd.DataFrame, dict[str, pd.Da
         assert row.contacts_last_7d == contacts_last_7d(
             attempts[attempts.case_id == row.case_id], as_of=as_of
         )
+        checked += 1
+    assert checked > 50
+
+
+def test_context_matches_python_reference(built: tuple[pd.DataFrame, dict[str, pd.DataFrame]]) -> None:
+    """The ten context inputs agree with `bank_context`, the oracle, for every (case, as_of)."""
+    out, silver = built
+    cases = silver["collections_cases"].set_index("case_id")
+    contacts = _aware(silver["contact_history"], "contact_ts_utc")
+    promises = _aware(silver["promises_to_pay"], "ptp_created_ts")
+    promises = promises.assign(status_ts=pd.to_datetime(promises.status_ts, utc=True))
+    checked = 0
+    for row in out.itertuples():
+        as_of = pd.Timestamp(row.as_of).tz_localize("UTC").to_pydatetime()
+        crm = cases.loc[row.case_id, "coll_customer_ref"]
+        mine = contacts[contacts.crm_customer_id == crm]
+        want = bank_context(
+            contacts[(contacts.case_id == row.case_id) & (contacts.direction == "outbound")],
+            mine,
+            promises[promises.crm_customer_id == crm],
+            as_of=as_of,
+        )
+        for n in CONTEXT_COLS:
+            got = getattr(row, n)
+            got = None if pd.isna(got) else got
+            ok = _same(got, want[n]) if want[n] is None or isinstance(want[n], float) else got == want[n]
+            assert ok, (row.case_id, as_of, n, got, want[n])
         checked += 1
     assert checked > 50
 

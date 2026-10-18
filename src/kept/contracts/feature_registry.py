@@ -298,7 +298,7 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         FeatureOrigin.SQL,
         ("silver.promises_to_pay.ptp_due_date", "silver.promises_to_pay.status_ts"),
         "D",
-        "Days from as_of to the earliest due date among the customer's unresolved promises",
+        "Days from the decision's date (as_of + 1 second, UTC) to the earliest due date among the customer's unresolved promises",
     ),
     FeatureSpec(
         "n_out_7d",
@@ -368,7 +368,7 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         FeatureOrigin.SQL,
         ("silver.contact_history.contact_ts_utc",),  # in training as_of is a second before the contact being decided
         "D",
-        "Weekday of as_of's UTC date (Sunday 0, the nightly's date; in training, the decision's date)",
+        "Weekday of the decision's UTC date, as_of + 1 second (Sunday 0): the nightly's date at serving, the decision's date in training",
     ),
 )
 

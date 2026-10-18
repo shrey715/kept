@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (the context oracle mirrors the SQL line by line)
 """Reference semantics for SQL features (oracle for dbt). Point in time: every
 function sees only events at or before `as_of`. Missing stays missing (None)."""
 
@@ -76,3 +77,41 @@ def cohort_rate(successes: int, n: int, *, min_group: int = 50) -> float | None:
     if not 0 <= successes <= n:
         raise ValueError(f"successes {successes} not in [0, {n}]")
     return None if n < min_group else successes / n
+
+
+def bank_context(
+    case_outbound: pd.DataFrame, customer_contacts: pd.DataFrame, customer_promises: pd.DataFrame, *, as_of: datetime
+) -> dict[str, object]:
+    """The ten context inputs (dbt context_features.sql) at as_of, which is the instant just before the decision.
+    case_outbound: the case's outbound contacts (contact_ts_utc tz-aware, rpc_flag, ptp_made_flag). customer_contacts:
+    the customer's contacts (contact_ts_utc, payment_taken_flag, link_payment_flag, app_payment_after_contact_flag).
+    customer_promises: ptp_created_ts, ptp_due_date, ptp_status, status_ts (NaT: unresolved), paid_date (date or None).
+    Contacts are counted at or before as_of, within 30 days (7 for n_out_7d and the payment flags). The decision's day is
+    that of as_of + 1 second (UTC)."""
+    day = (as_of + timedelta(seconds=1)).date()
+    out = case_outbound[
+        (case_outbound["contact_ts_utc"] <= as_of) & (case_outbound["contact_ts_utc"] > as_of - timedelta(days=30))
+    ].sort_values("contact_ts_utc")
+    last = out.iloc[-1] if len(out) else None
+    p = customer_promises
+    status = pd.to_datetime(p["status_ts"], utc=True)  # all-NaT columns arrive naive
+    open_ = p[(p["ptp_created_ts"] <= as_of) & (status.isna() | (status > as_of))]
+    week = as_of - timedelta(days=7)
+    c = customer_contacts
+    flags = c[["payment_taken_flag", "link_payment_flag", "app_payment_after_contact_flag"]].fillna(False).any(axis=1)
+    paid_contact = ((c["contact_ts_utc"] <= as_of) & (c["contact_ts_utc"] > week) & flags).any()
+    noon = pd.to_datetime(p["paid_date"]) + pd.Timedelta(hours=12)
+    noon = noon.dt.tz_localize("UTC")
+    paid_promise = (p["ptp_status"].isin(["kept", "partially_kept"]) & (noon <= as_of) & (noon > week)).any()
+    return {
+        "pending_ptp": bool(len(open_)),
+        "ptp_due_in_days": (open_["ptp_due_date"].min() - day).days if len(open_) else None,
+        "n_out_7d": int((out["contact_ts_utc"] > week).sum()),
+        "n_out_30d": len(out),
+        "n_rpc_30d": int(out["rpc_flag"].fillna(False).astype(bool).sum()),
+        "days_since_contact": (as_of - last["contact_ts_utc"]).total_seconds() / 86400 if last is not None else None,
+        "last_rpc": bool(last["rpc_flag"]) if last is not None and pd.notna(last["rpc_flag"]) else None,
+        "last_ptp_made": bool(last["ptp_made_flag"]) if last is not None and pd.notna(last["ptp_made_flag"]) else None,
+        "paid_prev7": bool(paid_contact or paid_promise),
+        "weekday": (day.isoweekday() % 7),  # duckdb dayofweek: Sunday 0
+    }

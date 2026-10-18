@@ -3,7 +3,10 @@
 -- One row per (case, as_of) of the spine, so the nightly spine and the training spine (as_of a second before each
 -- decision) read the same SQL. Contacts per case; promises and payments per customer, like the other features.
 -- n_out_7d counts the same contacts as contacts_last_7d (a rule input there); it is kept under the study's name so the
--- next challenger reads the columns the study fitted. weekday: duckdb's dayofweek of as_of's UTC date, Sunday 0.
+-- next challenger reads the columns the study fitted.
+-- Dates (ptp_due_in_days, weekday) are the decision's own: as_of is the instant just before it (a second before in training,
+-- where a weekly check-in sits at midnight), so the day is that of as_of + 1 second; the nightly's 06:00 UTC is the same day.
+-- weekday: duckdb's dayofweek of that UTC date, Sunday 0.
 with s as (select case_id, crm_customer_id, as_of from {{ ref('feature_spine') }}),
 out as (
     select case_id, contact_ts_utc, coalesce(rpc_flag, false) as rpc, coalesce(ptp_made_flag, false) as ptp_made
@@ -22,7 +25,7 @@ agg as (
     group by s.case_id, s.as_of
 ),
 pend as (  -- open at as_of: made by then and not resolved by then
-    select s.case_id, s.as_of, min(p.ptp_due_date) - min(cast(s.as_of as date)) as ptp_due_in_days
+    select s.case_id, s.as_of, min(p.ptp_due_date) - min(cast(s.as_of + interval 1 second as date)) as ptp_due_in_days
     from s join {{ ref('promises_to_pay') }} p on p.crm_customer_id = s.crm_customer_id
         and p.ptp_created_ts <= s.as_of and (p.status_ts is null or p.status_ts > s.as_of)
     group by s.case_id, s.as_of
@@ -47,7 +50,7 @@ select s.case_id, s.as_of,
     a.last_rpc,
     a.last_ptp_made,
     w.case_id is not null as paid_prev7,
-    dayofweek(s.as_of) as weekday
+    dayofweek(s.as_of + interval 1 second) as weekday
 from s
 left join agg a using (case_id, as_of)
 left join pend p using (case_id, as_of)

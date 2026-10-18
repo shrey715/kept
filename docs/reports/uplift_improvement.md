@@ -114,7 +114,7 @@ Decision rule applied: heterogeneity not reliably found, so the fixed rows (Trac
 
 ## Track 1: candidate models
 
-**Rows and inputs.** `dbt/models/features/training_weeks.sql` (landmarks), `decision_context.sql` (context), `macros/payment_events.sql` (labels, shared with `training_rows.sql`, whose `paid_14d` is unchanged: 0 differences in 708,678 rows). The context is what the bank knew a second before deciding: a pending promise and its due date, outbound contacts in the last 7 and 30 days, right-party contacts in the last 30 days, days since the last contact, the last contact's outcome (right party; promise made), a payment in the last 7 days, and the weekday. The training-only models are disabled in the nightly build. No language, accent, postal code, age or other proxy is an input; `tests/nba/test_causal.py::test_study_features_are_clean` runs `assert_no_denied` and checks the contract's protected and proxy lists against every input.
+**Rows and inputs.** `dbt/models/features/training_weeks.sql` (landmarks), `context_features.sql` (context; it started as `decision_context.sql` and now lives in `case_features`, so the nightly serves the same inputs, and it matches the old table on all 708,678 decisions and 402,064 landmarks), `macros/payment_events.sql` (labels, shared with `training_rows.sql`, whose `paid_14d` is unchanged: 0 differences in 708,678 rows). The context is what the bank knew a second before deciding: a pending promise and its due date, outbound contacts in the last 7 and 30 days, right-party contacts in the last 30 days, days since the last contact, the last contact's outcome (right party; promise made), a payment in the last 7 days, and the weekday. The label models (`training_rows`, `training_weeks`) are disabled in the nightly build; the context is part of `case_features` in both builds. No language, accent, postal code, age or other proxy is an input; `tests/nba/test_causal.py::test_study_features_are_clean` runs `assert_no_denied` and checks the contract's protected and proxy lists against every input.
 
 **Candidates** (12): (T-learner on the 17 inputs, T-learner on 17 + context, DR-learner on 17 + context, R-learner on 17 + context) x three training sets (old rows with the old label; contact attempts with the clean label on covered cases; landmarks with the clean label on covered cases). The DR- and R-learners use cross-fitted nuisance models, drop rows outside the overlap range from the second stage, and use a small LightGBM (7 leaves, 1,000 minimum rows, L2 20) fixed before seeing any result. Three seeds each.
 
@@ -350,7 +350,7 @@ Cases whose last recommendation is a call, a hardship plan or a letter never cur
 uv sync --inexact --extra data --extra model
 uv run kept land && uv run kept build --silver-only && uv run kept match --train-sample-mod 5
 uv run kept build --gold-only --crosswalk <published identity_crosswalk_4ac9c37-20261003-full-train5.parquet>
-uv run kept features --training      # training_rows (+ clean outcome), training_weeks, decision_context
+uv run kept features --training      # training_rows (+ clean outcome), training_weeks, case_features (with the context)
 uv run kept train                    # the reproduced champion (cutoff 2026-08-15)
 uv run python scripts/uplift_diagnostics.py --part 1   # Step 0, old rows: overlap, effects, heterogeneity, rolling windows
 uv run python scripts/uplift_diagnostics.py --part 2   # overlap x clean outcome, both row sets, four outcomes, flag tie-breaker
