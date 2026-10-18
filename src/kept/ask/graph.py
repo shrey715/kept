@@ -272,6 +272,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
 
     def scope(s: AskState) -> AskState:
         r = s["request"]
+        if not ask._on("route"):  # B5 ablation "plain": no classifier (the safety rules above still ran)
+            return {"trace": ["Scope: not checked (ablation)"]}
         decision = check_scope(r, ask._contract, ask._classifier)
         if not decision.in_scope:
             return {
@@ -284,6 +286,11 @@ def build_graph(ask: CollectionsAsk) -> Any:
         r, q = s["request"], s["question"]
         fresh = ask._freshness()
         as_of = ask._as_of(fresh)
+        if not ask._on("route"):  # B5 ablation "plain": every question is one SQL prompt
+            s["seen"]["intent"] = IntentKind.LOOKUP.value
+            plain = Intent(kind=IntentKind.LOOKUP, confidence=1.0)
+            return {"fresh": fresh, "as_of": as_of, "intent": plain, "trace": ["Route: none (ablation)"]}
+        checks = ask._on("templates")  # B5 ablation below "templates": the router's intent as it came
         intent = None
         for _ in range(2):  # a reply that fails validation, or a busy local server: one more try
             try:
@@ -294,7 +301,7 @@ def build_graph(ask: CollectionsAsk) -> Any:
                     actor_id=r.user_id,
                     as_of=as_of,
                     metric_hints=ask._hints,
-                    date_hints=date_hints(q.text, as_of),
+                    date_hints=date_hints(q.text, as_of) if checks else "",
                 )
                 break
             except Exception:
@@ -304,13 +311,15 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "response": ask._unsure(r, "I couldn't work out what you're asking."),
                 "trace": ["Route: failed twice"],
             }
-        if intent.kind is not IntentKind.POLICY and _POLICY.search(r.question):  # "can we ...?" asks a rule
+        if (
+            checks and intent.kind is not IntentKind.POLICY and _POLICY.search(r.question)
+        ):  # "can we ...?" asks a rule
             intent = intent.model_copy(update={"kind": IntentKind.POLICY, "metric_id": None})
             policy_note = ["Intent check: the question asks what we may do, so policy"]
         else:
             policy_note = []
         s["seen"]["intent"] = intent.kind.value
-        spans = resolve_dates(q.text, as_of)
+        spans = resolve_dates(q.text, as_of) if checks else []
         filled = (
             intent.kind is IntentKind.METRIC
             and intent.date_from is None
@@ -330,7 +339,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
         )
         q_date = getattr(ask._queries.get(intent.metric_id or ""), "date_column", None) or ""
         today = (  # a snapshot table holds every snapshot: "today" or "the last snapshot" is the as-of date
-            as_of is not None
+            checks
+            and as_of is not None
             and intent.kind is IntentKind.METRIC
             and intent.date_from is None
             and intent.date_to is None
@@ -370,6 +380,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 "intent": as_lookup(s["intent"]),
                 "trace": [f"Certified metric: {s['intent'].metric_id} isn't certified"],
             }
+        if not ask._on("templates"):  # B5 ablation: the router's intent as it came, no checks
+            return certified(s["intent"], [])
         d = ask._metrics.get(s["intent"].metric_id or "")
         if d is not None and not relevant(s["request"].question, d.metric_id, d.metric_name, d.synonyms):
             return {
@@ -394,12 +406,15 @@ def build_graph(ask: CollectionsAsk) -> Any:
                 )
                 notes = [*notes, f"Intent check: one total per period, so not grouped by {query.date_column}"]
             return compare_periods(intent, spans[:2], notes)
+        return certified(intent, notes, s["intent"])
+
+    def certified(intent: Intent, notes: list[str], routed: Intent | None = None) -> AskState:
         try:
             sql, params = compile_metric(intent, ask._metrics, ask._queries)
         except ValueError as e:  # still doesn't fit the certified query: a voted SQL lookup can try
             return {
                 "reroute": True,
-                "intent": as_lookup(s["intent"]),
+                "intent": as_lookup(routed or intent),
                 "trace": [*notes, f"Certified metric: can't compile ({e}); trying a lookup"],
             }
         guarded = guard_sql(sql, ask._sql_policy())
@@ -504,7 +519,8 @@ def build_graph(ask: CollectionsAsk) -> Any:
     def after_rules(s: AskState) -> str:
         if "response" in s:
             return END
-        return "call_summary" if svc._CALL_SUMMARY.search(s["request"].question) else "scope"
+        summary = ask._on("route") and svc._CALL_SUMMARY.search(s["request"].question)
+        return "call_summary" if summary else "scope"
 
     def by_intent(s: AskState) -> str:
         if "response" in s:

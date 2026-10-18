@@ -542,12 +542,9 @@ GBM_WIDE = dict(n_estimators=1500, num_leaves=31, min_child_samples=300, learnin
                 subsample_freq=1, colsample_bytree=0.8, verbose=-1, deterministic=True, force_row_wise=True)
 
 
-def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
-    """A standalone model with the kinds of inputs the bank's score names in its reason codes (balances, bureau,
-    contacts, cash flow), every one dated before the promise, against the bank's score on the §6 promises."""
-    from scipy.stats import rankdata
-    from sklearn.ensemble import RandomForestClassifier
-
+def wide_split(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, list[str], pd.Timestamp]:
+    """§8's data: every resolved promise with the wide inputs (r), the §6 promises the bank scored before their outcome
+    with its score (h), the input names, and the cut (the median promise date of h; test = h from the cut)."""
     w = con.execute(SQL_WIDE).df().merge(con.execute(SQL_HISTORY).df(), on="ptp_id")
     r = rows.drop(columns=["amount_ratio"], errors="ignore").merge(w, on="ptp_id").sort_values(["created", "ptp_id"])
     r = r.reset_index(drop=True)  # a fixed row order: LightGBM's bagging depends on it
@@ -561,7 +558,16 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
     dates = con.execute("select ptp_id, cast(status_ts as date) od, ptp_due_date due from silver.promises_to_pay").df()
     h = r.merge(bank, on="ptp_id").merge(dates, on="ptp_id")
     h = h[pd.to_datetime(h.score_date) < pd.to_datetime(h.od)].reset_index(drop=True)  # as §6
-    cut = h.created.quantile(0.5)
+    return r, h, feats, h.created.quantile(0.5)
+
+
+def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
+    """A standalone model with the kinds of inputs the bank's score names in its reason codes (balances, bureau,
+    contacts, cash flow), every one dated before the promise, against the bank's score on the §6 promises."""
+    from scipy.stats import rankdata
+    from sklearn.ensemble import RandomForestClassifier
+
+    r, h, feats, cut = wide_split(con, rows)
     test = h[h.created >= cut].reset_index(drop=True)
     fit = (r.created < cut).to_numpy()
     wt = 0.5 ** ((cut - r.created).dt.days.to_numpy() / HALF_LIFE_DAYS)
@@ -616,6 +622,91 @@ def standalone(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
     )
 
 
+def promise_decision(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> str:
+    """Decision B9 (docs/reports/decisions.md): which promise model ships. §8's split and test promises; adds logistic
+    regression on the 6 features, the 6-feature LightGBM raw / Platt / isotonic, and the wide LightGBM raw / isotonic.
+    Calibrators are fitted on the bank-scored promises of the last 20% of the training period (the base model is
+    refitted on the 80% before it, so no calibrator sees its own base model's training data or the test). The raw rows are
+    shown on both bases. Writes data/exports/reports/decision_B9.json."""
+    import inspect
+    import json
+
+    from sklearn.impute import SimpleImputer
+    from sklearn.isotonic import IsotonicRegression  # type: ignore[import-untyped]
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import brier_score_loss
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    r, h, feats, cut = wide_split(con, rows)
+    six_f = list(pm.FEATURES)
+    test = h[h.created >= cut].reset_index(drop=True)
+    y = test.kept.to_numpy()
+    cut2 = h.created[h.created < cut].quantile(0.8)  # calibration window: [cut2, cut)
+    wt = 0.5 ** ((cut - r.created).dt.days.to_numpy() / HALF_LIFE_DAYS)
+    cal = h[(h.created >= cut2) & (h.created < cut)].reset_index(drop=True)
+    six_kw = dict(n_estimators=200, num_leaves=15, min_child_samples=200, learning_rate=0.05, verbose=-1, deterministic=True, force_row_wise=True)
+
+    def six_gbm(df: pd.DataFrame) -> LGBMClassifier:
+        return LGBMClassifier(**six_kw, n_jobs=4).fit(df[six_f].astype(float), df.kept)
+
+    def wide_gbm(m: np.ndarray) -> LGBMClassifier:
+        return LGBMClassifier(**GBM_WIDE, n_jobs=4).fit(r.loc[m, feats], r.kept[m], sample_weight=wt[m])
+
+    def sx(df: pd.DataFrame) -> pd.DataFrame:
+        return df[six_f].astype(float)
+
+    base = {"six": six_gbm(h[h.created < cut2]), "wide": wide_gbm((r.created < cut2).to_numpy())}
+    full = {"six": six_gbm(h[h.created < cut]), "wide": wide_gbm((r.created < cut).to_numpy())}
+    lr = make_pipeline(SimpleImputer(strategy="median"), StandardScaler(), LogisticRegression(max_iter=1000)).fit(sx(h[h.created < cut]), h.kept[h.created < cut])
+    f = {"six": lambda m, d: m.predict_proba(sx(d))[:, 1], "wide": lambda m, d: m.predict_proba(d[feats])[:, 1]}
+
+    def logit(p: np.ndarray) -> np.ndarray:
+        p = np.clip(p, 1e-6, 1 - 1e-6)
+        return np.log(p / (1 - p))
+
+    def platt(kind: str) -> np.ndarray:
+        m = LogisticRegression(C=1e6, max_iter=1000).fit(logit(f[kind](base[kind], cal))[:, None], cal.kept)
+        return m.predict_proba(logit(f[kind](base[kind], test))[:, None])[:, 1]
+
+    def iso(kind: str) -> np.ndarray:
+        m = IsotonicRegression(out_of_bounds="clip").fit(f[kind](base[kind], cal), cal.kept)
+        return m.predict(f[kind](base[kind], test))
+
+    last = "first 80%, calibrated on the last 20%"
+    preds = {  # name -> (probabilities, fitted on)
+        "Logistic regression, 6 features": (lr.predict_proba(sx(test))[:, 1], "full training period"),
+        "6-feature LightGBM, no calibration (as §8)": (f["six"](full["six"], test), "full training period"),
+        "6-feature LightGBM, no calibration": (f["six"](base["six"], test), "first 80%"),
+        "6-feature LightGBM, Platt": (platt("six"), last),
+        "6-feature LightGBM, isotonic": (iso("six"), last),
+        "Wide LightGBM, no calibration (as §8)": (f["wide"](full["wide"], test), "full training period"),
+        "Wide LightGBM, no calibration": (f["wide"](base["wide"], test), "first 80%"),
+        "Wide LightGBM, isotonic": (iso("wide"), last),
+    }
+    rng = np.random.default_rng(0)
+    draws = [rng.integers(0, len(y), len(y)) for _ in range(BOOT)]
+    res = {"test_promises": len(y), "kept_rate_test": float(y.mean()), "calibration_promises": len(cal), "calibration_window": [str(cut2), str(cut)],
+           "cut": str(cut), "bank_auc": float(roc_auc_score(y, -test.score.to_numpy())), "models": {}}
+    out = [f"| Model | Fitted on | AUC [95% CI] | Brier | Calibration gap, pts | Mean predicted (kept {100 * y.mean():.0f}%) |", "|---|---|---:|---:|---:|---:|"]
+    for name, (p, how) in preds.items():
+        auc = roc_auc_score(y, p)
+        ci = np.percentile([roc_auc_score(y[i], p[i]) for i in draws], [2.5, 97.5])
+        b = np.clip((p * 10).astype(int), 0, 9)
+        gap = sum(abs(p[b == k].mean() - y[b == k].mean()) * (b == k).mean() for k in range(10) if (b == k).any())
+        res["models"][name] = dict(fitted=how, auc=float(auc), auc_ci=[float(c) for c in ci], brier=float(brier_score_loss(y, p)),
+                                   calibration_gap_pts=float(100 * gap), mean_predicted=float(p.mean()))
+        out.append(f"| {name} | {how} | {auc:.3f} [{ci[0]:.3f}, {ci[1]:.3f}] | {brier_score_loss(y, p):.3f} | {100 * gap:.1f} | {p.mean():.2f} |")
+
+    def sql_lines(s: str) -> int:
+        return len([ln for ln in s.splitlines() if ln.strip()])
+
+    res["serving"] = {"six_features": len(six_f), "six_sql_lines": sql_lines(inspect.getsource(pm.load)), "wide_features": len(feats),
+                      "wide_sql_lines": sql_lines(SQL_WIDE) + sql_lines(SQL_HISTORY)}
+    (REPO / "data" / "exports" / "reports" / "decision_B9.json").write_text(json.dumps(res, indent=1))
+    return "\n".join(out)
+
+
 def ratio_table(con: duckdb.DuckDBPyConnection) -> str:
     d = con.execute("""
         select ptp_status, count(*) n, avg((abs(ptp_amount - overdue_at_creation) < 0.01)::int) full_balance
@@ -629,25 +720,30 @@ def ratio_table(con: duckdb.DuckDBPyConnection) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(WAREHOUSE_PATH))
+    ap.add_argument("--only-b9", action="store_true", help="decision B9: only the §8 promise-model variants, no report written")
     a = ap.parse_args()
     con = duckdb.connect(a.warehouse, read_only=True)
-    con.execute("set memory_limit = '8GB'")
+    # one thread: parallel scans break arg_max ties (bureau pulls on one date) and sum order differently each run
+    con.execute(f"set memory_limit = '{'3GB' if a.only_b9 else '8GB'}'; set threads = 1")
     rows = pm.load(con).merge(  # the leaky ratio the shipped model dropped, for the audit only
         con.execute(
             "select ptp_id, ptp_to_overdue_ratio::double as amount_ratio from silver.promises_to_pay"
         ).df(),
         on="ptp_id",
     )
+    if a.only_b9:
+        print(promise_decision(con, rows))
+        return
     cell_md = cells(con)
     pay_md, pay_sum = payday(con, rows)
     day_md, design_md = payday_designs(con)
     abl_md, h2h_md, where_md = models(con, rows)
     wide_md = standalone(con, rows)
+    wide_md += "\n\nSame promises, the shipped model's family and the wide one with other models and calibrations (decision B9; the calibrated rows refit the base on the first 80% of the training period and calibrate on the last 20%, never on the test):\n\n" + promise_decision(con, rows)
     uplift_md = cell_uplift(con)
     OUT.write_text(f"""# Measured evidence
 
-Generated by `scripts/evidence_report.py` from the release data (read-only). Intervals are 95%. In §8, interval
-ends can move by 0.1 between runs: some source rows share a date, and which one counts as latest is not fixed.
+Generated by `scripts/evidence_report.py` from the release data (read-only). Intervals are 95%.
 
 ## 1. The bank's randomised test cells
 
