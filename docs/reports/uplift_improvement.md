@@ -343,6 +343,10 @@ Cases whose last recommendation is a call, a hardship plan or a letter never cur
 - The hour result is a model plus observational checks; capacity is taken from the recorded `channel_capacity` and from the volume the team handled.
 - The warehouse was rebuilt on 17 Oct from the release; absolute numbers differ from the 3 Oct reports (the published call Qini is +0.0073, the rebuild gives +0.0041 on average over seeds).
 
+## The gate after this study
+
+`kept train` (`src/kept/nba/train.py`) no longer judges a challenger by one seed against the random-ranking noise. The champion (refitted with its own recipe and input columns) and the challenger are each fitted at three seeds and scored as the mean over them. The margin is twice the case-bootstrap SD of the paired challenger-minus-champion difference (`causal.case_bootstrap` over `causal.gate_qini`), for calls and for any contact; the old random-ranking noise is still reported (`noise_*`). A challenger is promoted only if it beats the champion by more than that margin on calls or any contact, is not worse by more than it on the other, and is not worse by more than twice the bootstrap SD of the paired doubly robust Qini on the clean outcome (`paid_clean_14d`, covered cases; nuisance models fitted before the cutoff) for calls or any contact. Both models are also valued against what the bank did with `causal.policy_value` on the clean outcome. The legacy recommendation field is no longer scored (it is look-ahead). Numbers of the last run: `data/exports/reports/train_gate.json`. `kept train --champion <live.pkl> --out <scratch.pkl>` tries a challenger without touching the live model.
+
 ## Reproduce
 
 ```bash
