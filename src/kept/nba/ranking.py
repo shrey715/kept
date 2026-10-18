@@ -9,13 +9,20 @@ time bands are applied when the call window is chosen.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from kept.config import CENT
 from kept.contracts.enums import ACTION_CHANNEL, Action, Channel
 from kept.contracts.nba import ActionScore, CaseContext
+
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from kept.nba.best_hour import BestHourModel
 
 _ORDER = {a: i for i, a in enumerate(Action)}
 _KEPT_SIZED = (Action.PROMISE_REQUEST, Action.PAYMENT_PLAN)
@@ -104,9 +111,18 @@ def is_close_call(ranked: Sequence[ActionScore], *, margin: float) -> bool:
 class CallCapacity:
     """Hourly call capacity in the bank's operating time zone, booked as the nightly batch places calls.
     `units[(weekday, hour)]` is how many call attempts the team can make in that hour on that weekday
-    (Monday 0); each date gets its own copy, used up as calls are booked into it."""
+    (Monday 0); each date gets its own copy, used up as calls are booked into it. With `best_hour`,
+    `book_best` picks the likeliest-to-answer slot on the earliest bookable day, not the earliest slot."""
 
-    def __init__(self, units: Mapping[tuple[int, int], float], *, tz: str, length: timedelta) -> None:
+    def __init__(
+        self,
+        units: Mapping[tuple[int, int], float],
+        *,
+        tz: str,
+        length: timedelta,
+        best_hour: BestHourModel | None = None,
+    ) -> None:
+        self.best_hour = best_hour
         self._units = dict(units)
         self._tz = ZoneInfo(tz)
         self._length = length
@@ -136,3 +152,58 @@ class CallCapacity:
                     return s.astimezone(UTC), min(s + self._length, close).astimezone(UTC)
                 s += timedelta(minutes=30)
         return first
+
+    def book_best(
+        self, ctx: CaseContext, first: tuple[datetime, datetime], features: pd.DataFrame
+    ) -> tuple[tuple[datetime, datetime], MovedCall | None]:
+        """Like `book`, but of the half-hour slots with capacity on the same local day as the earliest
+        (never a later day), books the one likeliest to reach the right party (`best_hour.p_rpc` on
+        `features`, one row of the model inputs); a tie goes to the earlier slot. The second value says what
+        moved, None if the earliest slot won. Needs `best_hour`; no free slot: `first`."""
+        assert self.best_hour is not None
+        local_tz = ZoneInfo(ctx.time_zone)
+        start = first[0].astimezone(local_tz)
+        for d in range(8):
+            day = start.date() + timedelta(days=d)
+            if day.weekday() == 6 and not ctx.sunday_contact_permitted:
+                continue
+            open_, close = (
+                datetime.combine(day, t, local_tz)
+                for t in (ctx.permitted_call_start_local, ctx.permitted_call_end_local)
+            )
+            free: list[tuple[datetime, tuple[date, int]]] = []
+            s = max(open_, start)
+            while s < close:
+                op = s.astimezone(self._tz)
+                key = (op.date(), op.hour)
+                if key not in self._left:
+                    self._left[key] = self._units.get((op.weekday(), op.hour), 0.0)
+                if self._left[key] >= 1:
+                    free.append((s, key))
+                s += timedelta(minutes=30)
+            if not free:
+                continue
+            p = self.best_hour.p_rpc(features, [(s.hour, s.weekday()) for s, _ in free])
+            i = int(p.argmax())  # the first maximum: ties go to the earlier slot
+            s, key = free[i]
+            self._left[key] -= 1
+            moved = MovedCall(s, free[0][0], float(p[i]), float(p[0])) if i else None
+            return (s.astimezone(UTC), min(s + self._length, close).astimezone(UTC)), moved
+        return first, None
+
+
+@dataclass(frozen=True)
+class MovedCall:
+    """A call booked after its earliest slot because the customer likelier answers then (customer-local)."""
+
+    booked: datetime
+    earliest: datetime
+    p_booked: float
+    p_earliest: float
+
+    def text(self) -> str:
+        return (
+            f"Booked {self.booked:%H:%M}: this customer is likelier to answer then "
+            f"({self.p_booked:.0%} chance of reaching them, "
+            f"against {self.p_earliest:.0%} at {self.earliest:%H:%M})."
+        )

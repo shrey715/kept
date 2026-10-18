@@ -3,7 +3,8 @@
 {% if var('training_spine', false) %}
 -- Training: one as_of per uplift decision, a second before it, so the contact's own outcome never leaks.
 with as_of as (
-    select distinct case_id, decision_at - interval 1 second as as_of from {{ ref('training_rows') }}
+    select distinct case_id, decision_at - interval 1 second as as_of
+    from (select case_id, decision_at from {{ ref('training_rows') }} union all select case_id, decision_at from {{ ref('training_weeks') }})
 )
 {% else %}
 with as_of as (

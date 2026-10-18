@@ -48,6 +48,8 @@ A LightGBM T-learner: one model per action against waiting, on paid-within-14-da
 
 The signal is small and the gate treats it that way: a challenger replaces the champion only if it beats it by more than the noise on held-out decisions (`docs/reports/tuning.md`: a 40-candidate search did not).
 
+Two cautions from `docs/reports/uplift_improvement.md`. The gate's noise is the spread under random rankings; retraining on a different seed moves the call Qini by more than that. And there is no comparison with the bank's targeting: the bank's recommendation field is the last one shown as of the snapshot, so it encodes how each case ended and is not a decision-time rule. On a clean outcome (account-sourced payments) with doubly robust scoring, the call ranking adds less than calling every call decision; contact itself barely moves payment, and call timing is where the evidence is stronger.
+
 **Strongest inputs per action (mean |TreeSHAP|, percentage points)**
 
 | Action | Inputs |

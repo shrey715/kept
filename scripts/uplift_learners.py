@@ -1,4 +1,4 @@
-# ruff: noqa: E501  (report prose)
+# ruff: noqa: E501, B023  (report prose; loop variables in bootstrap lambdas are used before the next iteration)
 """Uplift learners against the live T-learner, judged two ways: docs/reports/uplift_learners.md.
 
     uv run python scripts/uplift_learners.py [--warehouse data/warehouse/scratch_copy.duckdb]
@@ -7,18 +7,14 @@ The gate's Qini (kept.nba.train.evaluate) compares treated and untreated decisio
 which action, so that comparison is biased. The doubly robust Qini sorts decisions by a candidate's uplift and adds up
 AIPW pseudo-outcomes from nuisance models that no candidate uses (one outcome model with the action as an input, one
 propensity model). Candidates are compared on a validation window (15 Jul to 15 Aug, fitted before it); the chosen one
-is then scored once on the test decisions (from 15 Aug), next to the champion and the bank's strategy.
-
-    uv run --extra model --extra analysis python scripts/uplift_learners.py --mode decision   # decision B10
-
-Decision B10 (docs/reports/decisions.md): the same windows and doubly robust Qini, for uplift against a "who will pay"
-response model, an S-learner and a causal forest (econml, the `analysis` extra). Writes
-data/exports/reports/decision_B10.json and docs/reports/figures/dec_B10.png.
+is then scored once on the test decisions (from 15 Aug), next to the champion. There is no "bank's strategy" column: the
+bank's recommendation field is the last one shown as of the snapshot (look-ahead), not a decision-time rule.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import pickle
 from datetime import datetime
 from pathlib import Path
@@ -31,18 +27,40 @@ from lightgbm import LGBMClassifier, LGBMRegressor
 
 from kept.contracts.enums import Action
 from kept.contracts.feature_registry import model_inputs
-from kept.nba.legacy import legacy_to_action
-from kept.nba.train import ACTIONS, evaluate, load_rows
-from kept.nba.uplift import DEFAULT_PARAMS, TLearnerUplift, _frame
+from kept.nba.causal import CLIP, CausalUplift, Nuisance, case_bootstrap, gate_qini
+from kept.nba.causal import dr_qini as dr_qini_w
+from kept.nba.train import ACTIONS, CONTEXT_COLS, evaluate, load_rows
+from kept.nba.uplift import TLearnerUplift, _frame
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "uplift_learners.md"
 CUTOFF, VALID_FROM = datetime(2026, 8, 15), datetime(2026, 7, 15)
 COLS = list(model_inputs())
 ARMS = ("call", "sms_payment_link", "email")
-NUIS = dict(n_jobs=4, n_estimators=300, num_leaves=31, min_child_samples=300, learning_rate=0.05, verbose=-1, deterministic=True, force_row_wise=True)
-REG = dict(n_estimators=300, num_leaves=15, min_child_samples=300, learning_rate=0.03, reg_lambda=5.0, colsample_bytree=0.8, verbose=-1, deterministic=True, force_row_wise=True)
-VARIANTS = {"DR-learner": {}, "DR-learner, more regularised": dict(num_leaves=7, min_child_samples=1000, reg_lambda=20.0)}
+NUIS = dict(
+    n_estimators=300,
+    num_leaves=31,
+    min_child_samples=300,
+    learning_rate=0.05,
+    verbose=-1,
+    deterministic=True,
+    force_row_wise=True,
+)
+REG = dict(
+    n_estimators=300,
+    num_leaves=15,
+    min_child_samples=300,
+    learning_rate=0.03,
+    reg_lambda=5.0,
+    colsample_bytree=0.8,
+    verbose=-1,
+    deterministic=True,
+    force_row_wise=True,
+)
+VARIANTS = {
+    "DR-learner": {},
+    "DR-learner, more regularised": dict(num_leaves=7, min_child_samples=1000, reg_lambda=20.0),
+}
 
 
 class MetaLearner:
@@ -53,14 +71,21 @@ class MetaLearner:
 
     def fit(self, df: pd.DataFrame) -> MetaLearner:
         X, a, y = _frame(df[COLS]), df.action.to_numpy(), df.paid_14d.to_numpy(dtype=float)
-        mu = TLearnerUplift(ACTIONS).fit(df[COLS], action=df.action, paid_14d=df.paid_14d, is_random_assignment=pd.Series(True, index=df.index))
+        mu = TLearnerUplift(ACTIONS).fit(
+            df[COLS],
+            action=df.action,
+            paid_14d=df.paid_14d,
+            is_random_assignment=pd.Series(True, index=df.index),
+        )
         P = mu.predict_proba(df[COLS])
         for act in ACTIONS:
             if act is Action.WAIT:
                 continue
             m = (a == act.value) | (a == "wait")
             Xm, ym, t = X[m], y[m], (a[m] == act.value).astype(int)
-            e = LGBMClassifier(n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1).fit(Xm, t)
+            e = LGBMClassifier(
+                n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1
+            ).fit(Xm, t)
             ps = np.clip(e.predict_proba(Xm)[:, 1], 0.05, 0.95)
             m1, m0 = P[act.value].to_numpy()[m], P["wait"].to_numpy()[m]
             if self.kind == "dr":
@@ -83,91 +108,29 @@ class MetaLearner:
         return pd.DataFrame(out, index=features.index)[[a.value for a in ACTIONS]]
 
 
-class ResponseModel:
-    """What a propensity-to-pay score does: one LightGBM (the live tree settings) for paid_14d on contacted decisions.
-    Every arm is ranked by that chance of paying, so `uplift` returns the same score in every column."""
-
-    def fit(self, df: pd.DataFrame) -> ResponseModel:
-        c = df[df.action != "wait"]
-        self.m = LGBMClassifier(**DEFAULT_PARAMS, random_state=0).fit(_frame(c[COLS]), c.paid_14d.astype(int))
-        return self
-
-    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
-        p = self.m.predict_proba(_frame(features[COLS]))[:, 1]
-        return pd.DataFrame({a.value: p for a in ACTIONS}, index=features.index)
-
-
-class SLearner:
-    """One LightGBM with the action as an input; uplift = P(paid | x, action) - P(paid | x, wait)."""
-
-    def __init__(self, params: dict[str, Any]) -> None:
-        self.params = {**DEFAULT_PARAMS, **params, "random_state": 0}
-
-    def fit(self, df: pd.DataFrame) -> SLearner:
-        self.m = LGBMClassifier(**self.params).fit(_arm(_frame(df[COLS]), df.action.to_numpy()), df.paid_14d.astype(int))
-        return self
-
-    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
-        X = _frame(features[COLS])
-        p = {a.value: self.m.predict_proba(_arm(X, a.value))[:, 1] for a in ACTIONS}
-        return pd.DataFrame(p, index=features.index).sub(p["wait"], axis=0)
-
-
-class CausalForest:
-    """econml's CausalForestDML per judged arm against waiting (a generalised random forest on the residualised outcome
-    and treatment). econml's forest defaults apart from `params`. Its trees take no missing values, which LightGBM
-    routes on its own, so a missing input takes the training median plus a 0/1 "was missing" column."""
-
-    def __init__(self, params: dict[str, Any]) -> None:
-        self.params, self.tau = params, {}
-
-    def _num(self, df: pd.DataFrame) -> np.ndarray:
-        X = _frame(df[COLS])
-        X = X.assign(pay_frequency=X.pay_frequency.cat.codes.replace(-1, np.nan)).astype(float)
-        return np.hstack([X.fillna(self.fill).to_numpy(), X[self.miss].isna().to_numpy(float)])
-
-    def fit(self, df: pd.DataFrame) -> CausalForest:
-        from econml.dml import CausalForestDML
-
-        X = _frame(df[COLS]).drop(columns="pay_frequency").astype(float)
-        self.fill = X.median().fillna(0.0).reindex(COLS, fill_value=0.0)  # pay_frequency codes: 0 when missing
-        self.miss = [c for c in COLS if df[c].isna().any() and df[c].notna().any()]
-        Xn, y = self._num(df), df.paid_14d.to_numpy(float)
-        small = dict(n_jobs=4, n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1, random_state=0)
-        for act in ARMS:
-            m = df.action.isin([act, "wait"]).to_numpy()
-            cf = CausalForestDML(model_y=LGBMRegressor(**small), model_t=LGBMClassifier(**small), discrete_treatment=True, inference=False, random_state=0, n_jobs=4, **self.params)
-            self.tau[act] = cf.fit(y[m], (df.action[m] == act).to_numpy(int), X=Xn[m])
-        return self
-
-    def uplift(self, features: pd.DataFrame) -> pd.DataFrame:
-        X = self._num(features)
-        out ={"wait": np.zeros(len(X))} | {a: cf.effect(X).ravel() for a, cf in self.tau.items()}
-        return pd.DataFrame(out, index=features.index)
-
-
-def _arm(X: pd.DataFrame, a: Any) -> pd.DataFrame:
-    """X with the action as a categorical input `_a` (one action for every row, or a Series of actions)."""
-    return X.assign(_a=pd.Categorical([a] * len(X) if isinstance(a, str) else a, categories=[x.value for x in ACTIONS]))
-
-
 def nuisance(train: pd.DataFrame) -> tuple[Any, Any]:
-    out = LGBMClassifier(**NUIS).fit(_arm(_frame(train[COLS]), train.action.to_numpy()), train.paid_14d.astype(int))
+    cats = [a.value for a in ACTIONS]
+    out = LGBMClassifier(**NUIS).fit(
+        _frame(train[COLS]).assign(_a=pd.Categorical(train.action, categories=cats)),
+        train.paid_14d.astype(int),
+    )
     prop = LGBMClassifier(**NUIS).fit(_frame(train[COLS]), train.action)
     return out, prop
 
 
-def pseudo(ev: pd.DataFrame, out: Any, prop: Any, act: str, *, means: bool = False) -> Any:
-    """(rows in this arm or waiting, AIPW pseudo-outcomes); means=True also returns the outcome model's m1 and m0."""
+def pseudo(ev: pd.DataFrame, out: Any, prop: Any, act: str) -> tuple[np.ndarray, np.ndarray]:
+    cats = [a.value for a in ACTIONS]
     m = ev.action.isin([act, "wait"]).to_numpy()
     e = ev[m]
     Xe = _frame(e[COLS])
-    m1, m0 = (out.predict_proba(_arm(Xe, x))[:, 1] for x in (act, "wait"))
+    m1, m0 = (
+        out.predict_proba(Xe.assign(_a=pd.Categorical([x] * len(Xe), categories=cats)))[:, 1]
+        for x in (act, "wait")
+    )
     P = pd.DataFrame(prop.predict_proba(Xe), columns=prop.classes_)
     ps = np.clip(P[act].to_numpy() / (P[act].to_numpy() + P["wait"].to_numpy()), 0.05, 0.95)
     t, y = (e.action == act).to_numpy(float), e.paid_14d.to_numpy(float)
-    phi = m1 - m0 + t / ps * (y - m1) - (1 - t) / (1 - ps) * (y - m0)
-    return (m, phi, m1, m0) if means else (m, phi)
+    return m, m1 - m0 + t / ps * (y - m1) - (1 - t) / (1 - ps) * (y - m0)
 
 
 def dr_qini(score: np.ndarray, phi: np.ndarray) -> float:
@@ -179,12 +142,10 @@ def dr_qini(score: np.ndarray, phi: np.ndarray) -> float:
 
 def judge(models: dict[str, Any], ev: pd.DataFrame, out: Any, prop: Any) -> dict[str, dict[str, float]]:
     rng = np.random.default_rng(0)
-    legacy = ev.nba_recommendation_last.map(lambda c: (a := legacy_to_action(c)) and a.value)
     res: dict[str, dict[str, float]] = {}
     for act in ARMS:
         m, phi = pseudo(ev, out, prop, act)
         row = {"noise": float(np.std([dr_qini(rng.random(len(phi)), phi) for _ in range(100)]))}
-        row["The bank's strategy"] = dr_qini((legacy[m] == act).to_numpy(float) + 1e-9 * rng.random(m.sum()), phi)
         for name, mdl in models.items():
             row[name] = dr_qini(mdl.uplift(ev[m])[act].to_numpy(), phi)
         res[act] = row
@@ -195,131 +156,193 @@ def table(res: dict[str, dict[str, float]]) -> str:
     names = [k for k in next(iter(res.values())) if k != "noise"]
     lines = ["| Arm | Noise (1 sd) | " + " | ".join(names) + " |", "|---|---:|" + "---:|" * len(names)]
     for act, row in res.items():
-        lines.append(f"| {act.replace('_', ' ')} | {row['noise']:.4f} | " + " | ".join(f"{row[n]:+.4f}" for n in names) + " |")
+        lines.append(
+            f"| {act.replace('_', ' ')} | {row['noise']:.4f} | "
+            + " | ".join(f"{row[n]:+.4f}" for n in names)
+            + " |"
+        )
     return "\n".join(lines)
 
 
-TOPS, SURE = (0.1, 0.3, 0.5), 0.3
-S_VARIANTS = {"S-learner": {}, "S-learner, larger trees": dict(n_estimators=200, num_leaves=15)}
-CF_VARIANTS = {"Causal forest": {}, "Causal forest, larger leaves": dict(min_samples_leaf=200)}
-LIVE = "T-learner (live settings)"
+# ---------------------------------------------------------------- --improve: docs/reports/uplift_improvement.md
+IMPROVE_JSON = REPO / "data" / "exports" / "reports" / "uplift_improve.json"
+F17, F27 = COLS, COLS + CONTEXT_COLS
+SEEDS = (0, 1, 2)
+# training sets: name -> (rows, outcome column, binary). Evaluation sets are the same three, scored with nuisance fitted on their own fit window.
+SETS = {
+    "old rows (attempts, any payment)": ("att", "paid_14d"),
+    "attempts, clean payment (covered)": ("att", "paid_clean_14d"),
+    "landmarks, clean payment (covered)": ("lm", "paid_clean_14d"),
+}
+PRIMARY = "attempts, clean payment (covered)"
 
 
-def measure(models: dict[str, Any], ev: pd.DataFrame, out: Any, prop: Any) -> tuple[dict[str, Any], dict[str, list[Any]]]:
-    """Per arm and in total: the doubly robust Qini (raw and in noise units); extra payers per 1,000 contacts in the
-    top 10/30/50% (the mean pseudo-outcome there); and contacts on "sure things": the share of the top 30% whose
-    estimated uplift is <= 0, with their mean chance of paying if left alone. The estimated uplift and that chance
-    come from the judge's outcome model (m1 - m0 and m0), which no candidate uses. "Random" is the exact expectation
-    of a random ranking (top k% = everyone, Qini 0). Totals pool the arms: Qini in noise units summed, the rest
-    weighted by rows. Also returns, per name, each arm's (phi, uplift, m0, top sets) for the bootstrap."""
-    rng = np.random.default_rng(0)
-    legacy = ev.nba_recommendation_last.map(lambda c: (a := legacy_to_action(c)) and a.value)
-    res: dict[str, Any] = {}
-    parts: dict[str, list[Any]] = {}
-    for act in ARMS:
-        m, phi, m1, m0 = pseudo(ev, out, prop, act, means=True)
-        ref, n = m1 - m0, len(phi)
-        noise = float(np.std([dr_qini(rng.random(n), phi) for _ in range(100)]))
-        scores = {"Random": None, "The bank's strategy": (legacy[m] == act).to_numpy(float) + 1e-9 * rng.random(n)}
-        scores |= {k: mdl.uplift(ev[m])[act].to_numpy() for k, mdl in models.items()}
-        res[act] = {"rows": n, "noise": noise, "models": {}}
-        for name, s in scores.items():
-            o = np.arange(n) if s is None else np.argsort(-s, kind="stable")
-            top = {k: o if s is None else o[: round(k * n)] for k in TOPS}
-            q = 0.0 if s is None else dr_qini(s, phi)
-            parts.setdefault(name, []).append((phi, ref, m0, top))
-            res[act]["models"][name] = {"qini": q, "qini_noise_units": q / noise} | summarise([(phi, ref, m0, top)])
-    res["total"] = {"rows": sum(res[a]["rows"] for a in ARMS), "models": {
-        n: {"qini_noise_units": sum(res[a]["models"][n]["qini_noise_units"] for a in ARMS)} | summarise(p) for n, p in parts.items()}}
-    return res, parts
+def subset(frames: dict[str, pd.DataFrame], name: str) -> pd.DataFrame:
+    kind, outcome = SETS[name]
+    d = frames[kind]
+    d = d[d.paid_14d_known] if outcome == "paid_14d" else d[d.covered]
+    return d.assign(y=d[outcome].astype(float)).reset_index(drop=True)
 
 
-def summarise(parts: list[Any], w: list[np.ndarray] | None = None) -> dict[str, float]:
-    """Pooled over arms (optionally with bootstrap weights): extra payers per 1,000 in each top set, and the sure-thing
-    share and chance of paying if left alone in the top 30%."""
-    z = list(zip(w or [np.ones(len(p[0])) for p in parts], parts, strict=True))
-
-    def mean(k: float, val: Any) -> float:  # weighted mean of val(phi, ref, m0)[top k] over the pooled arms
-        return float(sum((wi[p[3][k]] * val(*p[:3])[p[3][k]]).sum() for wi, p in z) / sum(wi[p[3][k]].sum() for wi, p in z))
-
-    out = {f"per_1000_top{round(k * 100)}": 1000 * mean(k, lambda phi, ref, m0: phi) for k in TOPS}
-    out["sure_things_top30"] = mean(SURE, lambda phi, ref, m0: (ref <= 0).astype(float))
-    out["p_pay_if_left_top30"] = mean(SURE, lambda phi, ref, m0: m0)
+def candidates(fit: dict[str, pd.DataFrame], seed: int) -> dict[str, Any]:
+    """Every candidate fitted on `fit` (a frame per training set). Name: learner | training set."""
+    out: dict[str, Any] = {}
+    for sname in SETS:
+        d = fit[sname]
+        ones = pd.Series(True, index=d.index)
+        for fname, cols in (("17 inputs", F17), ("17 + context", F27)):
+            out[f"T-learner, {fname} | {sname}"] = TLearnerUplift(ACTIONS, seed=seed).fit(
+                d[cols], action=d.action, paid_14d=d.y, is_random_assignment=ones
+            )
+        cu = CausalUplift(F27, ["call", "sms_payment_link", "email", "push"], "y", seed=seed).fit(d)
+        out[f"DR-learner, 17 + context | {sname}"] = cu.view("dr")
+        out[f"R-learner, 17 + context | {sname}"] = cu.view("r")
     return out
 
 
-def paired_boot(parts: dict[str, list[Any]], a: str, b: str, reps: int = 1000) -> dict[str, list[float]]:
-    """95% interval of a minus b, extra payers per 1,000 in the top 30%, all arms: the decisions resampled (the same
-    Poisson weights for both), the models and the judge held fixed."""
+def eval_sets(fit: dict[str, pd.DataFrame], ev: dict[str, pd.DataFrame]) -> dict[str, dict[str, Any]]:
+    """Pseudo-outcomes per evaluation set and arm from nuisance fitted on the fit window (not any candidate), rows trimmed to overlap."""
+    res: dict[str, dict[str, Any]] = {}
+    for sname in SETS:
+        res[sname] = {}
+        for arm in ARMS:
+            n = Nuisance(F27, arm, "y").fit(fit[sname])
+            m, o = n.pseudo(ev[sname])
+            e = ev[sname][m]
+            ok = ((o.e >= CLIP[0]) & (o.e <= CLIP[1])).to_numpy()
+            res[sname][arm] = {"rows": e[ok], "phi": o.phi.to_numpy()[ok], "kept": float(ok.mean())}
+    return res
+
+
+def score_all(
+    models: dict[int, dict[str, Any]], es: dict[str, dict[str, Any]], reps: int = 100
+) -> dict[str, Any]:
+    """DR Qini per candidate, evaluation set and arm: mean over seeds, and the case-bootstrap SD of its difference from the champion."""
+    champion = next(n for n in models[SEEDS[0]] if n.startswith("T-learner, 17 inputs | old rows"))
+    out: dict[str, Any] = {}
+    for sname, arms in es.items():
+        for arm, e in arms.items():
+            rows, phi = e["rows"], e["phi"]
+            sc = {
+                n: [models[s][n].uplift(rows[F27])[arm].to_numpy() for s in SEEDS] for n in models[SEEDS[0]]
+            }
+            stat = lambda w, n: float(np.mean([dr_qini_w(x, phi, w) for x in sc[n]]))  # noqa: E731
+            base = case_bootstrap(rows.case_id, lambda w: stat(w, champion), reps=reps)
+            for n in sc:
+                v = stat(np.ones(len(phi)), n)
+                diff = (
+                    case_bootstrap(rows.case_id, lambda w, n=n: stat(w, n) - stat(w, champion), reps=reps)
+                    if n != champion
+                    else np.zeros(2)
+                )
+                out.setdefault(n, {}).setdefault(sname, {})[arm] = {
+                    "qini": v,
+                    "vs_champion": v - stat(np.ones(len(phi)), champion),
+                    "diff_sd": float(diff.std()),
+                    "seed_min": float(min(dr_qini_w(x, phi) for x in sc[n])),
+                    "seed_max": float(max(dr_qini_w(x, phi) for x in sc[n])),
+                    "kept": e["kept"],
+                }
+            out[champion][sname][arm]["boot_sd"] = float(base.std())
+    return out
+
+
+def gate(models: dict[int, dict[str, Any]], test: pd.DataFrame) -> dict[str, dict[str, float]]:
+    """The gate's own metric (treated vs untreated directly; old rows, any payment) for every candidate, mean over seeds, and its
+    noise as the gate defines it (SD of Qini under random rankings)."""
+    d = test[test.paid_14d_known]
+    wait = (d.action == "wait").to_numpy()
+    y = d.paid_14d.to_numpy(float)
     rng = np.random.default_rng(0)
-    d = {"a": [], "b": [], "diff": []}
-    for _ in range(reps):
-        w = [rng.poisson(1.0, len(p[0])).astype(float) for p in parts[a]]
-        va, vb = (summarise(parts[x], w)["per_1000_top30"] for x in (a, b))
-        d["a"].append(va), d["b"].append(vb), d["diff"].append(va - vb)
-    return {k: [float(x) for x in np.percentile(v, [2.5, 97.5])] for k, v in d.items()}
+    out: dict[str, dict[str, float]] = {}
+    for n in models[SEEDS[0]]:
+        per: dict[str, list[float]] = {"call": [], "any_contact": []}
+        for s in SEEDS:
+            lift = models[s][n].uplift(d[F27])
+            for k in per:
+                arm = (d.action == "call").to_numpy() if k == "call" else ~wait
+                both = arm | wait
+                score = (
+                    lift["call"]
+                    if k == "call"
+                    else lift[[c for c in lift.columns if c != "wait"]].max(axis=1)
+                )
+                per[k].append(gate_qini(score.to_numpy()[both], arm[both].astype(float), y[both]))
+        out[n] = {f"qini_{k}": float(np.mean(v)) for k, v in per.items()} | {
+            f"seed_sd_{k}": float(np.std(v)) for k, v in per.items()
+        }
+    for k in ("call", "any_contact"):
+        arm = (d.action == "call").to_numpy() if k == "call" else ~wait
+        both = arm | wait
+        noise = float(
+            np.std([gate_qini(rng.random(both.sum()), arm[both].astype(float), y[both]) for _ in range(50)])
+        )
+        for n in out:
+            out[n][f"noise_{k}"] = noise
+    return out
 
 
-def decision(rows: pd.DataFrame) -> None:
-    import json
-
-    from reportlib import BLUE, KEPT, MUTED, plt, save, style, tidy
-
-    def live(df: pd.DataFrame) -> TLearnerUplift:
-        return TLearnerUplift(ACTIONS).fit(df[COLS], action=df.action, paid_14d=df.paid_14d, is_random_assignment=pd.Series(True, index=df.index))
-
-    tune = rows[rows.decision_at < CUTOFF]
-    fit, val = tune[tune.decision_at < VALID_FROM], tune[tune.decision_at >= VALID_FROM]
-    out, prop = nuisance(fit)
-    cands: dict[str, Any] = {LIVE: live(fit), "Response model": ResponseModel().fit(fit)}
-    cands |= {n: SLearner(p).fit(fit) for n, p in S_VARIANTS.items()} | {n: CausalForest(p).fit(fit) for n, p in CF_VARIANTS.items()}
-    v, _ = measure(cands, val, out, prop)
-    s_best, cf_best = (max(vs, key=lambda n: v["total"]["models"][n]["qini_noise_units"]) for vs in (S_VARIANTS, CF_VARIANTS))
-    full, test = rows[rows.decision_at < CUTOFF], rows[rows.decision_at >= CUTOFF]
-    out, prop = nuisance(full)
-    final: dict[str, Any] = {LIVE: live(full), "Champion (live)": pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes()),
-                             "Response model": ResponseModel().fit(full), s_best: SLearner(S_VARIANTS[s_best]).fit(full), cf_best: CausalForest(CF_VARIANTS[cf_best]).fit(full)}
-    t, parts = measure(final, test, out, prop)
-    res = {"windows": {"validation": "fitted before 15 Jul 2026, scored 15 Jul to 15 Aug", "test": "fitted before 15 Aug 2026, scored from 15 Aug"},
-           "rows": {"fit_validation": len(fit), "validation": len(val), "fit_test": len(full), "test": len(test)},
-           "chosen_on_validation": {"s_learner": s_best, "causal_forest": cf_best}, "validation": v, "test": t,
-           "paired_bootstrap_top30_live_vs_response": paired_boot(parts, LIVE, "Response model")}
-    (REPO / "data" / "exports" / "reports" / "decision_B10.json").write_text(json.dumps(res, indent=1))
-    style()
-    T = t["total"]["models"]
-    names = list(T)
-    fig, axs = plt.subplots(1, 2, figsize=(9.5, 3.4), sharey=True)
-    for ax, key, title, fmt in ((axs[0], "per_1000_top30", "Extra payers per 1,000 contacts, top 30%", "{:+.1f}"),
-                                (axs[1], "sure_things_top30", "Share of the top 30% with estimated uplift ≤ 0", "{:.0%}")):
-        y = list(range(len(names)))[::-1]
-        vals = [T[n][key] for n in names]
-        ax.barh(y, vals, color=[KEPT if n in (LIVE, "Champion (live)") else MUTED if n in ("Random", "The bank's strategy") else BLUE for n in names], height=0.6)
-        for yi, val_ in zip(y, vals, strict=True):
-            ax.text(val_, yi, " " + fmt.format(val_), va="center", fontsize=8)
-        ax.set_yticks(y, names)
-        ax.set_title(title, loc="left")
-        tidy(ax)
-    fig.suptitle(f"Test decisions from 15 Aug ({len(test):,}), call, SMS and email arms pooled; doubly robust", fontsize=8, color=MUTED, x=0.01, ha="left")
-    print(save(fig, "dec_B10"))
-    print(json.dumps({"chosen": res["chosen_on_validation"], "test_total": T, "boot": res["paired_bootstrap_top30_live_vs_response"]}, indent=1))
+def improve(conn: duckdb.DuckDBPyConnection) -> None:
+    frames = {
+        "att": load_rows(conn, extras=True),
+        "lm": load_rows(conn, source="training_weeks", extras=True),
+    }
+    for f in frames.values():
+        f["last_rpc"], f["last_ptp_made"] = f.last_rpc.astype(float), f.last_ptp_made.astype(float)
+    res: dict[str, Any] = {}
+    for stage, hi in {"validation": VALID_FROM, "test": CUTOFF}.items():
+        fit = {n: subset(frames, n)[lambda d: d.decision_at < hi] for n in SETS}
+        ev_from, ev_to = (VALID_FROM, CUTOFF) if stage == "validation" else (CUTOFF, datetime(2026, 10, 1))
+        ev = {
+            n: subset(frames, n)[lambda d: (d.decision_at >= ev_from) & (d.decision_at < ev_to)] for n in SETS
+        }
+        fit_win = {n: d for n, d in fit.items()}
+        models = {s: candidates(fit_win, s) for s in SEEDS}
+        es = eval_sets(fit_win, ev)
+        att = frames["att"]
+        res[stage] = {
+            "dr": score_all(models, es),
+            "gate": gate(models, att[(att.decision_at >= ev_from) & (att.decision_at < ev_to)]),
+            "rows": {n: len(d) for n, d in ev.items()},
+            "fit_rows": {n: len(d) for n, d in fit.items()},
+        }
+        IMPROVE_JSON.write_text(json.dumps(res, indent=1, default=float))
+        print(stage, "done", flush=True)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--warehouse", default=str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"))
-    ap.add_argument("--mode", choices=("learners", "decision"), default="learners", help="decision: B10, uplift against a response model")
+    ap.add_argument(
+        "--improve",
+        action="store_true",
+        help="the uplift_improvement.md candidate comparison (needs features_train v2 rows)",
+    )
     args = ap.parse_args()
+    if args.improve:
+        conn = duckdb.connect(args.warehouse, read_only=True)
+        conn.execute("set memory_limit = '4GB'; set threads = 4")
+        improve(conn)
+        return
     rows = load_rows(duckdb.connect(args.warehouse, read_only=True))
-    if args.mode == "decision":
-        return decision(rows)
     tune = rows[rows.decision_at < CUTOFF]
     fit, val = tune[tune.decision_at < VALID_FROM], tune[tune.decision_at >= VALID_FROM]
     out, prop = nuisance(fit)
-    cands: dict[str, Any] = {"T-learner (as live)": TLearnerUplift(ACTIONS).fit(fit[COLS], action=fit.action, paid_14d=fit.paid_14d, is_random_assignment=pd.Series(True, index=fit.index)),
-                             "X-learner": MetaLearner("x", {}).fit(fit)}
+    cands: dict[str, Any] = {
+        "T-learner (as live)": TLearnerUplift(ACTIONS).fit(
+            fit[COLS],
+            action=fit.action,
+            paid_14d=fit.paid_14d,
+            is_random_assignment=pd.Series(True, index=fit.index),
+        ),
+        "X-learner": MetaLearner("x", {}).fit(fit),
+    }
     cands |= {n: MetaLearner("dr", v).fit(fit) for n, v in VARIANTS.items()}
     v = judge(cands, val, out, prop)
-    best = max((n for n in cands if n != "T-learner (as live)"), key=lambda n: sum(v[a][n] / v[a]["noise"] for a in ARMS))
+    best = max(
+        (n for n in cands if n != "T-learner (as live)"),
+        key=lambda n: sum(v[a][n] / v[a]["noise"] for a in ARMS),
+    )
     full, test = rows[rows.decision_at < CUTOFF], rows[rows.decision_at >= CUTOFF]
     out, prop = nuisance(full)
     champion = pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes())
@@ -329,7 +352,10 @@ def main() -> None:
     gate = {n: evaluate(m, rows, cutoff=CUTOFF) for n, m in (("Champion (live)", champion), (best, chosen))}
     gate_md = "\n".join(
         ["| Model | Qini, calls | Qini, any contact | Noise (calls, any) |", "|---|---:|---:|---:|"]
-        + [f"| {n} | {g['qini_call']:+.4f} | {g['qini_any_contact']:+.4f} | {g['noise_call']:.4f}, {g['noise_any_contact']:.4f} |" for n, g in gate.items()]
+        + [
+            f"| {n} | {g['qini_call']:+.4f} | {g['qini_any_contact']:+.4f} | {g['noise_call']:.4f}, {g['noise_any_contact']:.4f} |"
+            for n, g in gate.items()
+        ]
     )
     OUT.write_text(f"""# Uplift learners: does a causal learner beat the live model?
 
@@ -357,16 +383,23 @@ The gate's own metric on the same test decisions:
 
 - **No learner beats the live model on every arm.** The causal learner wins on some arms and loses on others, and the
   arms that win on validation don't all win on the test. The gate keeps the live model, correctly.
-- **On SMS and email, both Kept models beat the bank's strategy** on the doubly robust score. **On calls, the bank's
-  targeting scores higher** on that measure while the gate's measure says the opposite: who gets a call is the arm
-  most shaped by the bank's own choices, and the two scores disagree there.
+- **There is no comparison with the bank's targeting.** An earlier version scored the bank's recommendation field as a
+  rule; that field is the last recommendation shown as of the snapshot, so it encodes how each case ended
+  (`uplift_improvement.md`) and the column was removed.
+- **The scores are noisy and the DR evaluation here is the old one** (old label, nuisance models on the 17 inputs only);
+  `uplift_improvement.md` repeats the comparison on a clean outcome over several seeds.
 - The bank's randomised cells say contact intensity barely changes outcomes (`evidence.md` §1), so a small uplift
   signal is the expected result. Kept's main lever is the due date (`evidence.md` §2, §2a).
 """)
-    import json
-
     (REPO / "data" / "exports" / "reports" / "uplift_learners.json").write_text(
-        json.dumps({"best": best, "test": t, "gate": {n: {k: g[k] for k in ("qini_call", "qini_any_contact")} for n, g in gate.items()}}, indent=1)
+        json.dumps(
+            {
+                "best": best,
+                "test": t,
+                "gate": {n: {k: g[k] for k in ("qini_call", "qini_any_contact")} for n, g in gate.items()},
+            },
+            indent=1,
+        )
     )
     print(f"wrote {OUT}")
 

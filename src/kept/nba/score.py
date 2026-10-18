@@ -30,6 +30,8 @@ from kept.contracts.identity import GoldenCustomer, SourceKey
 from kept.contracts.nba import NBACard
 from kept.data.c360_reader import _to_customer
 from kept.features.drift import load_alarm
+from kept.nba.best_hour import BestHourModel
+from kept.nba.best_hour import load_model as load_best_hour
 from kept.nba.context import CaseRow, KeptContextBuilder
 from kept.nba.engine import WINDOW, KeptEngine
 from kept.nba.promise_model import load_model
@@ -242,25 +244,41 @@ select isodow(date) - 1, hour, sum(units / (e - s)) from c, unnest(range(s, e)) 
 group by 1, 2"""
 
 
-def call_capacity(conn: duckdb.DuckDBPyConnection) -> CallCapacity | None:
+def call_capacity(
+    conn: duckdb.DuckDBPyConnection, best_hour: BestHourModel | None = None
+) -> CallCapacity | None:
     """The call team's attempts per weekday and hour (bank time), from the latest week of
-    silver.channel_capacity; None when the table is missing or empty."""
+    silver.channel_capacity; None when the table is missing or empty. With `best_hour`, calls are booked
+    into the likeliest-to-answer hour of their day (`kept score --best-hour`)."""
     try:
         rows = conn.execute(SQL_CALL_CAPACITY).fetchall()
     except duckdb.Error:
         return None
     if not rows:
         return None
-    return CallCapacity({(int(w), int(h)): float(u) for w, h, u in rows}, tz=OPERATING_TZ, length=WINDOW)
+    units = {(int(w), int(h)): float(u) for w, h, u in rows}
+    return CallCapacity(units, tz=OPERATING_TZ, length=WINDOW, best_hour=best_hour)
 
 
 def score(
-    warehouse: Path | str, *, model: Path, holdout_salt: str, now: datetime, audit_log: DuckDBAuditLog
+    warehouse: Path | str,
+    *,
+    model: Path,
+    holdout_salt: str,
+    now: datetime,
+    audit_log: DuckDBAuditLog,
+    best_hour: bool = False,
 ) -> pd.DataFrame:
-    """Score every open case and write nba.cards. Returns the cards table."""
+    """Score every open case and write nba.cards. Returns the cards table. best_hour: book each call into the
+    hour the customer likeliest answers (models/best_hour.pkl from `kept train-best-hour`; none: an error)."""
+    hour_model = None
+    if best_hour:
+        hour_model = load_best_hour(EXPORT_DIR / "models" / "best_hour.pkl")
+        if hour_model is None:
+            raise FileNotFoundError("--best-hour needs models/best_hour.pkl: run `kept train-best-hour`")
     with duckdb.connect(str(warehouse), read_only=True) as conn:
         bulk = load(conn)
-        calls = call_capacity(conn)
+        calls = call_capacity(conn, hour_model)
     buffer = _Buffer()
     context = KeptContextBuilder(
         c360=bulk, features=bulk, cases=bulk.case_row, holdout_salt=holdout_salt, extractions=bulk

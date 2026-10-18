@@ -28,7 +28,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 | Dating a promise to payday: **+6.1 pts** of the promised money paid (95% CI 2.8–10.6), measured on the bank's randomised cases | [`docs/reports/evidence.md`](docs/reports/evidence.md) §2 | `uv run python scripts/evidence_report.py` |
 | It is the payday: due on payday vs 1–3 days either side **+7.7 to +8.3 pts** kept; the same customer on vs off payday **+4.0** (CI 1.1–7.4); fake paydays show nothing | evidence §2a | same |
 | The bank's own A/B cells can't tell its strategies apart | evidence §1 | same |
-| Kept's contact policy, off-policy: **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** on the same decisions | evidence §4 | same |
+| Choosing whom to contact adds nothing measurable once the outcome is clean: Kept's choice vs what the bank did, **0 per 1,000** decisions (CI −7 to +8); it looks like +42 only on the old label, which counts payments seen on the contact row alone | evidence §4, [`uplift_improvement.md`](docs/reports/uplift_improvement.md) | same |
 | A leaky feature found and removed (promise AUC 0.92 → 0.63), and a wide model on the bank's kinds of inputs matches the bank's score alone (0.697 vs 0.702, CI includes zero); averaged with it, 0.763 (+6.1 AUC points, 95% CI 5.1–6.9) | evidence §3, §6, §8 | same |
 | Every extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00** | [`docs/reports/extraction_gate.md`](docs/reports/extraction_gate.md) | `uv run python scripts/eval_extraction.py --source transcripts --split holdout` |
 | Whisper on 2,000 calls: **9.4%** word error rate vs the bank's speech-to-text at 12.4%, even across noise and accents | [`docs/reports/voice_wer.md`](docs/reports/voice_wer.md) | `uv run python scripts/voice_wer.py --report-only` |
@@ -50,9 +50,10 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
   plan holds out 5% on the old strategy and adds a randomised due-date cell.
 - **Payday is known for about 1 customer in 4** from deposit data. The pay page asks the rest; agents already hear it on
   calls (41% of open customers have stated one).
-- **The uplift signal is small.** Off-policy, Kept's choice of action gives +61 more customers paying within 14 days per
-  1,000 decisions than the bank's strategy [55, 67] (evidence §4), but that rests on a model of how the bank chose. On the
-  bank's randomisation alone (worked vs held out), targeting by uplift points the right way and its intervals include
+- **The uplift signal is small, and we claim no gain from it.** Off-policy, on a clean outcome (account-sourced payments),
+  Kept's choice of action is no better than what the bank did: 0 per 1,000 decisions [−7, +8] (evidence §4); on the old label
+  it shows +42, which rests on payments that exist only as flags on the contact row. An earlier "+61 against the bank's
+  strategy" used the bank's recommendation field, which is look-ahead, and is withdrawn. On the bank's randomisation alone (worked vs held out), targeting by uplift points the right way and its intervals include
   zero (evidence §9). An X-learner and a doubly robust learner, chosen on a validation window, win on some arms and
   lose on others on the test, so the live model stays ([`uplift_learners.md`](docs/reports/uplift_learners.md)). Payroll
   features added to training didn't beat the champion either.

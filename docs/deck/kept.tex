@@ -140,7 +140,7 @@
     \foreach \x/\y in {a/b,b/c,c/d,d/e,e/f,f/g} \draw[flow] (\x) -- (\y);
   \end{tikzpicture}\\[0.8em]
   \begin{columns}[T]
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Uplift, not propensity}LightGBM T-learner: one model per action against waiting. Contact whoever a contact changes, not whoever pays anyway.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{Uplift, behind a gate}LightGBM T-learner: one model per action against waiting. Its signal is small (a call: \KcallEffect\ pts on a clean payment), so it only changes anything by passing the champion gate.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{Due on payday}Next payday rolled forward from deposits or asked on the pay page; the promise falls due that day, the measured peak, inside spare cash.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{People release}Green in a sampled team-lead batch; Amber by the agent; Red by a hardship specialist and a second person. Every release rechecks on fresh data.}\end{column}
   \end{columns}
@@ -244,8 +244,8 @@
   \begin{tabular}{@{}L{2.9cm}L{2.9cm}L{7.3cm}@{}}
     \toprule
     \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
-    Uplift per action & a propensity-to-pay score & top 30\%: \KdecBtenTopT\ extra payers per 1,000 against \KdecBtenTopResp\ (difference \KdecBtenDiff); the score picks people who pay anyway (\KdecBtenAloneResp\ against \KdecBtenAloneT) \\
-    Timing (payday) & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts \\
+    Timing: payday and the hour of the call & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts; evening calls reach the right party \KeveningGap\ pts more \\
+    Uplift per action, behind a gate & a propensity-to-pay score & uplift asks the right question, but contact barely moves payment (a call \KcallEffect\ pts [\KcallEffectCI]); the gate keeps a weak model out \\
     Local models for everything & a hosted model & not cost (Haiku 5.5: USD \KdecBfourHaiku\ a year, ours \KdecBfourLocal); customer data stays inside (OSFI B-10, E-23, PIPEDA, Law 25) \\
     Certified metrics first & free-form SQL from a model & router and certified metrics: \KdecBfivePlain\ to \KdecBfiveRoute\ right of \KdecBfiveOf\ (\KdecBfivePlainPct\ to \KdecBfiveRoutePct) \\
     A graph with checks (LangGraph) & one prompt & \KdecBfiveLive\ of \KdecBfiveOf\ right against \KdecBfivePlain; wrong but confident \KdecBfiveConfPlain\ $\to$ \KdecBfiveConfLive \\
@@ -264,7 +264,7 @@
   \source{docs/reports/tuning.md, evidence.md §3, PR \#169}
   \begin{columns}[T]
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Rejected; the dense Qwen3.8-27B fits and is faster.}\end{column}
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). X- and DR-learners won some arms and lost others. The gate kept the champion.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). X- and DR-learners won some arms and lost others. The gate kept the champion. Also: the bank's recommendation field is look-ahead, not a baseline; the gate's noise understated seed spread (call Qini \KseedLo\ to \KseedHi).}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. A wider model then matched the bank's (\KwideAuc\ vs \KbankAuc); averaged with it, \KblendAuc.}\end{column}
   \end{columns}
   \vspace{0.8em}
@@ -344,7 +344,7 @@
     \end{column}
     \begin{column}{0.44\textwidth}
       \kcard{\bignum{\KpayMoney\ pts}{promised money paid when due 0--2 days after payday (95\% CI \KpayMoneyCI), \KpayPromises\ promises in randomised cases}\\[0.5em]
-        \bignum{\KoffPolicy\ per 1,000}{more customers paying within 14 days when Kept chooses the action, paired on the same decisions (95\% CI \KoffPolicyCI; off-policy, doubly robust)}}
+        \bignum{\KoffPolicy\ per 1,000}{customers paying within 14 days gained by Kept choosing the action instead of what the bank did, clean outcome (95\% CI \KoffPolicyCI): no measurable gain in who to contact}}
     \end{column}
   \end{columns}
 \end{frame}
@@ -352,7 +352,7 @@
 
 \begin{frame}
   \kicker{Is it real?}\frametitle{Every claim, its test, its 95\% interval}
-  \source{evidence.md §2, §2a, §4, §8, §9; business\_case.pdf}
+  \source{evidence.md §2, §2a, §4, §8, §9; uplift\_improvement.md; business\_case.pdf}
   \scriptsize\renewcommand{\arraystretch}{1.08}
   \begin{tabular}{@{}L{4.1cm}L{3.4cm}L{4.1cm}l@{}}
     \toprule
@@ -363,7 +363,8 @@
     Fake paydays show nothing & paydays moved 3--10 days & \KplaceboNull\ intervals include 0 & \pill[kgreen]{holds} \\
     Promise model vs the bank's & paired bootstrap & \KwideAuc\ vs \KbankAuc\ [\KwideGapCI] & \pill[kamber]{tie} \\
     The two models together & rank average, nothing fitted & \KblendAuc, \KblendGap\ [\KblendGapCI] & \pill[kgreen]{holds} \\
-    Kept's action vs the bank's & doubly robust, paired & \KoffPolicy\ payers / 1,000 [\KoffPolicyCI] & \pill[kgreen]{holds} \\
+    Kept's action vs what the bank did & doubly robust, clean outcome & \KoffPolicy\ payers / 1,000 [\KoffPolicyCI] & \pill[kamber]{no gain} \\
+    Evening calls reach the right party & comparable calls & \KeveningGap\ pts [\KeveningGapCI] & \pill[kgreen]{holds} \\
     Targeting by uplift & randomised cells only & \KcellAll\ to \KcellTop\ / 1,000, CI spans 0 & \pill{unproven} \\
     Pays back in year one & 20,000 simulated draws & \KpPayback\ (\KpPaybackTogether\ if correlated) & \pill[kgreen]{holds} \\
     \bottomrule
@@ -509,6 +510,23 @@
   \end{tabular}\\[0.8em]
   {\scriptsize \Ktrials\ candidates were compared on a validation window inside the training period (15 Jul to 15 Aug); only the best was
   judged once on the test decisions, by the nightly's own gate. It lost beyond noise, so the champion stays.}
+\end{frame}
+
+\begin{frame}
+  \kicker{Appendix}\frametitle{What the uplift study found}
+  \source{docs/reports/uplift\_improvement.md, best\_hour.md}
+  \scriptsize
+  \begin{tabular}{@{}L{4.6cm}L{8.7cm}@{}}
+    \toprule
+    \textbf{Finding} & \textbf{Number} \\ \midrule
+    Contact barely changes payment & a call adds \KcallEffect\ pts [\KcallEffectCI] on a clean payment (account-sourced, covered cases) \\
+    The call ranking adds little & per 1,000 decisions: live model \KliveGain\ [\KliveGainCI], calling every call decision \KeveryGain\ [\KeveryGainCI], a depth-3 policy tree \KtreeGain\ [\KtreeGainCI] \\
+    Kept's choice vs what the bank did & \KoffPolicy\ per 1,000 [\KoffPolicyCI] on a clean outcome; \KoffPolicyOld\ [\KoffPolicyOldCI] on the old label, which counts link payments seen only on the contact row \\
+    The bank's recommendation field is look-ahead & it is the last recommendation as of the snapshot, so it encodes how each case ended; not a baseline \\
+    The gate's noise understates seed spread & call Qini \KseedLo\ to \KseedHi\ over four seeds of the same recipe \\
+    Timing is the clear win & evening calls reach the right party \KeveningGap\ pts more often [\KeveningGapCI], \KeveningWithin\ pts within the same customer; booking to the best hour at today's team volume is predicted to lift right-party contact from \KhourBank\% to \KhourOn\% (\KhourGain\ pts [\KhourGainCI]) against the hours the bank called at, moving \KhourMoved\% of calls (best\_hour.md; the study's simpler model said \KhourLiftStudy\ pts) \\
+    \bottomrule
+  \end{tabular}
 \end{frame}
 
 \begin{frame}

@@ -298,77 +298,68 @@ def models(con: duckdb.DuckDBPyConnection, rows: pd.DataFrame) -> tuple[str, str
 
 
 def off_policy(con: duckdb.DuckDBPyConnection) -> str:
-    """Doubly robust value of each policy on the uplift test decisions (randomised cases, from TRAIN_CUTOFF on):
-    outcome model = the live champion (fitted before the cutoff), propensity = LightGBM on the same inputs, fitted
-    before the cutoff, clipped at 0.05. Paid within 14 days is the outcome the uplift model is trained on."""
+    """Kept's contact policy against what the bank actually did, on the uplift test decisions (randomised cases, from
+    TRAIN_CUTOFF on). Kept's policy: the action the live champion scores best (fitted before the cutoff). Value: doubly robust,
+    outcome models per action and a multinomial propensity cross-fitted by case (`kept.nba.causal.policy_value`), on rows where
+    the bank's chance of Kept's action is in [0.05, 0.95]; the bank's value is the observed mean on the same rows. 95% intervals
+    resample whole cases. The bank's own recommendation field is not used: it is look-ahead (docs/reports/uplift_improvement.md)."""
     import pickle
 
-    from kept.nba.legacy import legacy_to_action
-    from kept.nba.train import load_rows
-    from kept.nba.uplift import _frame
+    from kept.contracts.feature_registry import model_inputs
+    from kept.nba.causal import CLIP, case_bootstrap, policy_value
+    from kept.nba.train import CONTEXT_COLS, load_rows
 
     model = pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes())
-    acts = [a.value for a in model.actions]
-    rows = load_rows(con)
-    rows = rows[rows.action.isin(acts)].reset_index(drop=True)
-    early = (rows.decision_at < TRAIN_CUTOFF).to_numpy()
-    X = _frame(rows[list(model._columns)])
-    prop = LGBMClassifier(
-        n_estimators=200, num_leaves=15, min_child_samples=300, learning_rate=0.05, verbose=-1
-    )
-    prop.fit(X[early], rows.action[early])
-    late = rows[~early].reset_index(drop=True)
-    mu = model.predict_proba(late)[acts].to_numpy()
-    p_all = pd.DataFrame(prop.predict_proba(X[~early]), columns=prop.classes_)[acts].to_numpy()
-    a_idx = late.action.map({a: i for i, a in enumerate(acts)}).to_numpy()
-    y = late.paid_14d.to_numpy(dtype=float)
-    p_a = np.clip(p_all[np.arange(len(late)), a_idx], 0.05, None)
-    resid = (y - mu[np.arange(len(late)), a_idx]) / p_a
+    rows = load_rows(con, extras=True)
+    for c in ("last_rpc", "last_ptp_made"):
+        rows[c] = rows[c].astype(float)
+    cols = [*model_inputs(), *CONTEXT_COLS]
+    late = (rows.decision_at >= TRAIN_CUTOFF).to_numpy()
+    pi = np.full(len(rows), "wait", dtype=object)
+    pi[late] = model.predict_proba(rows[late][list(model._columns)]).idxmax(axis=1).to_numpy()
+    rows["pi"] = pi
+    known = rows.paid_14d_known.to_numpy(bool)
+    clean = rows.covered.to_numpy(bool)
 
-    def est(v: np.ndarray) -> str:
-        rng = np.random.default_rng(0)
-        bs = [v[rng.integers(0, len(v), len(v))].mean() for _ in range(BOOT)]
-        return (
-            f"{100 * v.mean():.1f}% [{100 * np.percentile(bs, 2.5):.1f}, {100 * np.percentile(bs, 97.5):.1f}]"
-        )
+    def run(label: str, outcome: str, keep: np.ndarray) -> dict[str, object]:
+        d = rows[keep].reset_index(drop=True)
+        v = policy_value(d, cols, d.pi.to_numpy(), outcome, evaluate=(d.decision_at >= TRAIN_CUTOFF).to_numpy())
+        ok = ((v.e_pi >= CLIP[0]) & (v.e_pi <= CLIP[1])).to_numpy()
+        t = d.loc[v.index[ok]]
+        psi, y = v.psi.to_numpy()[ok], v.y.to_numpy()[ok]
 
-    def dr(pi: np.ndarray, keep: np.ndarray) -> str:
-        return est((mu[np.arange(len(late)), pi] + (a_idx == pi) * resid)[keep])
+        def ci(f) -> tuple[float, float, float]:  # type: ignore[no-untyped-def]
+            bs = case_bootstrap(t.case_id, f, reps=BOOT)
+            return float(f(np.ones(len(t)))), float(np.percentile(bs, 2.5)), float(np.percentile(bs, 97.5))
 
-    def ips(pi: np.ndarray, keep: np.ndarray) -> str:  # self-normalised: no outcome model in the value
-        w = ((a_idx == pi) / p_a)[keep]
-        return est(w * y[keep] * len(w) / w.sum())
+        gap = ci(lambda w: 1000 * (w * (psi - y)).sum() / w.sum())
+        return {
+            "label": label, "decisions": len(v), "kept_rows": int(ok.sum()), "share_kept": float(ok.mean()),
+            "bank": ci(lambda w: 100 * (w * y).sum() / w.sum()), "kept": ci(lambda w: 100 * (w * psi).sum() / w.sum()),
+            "gap_per_1000": gap, "share_changed": float((t.pi != v.a.to_numpy()[ok]).mean()),
+        }  # fmt: skip
 
-    legacy = late.nba_recommendation_last.map(lambda c: (x := legacy_to_action(c)) and x.value)
-    has_legacy = legacy.isin(acts).to_numpy()
-    legacy_idx = legacy.map({a: i for i, a in enumerate(acts)}).fillna(0).astype(int).to_numpy()
-    everyone = np.ones(len(late), bool)
-    out = [
-        f"| Policy (on the {len(late):,} decisions from {TRAIN_CUTOFF:%d %b}) | Paid within 14 days: doubly robust | Inverse propensity |",
-        "|---|---:|---:|",
-        f"| What the bank actually did | {100 * y.mean():.1f}% (observed) | |",
+    res = [
+        run("Clean outcome: account-sourced payments, covered cases", "paid_clean_14d", clean),
+        run("Same rows, old label (payments flagged on the contact row included)", "paid_14d", clean & known),
+        run("Old label, every decision with a known outcome (as first published)", "paid_14d", known),
     ]
-    for name, pi, keep in [
-        ("The bank's strategy recommendation", legacy_idx, has_legacy),
-        ("Kept's model, on those same decisions", mu.argmax(axis=1), has_legacy),
-        ("Kept's model: the action it scores best", mu.argmax(axis=1), everyone),
-        ("Wait: contact nobody", np.full(len(late), acts.index("wait")), everyone),
-    ]:
-        cover = "" if keep.all() else f" ({100 * keep.mean():.0f}% of decisions)"
-        out.append(f"| {name}{cover} | {dr(pi, keep)} | {ips(pi, keep)} |")
-    # the gap, paired on the same decisions: extra customers paying within 14 days per 1,000 decisions
-    n = np.arange(len(late))
-    ours = mu[n, mu.argmax(axis=1)] + (a_idx == mu.argmax(axis=1)) * resid
-    theirs = mu[n, legacy_idx] + (a_idx == legacy_idx) * resid
-    gap = (ours - theirs)[has_legacy]
-    rng = np.random.default_rng(0)
-    bs = [gap[rng.integers(0, len(gap), len(gap))].mean() for _ in range(BOOT)]
-    EV["offpolicy_per_1000"] = (1000 * gap.mean(), 1000 * float(np.percentile(bs, 2.5)), 1000 * float(np.percentile(bs, 97.5)))
-    out.append(
-        f"\nPaired on the same decisions, Kept's choice against the bank's: **{1000 * gap.mean():+.0f} customers paying "
-        f"within 14 days per 1,000 decisions** [{1000 * np.percentile(bs, 2.5):+.0f}, {1000 * np.percentile(bs, 97.5):+.0f}] "
-        "(doubly robust)."
-    )
+    EV["offpolicy_per_1000"] = res[0]["gap_per_1000"]  # the headline: clean outcome, overlap rows
+    EV["offpolicy_old_label_per_1000"] = res[1]["gap_per_1000"]  # same rows, old label
+    EV["offpolicy_runs"] = res
+    out = [
+        f"| Kept's model against what the bank did (decisions from {TRAIN_CUTOFF:%d %b}) | Decisions kept | Bank, observed | Kept, doubly robust | Kept minus bank, per 1,000 decisions [95% CI] | Actions changed |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    def sg(x: float) -> str:  # signed, and no "-0"
+        return "0" if round(x) == 0 else f"{x:+.0f}"
+
+    for r in res:
+        b, k_, g = r["bank"], r["kept"], r["gap_per_1000"]
+        out.append(
+            f"| {r['label']} | {r['kept_rows']:,} of {r['decisions']:,} ({100 * r['share_kept']:.0f}%) | {b[0]:.1f}% [{b[1]:.1f}, {b[2]:.1f}] "
+            f"| {k_[0]:.1f}% [{k_[1]:.1f}, {k_[2]:.1f}] | **{sg(g[0])}** [{sg(g[1])}, {sg(g[2])}] | {100 * r['share_changed']:.0f}% |"
+        )
     return "\n".join(out)
 
 
@@ -808,14 +799,21 @@ at promise time, but in this data a full-balance promise is all but certain to b
 That is too clean to be real behaviour, so we treat it as an artefact of how the data was generated and **headline the
 leak-free model**. Kept's promise model drops this feature (phase 2).
 
-## 4. Kept's contact policy, estimated off-policy
+## 4. Kept's contact policy against what the bank did, off-policy
 
 {off_policy(con):s}
 
-Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
-uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
-They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
-scores best. A randomised pilot cell is the way to confirm it; the bank already runs four.
+Read the first row. On the clean outcome, **Kept's choice of action is no better than what the bank did**: the interval
+on the difference includes zero. The bigger gain on the old label (rows 2 and 3) comes from SMS and email payments that
+exist only as flags on the contact row and leave no trace in the account records (`uplift_improvement.md`), so it is not
+evidence of a better choice of whom to contact. Which action to take wasn't randomised (the bank chose it), so every
+number here is an estimate: outcome models per action and a model of how the bank chose, cross-fitted by case, on the
+decisions where the bank had a real chance (5% to 95%) of choosing Kept's action; the bank's value is simply what
+happened on those same decisions. The earlier version of this section compared Kept's choice with the bank's
+recommendation field (+61 per 1,000, 38.6-42.0% against 32.4-32.5%); that field is the last recommendation shown as of
+the snapshot, so it encodes how each case ended, and the comparison is withdrawn. **What Kept can claim measured is
+timing** (§2, and the best hour to call, `docs/reports/best_hour.md`), not a better choice of whom to contact; a randomised
+pilot cell is the way to find out whether targeting adds anything.
 
 ## 5. One primary metric, and the guards
 

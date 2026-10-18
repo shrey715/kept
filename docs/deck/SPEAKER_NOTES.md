@@ -35,7 +35,7 @@ extraction F1, uplift Qini. A layer can be replaced without touching the others.
 (`docs/reports/identity_recall.md`).
 
 ## 6 · Decide and release
-**Say:** seven checked steps; uplift not propensity; due on payday; people release.
+**Say:** seven checked steps; due on payday; people release. The uplift step is behind the champion/challenger gate and its signal is small: contact itself barely moves payment, so Kept's levers are timing, the due date and the hour of the call.
 **If asked "what if the model is wrong?":** it can't send anything. Hard stops run before it, the release rechecks on
 fresh data, Red needs two people, and one switch reverts everyone to the bank's strategy.
 
@@ -61,7 +61,7 @@ Ollama ran a 4k window under a 9k-token prompt. llama.cpp sets the window explic
 Qwen3.8-27B (Aug 2026, Apache 2.0) is the strongest open model that fits 16 GB at 3-bit, about 51 tokens a second.
 
 ## 11 · What we didn't ship
-**Say:** a bigger model, a tuned uplift model and a leaky feature, each measured and rejected.
+**Say:** a bigger model, a tuned uplift model and a leaky feature, each measured and rejected; and two lessons from the uplift study: a bank field that looked like its targeting was look-ahead (it encodes how each case ended), and the gate's noise understated the spread between seeds.
 **How do you know?** `docs/reports/tuning.md` (40 candidates; the best lost beyond noise), `evidence.md` §3 (AUC 0.92 was leakage).
 
 ## 12 · Safe by construction
@@ -78,24 +78,29 @@ evening slot, $140 × 3 due on payday, Red because of hardship.
 **Demo hand-off:** open the case page for Jane, then Portfolio, then ask a question in the Ask.
 
 ## 15 · Measured impact
-**Say:** the bank's strategies overlap; timing adds 6.1 points; when Kept chooses the action, 61 more customers in every
-1,000 pay within 14 days (interval 55–67).
-**If asked "is the +61 real?":** it's an off-policy estimate (the bank chose the actions, so we model how it chose and
-correct for it, paired on the same decisions); two estimators agree; the pilot's randomised cell turns it into a trial.
+**Say:** the bank's strategies overlap; timing adds 6.1 points; evening calls reach the right party about 21 points more
+often. Choosing whom to contact adds nothing we can measure: on a clean outcome Kept's choice of action against what the
+bank did is 0 per 1,000 decisions (interval −7 to +8).
+**If asked "what happened to the +61?":** an earlier version compared Kept's choice with the bank's recommendation field.
+That field is the last recommendation shown as of the snapshot, so it encodes how each case ended; we withdrew the
+comparison. Against what the bank actually did, on account-sourced payments only, the gap is zero. On the old label it
+is +42, but that label counts link and app payments seen only on the contact row. The pilot's randomised cell is how
+targeting would be measured.
 
 ## 16 · Is it real?
 **Say:** one table, every claim, the test, the interval, and a plain verdict. Walk the verdicts, not the numbers:
 the payday effect holds three ways (randomised cases, due on payday against a day or three either side, the same
 customer on and off payday) and fake paydays show nothing; our promise model ties the bank's and together they're
-much better; uplift targeting on the bank's own randomisation is unproven, which is what the pilot is for; and the
+much better; uplift targeting is unproven (no gain against what the bank did on a clean outcome, and the bank's own randomisation can't show one), which is what the pilot is for; and the
 business case pays back in 99.97% of simulated draws.
 **If asked "did you beat the bank's model?":** not alone, and we don't claim to. A wider model on the same kinds of
 inputs the bank's score uses matches it (0.697 against 0.702, interval −1.9 to +1.0 points). Ours exists the moment a
 promise is made, about nine days before the bank's score, and averaged with it the two reach 0.763 (+6.1 points). The
 bank keeps its model and gains ours.
-**If asked "why is uplift so small?":** the bank's randomised test says contact intensity barely moves outcomes, so a
-small uplift signal is the honest result. We tried X- and doubly robust learners: they win some actions and lose
-others, so the gate kept the live model. That's why the lever is the due date.
+**If asked "why is uplift so small?":** the bank's randomised test says contact intensity barely moves outcomes, and on
+clean outcomes the doubly robust effect of a call is +0.2 points [−0.2, +0.7]. We tried X-, DR- and R-learners and a
+context challenger: none clears the gate, so the live model stays, with its signal stated as small. That's why the
+levers are the due date and the hour of the call (`docs/reports/uplift_improvement.md`).
 **If asked "is it causal?":** the sharp comparison around payday, the same-customer comparison and the placebos are the
 strongest checks short of a trial; a promise due on payday is kept 8 points more often than one due a day or three
 either side, and a payday that isn't real shows nothing. The randomised due-date cell in the pilot is the trial.

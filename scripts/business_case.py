@@ -227,7 +227,7 @@ def render(d: dict) -> None:  # type: ignore[type-arg]
         [d["legacy"].get(a, 0) for a in acts],
         width=0.38,
         color=MUTED,
-        label="bank's current strategy",
+        label="bank's current recommendation (open cases)",
     )
     ax.bar([i + 0.2 for i in x], [d["ours"].get(a, 0) for a in acts], width=0.38, color=BLUE, label="Kept")
     ax.set_xticks(x, [a.replace("_", " ") for a in acts], fontsize=8)
