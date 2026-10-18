@@ -153,7 +153,8 @@ latest 06:00 UTC run, so cards are never stale.
 | extract | `kept extract --new` | C | tonight's new notes -> redaction -> Qwen3.8-27B -> `text.extractions` |
 | features | `kept features` | D | dbt features (point in time) -> Parquet -> Feast online store |
 | parity | `kept parity` | A | offline vs online features, ≤ 0.1% mismatch |
-| score | `kept score` | D | `nba.cards`: one card per open case, one audit event each |
+| train-best-hour | `kept train-best-hour --if-older-than 7` | D | the call-booking model (P(right-party contact \| hour, case inputs)): trained when `models/best_hour.pkl` is missing or a week old, otherwise skipped |
+| score | `kept score` | D | `nba.cards`: one card per open case, one audit event each. Calls are booked into the hour the customer likeliest answers (same day, within their hours and the team's capacity; [`docs/reports/best_hour.md`](docs/reports/best_hour.md)) whenever `best_hour.pkl` exists; `--no-best-hour` or `KEPT_BEST_HOUR=0` books the earliest slot |
 
 **Reports and monitoring.** Each report is a LaTeX PDF with charts in `docs/reports/` (sources alongside),
 built by a script from live queries. Stop `kept serve` first for the ones that read the warehouse.

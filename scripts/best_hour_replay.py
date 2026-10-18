@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import pickle
 from collections import Counter
 from datetime import UTC, date, datetime, time
 from pathlib import Path
@@ -33,6 +34,7 @@ from kept.nba.score import SQL_CALL_CAPACITY
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "data" / "exports" / "reports" / "best_hour.json"
+BOOKINGS = OUT.with_name("best_hour_bookings.pkl")
 HOURS = range(5, 23)
 
 
@@ -79,14 +81,15 @@ def run(
 ) -> dict[str, object]:
     """Book every call of `test` day by day; booked hour and weekday per call, and the checks."""
     cap = CallCapacity(units, tz=OPERATING_TZ, length=WINDOW, best_hour=model)
-    op, inputs = ZoneInfo(OPERATING_TZ), list(bh.model_inputs())
+    op, inputs = ZoneInfo(OPERATING_TZ), bh.base_inputs()
     booked: dict[int, tuple[int, int]] = {}
+    earliest: dict[int, tuple[int, int]] = {}  # the earliest free slot when the call was booked (= booked if not moved)
     moved = later_day = outside = unbooked = (
         0  # unbooked: no free slot within a week, the call keeps its first slot
     )
     use: Counter[tuple[date, int]] = Counter()
     for day, g in test.groupby("day", sort=True):
-        for i, r in g.iterrows():  # ponytail: decision order within a day; the nightly orders by balance
+        for i, r in g.iterrows():  # order within a day: --order (balance, as the nightly, or decision order)
             ctx = Ctx(r.tz, hm(r.ps), hm(r.pe), bool(r.sun))
             tz = ZoneInfo(r.tz)
             first_s = datetime.combine(day, hm(r.ps), tz)
@@ -101,7 +104,7 @@ def run(
             s, e = slot[0].astimezone(tz), slot[1].astimezone(tz)
             if slot == first and cap._left.get(fkey, left0) != left0 - 1:
                 unbooked += 1
-                booked[i] = (s.hour, s.weekday())
+                booked[i] = earliest[i] = (s.hour, s.weekday())
                 continue  # not a booking: no capacity used, and not counted in the checks
             if mv is not None:
                 moved += 1
@@ -111,10 +114,12 @@ def run(
             o = s.astimezone(op)
             use[(o.date(), o.hour)] += 1
             booked[i] = (s.hour, s.weekday())
+            earliest[i] = (mv.earliest.hour, mv.earliest.weekday()) if mv else booked[i]
     over = sum(max(0.0, n - units.get((d.weekday(), h), 0.0)) for (d, h), n in use.items())
     b = pd.DataFrame.from_dict(booked, orient="index", columns=["hour", "weekday"]).loc[test.index]
     return {
         "booked": b,
+        "earliest": pd.DataFrame.from_dict(earliest, orient="index", columns=["hour", "weekday"]).loc[test.index],
         "moved": moved,
         "later_day": later_day,
         "outside_hours": outside,
@@ -138,12 +143,158 @@ def summary(
     }  # fmt: skip
 
 
+MIN_GROUP_CALLS = 200  # a share of ~85% on fewer calls moves by +-5 points on noise alone
+SHOW = ("gender_code", "citizenship_status", "marital_status", "accessibility_needs_flag", "vulnerability_type", "household_size")
+
+
+def group_labels(conn: duckdb.DuckDBPyConnection, calls_df: pd.DataFrame) -> pd.DataFrame:
+    """The protected attributes and proxies in gold.c360_restricted (the ones kept.governance.fairness reads, with at most
+    25 distinct values) per call, as strings; blank where unknown. Compliance-only: only aggregates leave this script."""
+    from kept.contracts.data_contract import load_data_contract
+
+    r = conn.sql("""select x.source_key as crm_customer_id, r.* exclude (golden_customer_id)
+        from gold.identity_crosswalk x join gold.c360_restricted r using (golden_customer_id)
+        where x.source_system = 'crm' and x.valid_to is null""").df()
+    c = load_data_contract()
+    attrs = sorted((c.protected_attributes | c.proxy_attributes) & set(r.columns))
+    attrs = [a for a in attrs if 1 < r[a].nunique(dropna=True) <= 25]
+    r[attrs] = r[attrs].astype("string")
+    return calls_df[["crm_customer_id"]].merge(r[["crm_customer_id", *attrs]], how="left", on="crm_customer_id")[attrs]
+
+
+def fairness(
+    test: pd.DataFrame, labels_test: pd.DataFrame, labels_pre: pd.DataFrame, pre: pd.DataFrame,
+    off: dict[str, object], on: dict[str, object], model: bh.BestHourModel, p_bank: np.ndarray,
+) -> dict[str, object]:  # fmt: skip
+    """Per protected group, with the switch on against the earliest-slot booking: the share of calls moved, the predicted
+    right-party contact (RPC) at the booked slot against the earliest slot, the share booked from 17:00, and the share booked
+    into a slot at least as good as the earliest. "At least as good" is judged twice: by the booking model (true by
+    construction, it picks the best slot, so a failure would be a bug) and by the group's own observed hourly RPC rate before
+    the cutoff, which does not use the model. Four-fifths rule on the second."""
+    b, e, o = on["booked"], on["earliest"], off["booked"]  # type: ignore[index]
+    p_b, p_e = model.p_rows(test, b.hour, b.weekday), model.p_rows(test, e.hour, e.weekday)
+    p_off = model.p_rows(test, o.hour, o.weekday)
+    moved = ((b.hour != e.hour) | (b.weekday != e.weekday)).to_numpy()
+    out: dict[str, object] = {"min_group_calls": MIN_GROUP_CALLS, "attributes": {}}
+    for a in labels_test.columns:
+        def by_hour(df: pd.DataFrame) -> dict[int, float]:  # observed RPC by hour before the cutoff, hours with 100+ calls
+            h = df.groupby("hour").rpc.agg(["mean", "size"])
+            return h[h["size"] >= 100]["mean"].to_dict()  # type: ignore[no-any-return]
+
+        overall = by_hour(pre)
+        rates = {g: by_hour(df) or overall for g, df in pre.groupby(labels_pre[a].reindex(pre.index))}  # a group with no hour that busy: everyone's
+
+        def obs(g: str, hour: int, rates: dict = rates, overall: dict = overall) -> float:  # type: ignore[type-arg]
+            r = rates.get(g) or overall
+            return r[min(r, key=lambda k: abs(k - int(hour)))]  # nearest hour with enough calls
+
+        groups: dict[str, dict[str, float]] = {}
+        lab = labels_test[a]
+        for g in sorted(lab.dropna().unique()):
+            m = (lab == g).fillna(False).to_numpy(bool)
+            if m.sum() < MIN_GROUP_CALLS:
+                continue
+            good_obs = np.array([obs(g, hb) >= obs(g, he) - 1e-12 for hb, he in zip(b.hour[m], e.hour[m], strict=True)])
+            groups[str(g)] = {
+                "calls": int(m.sum()), "moved": float(moved[m].mean()), "evening": float((b.hour[m] >= 17).mean()),
+                "p_booked": float(p_b[m].mean()), "p_earliest": float(p_e[m].mean()), "p_off": float(p_off[m].mean()),
+                "p_bank": float(p_bank[m].mean()), "gain_vs_earliest_pts": float(100 * (p_b[m] - p_e[m]).mean()),
+                "vs_bank_pts": float(100 * (p_b[m] - p_bank[m]).mean()),
+                "vs_bank_se_pts": float(100 * (p_b[m] - p_bank[m]).std() / np.sqrt(m.sum())),  # calls, not cases: a floor
+                "as_good_model": float((p_b[m] >= p_e[m] - 1e-12).mean()), "as_good_observed": float(good_obs.mean()),
+            }  # fmt: skip
+        if len(groups) < 2:
+            continue
+        def v(k: str, groups: dict = groups) -> list[float]:  # type: ignore[type-arg]
+            return [x[k] for x in groups.values()]
+
+        out["attributes"][a] = {  # type: ignore[index]
+            "groups": groups,
+            "four_fifths_as_good_observed": min(v("as_good_observed")) / max(v("as_good_observed")),
+            "four_fifths_as_good_model": min(v("as_good_model")) / max(v("as_good_model")),
+            "gap_pts_off": 100 * (max(v("p_off")) - min(v("p_off"))),
+            "gap_pts_on": 100 * (max(v("p_booked")) - min(v("p_booked"))),
+            "gap_pts_bank": 100 * (max(v("p_bank")) - min(v("p_bank"))),
+            "below_bank": [g for g, x in groups.items() if x["vs_bank_pts"] < -2 * x["vs_bank_se_pts"]],  # beyond 2 standard errors
+        }  # fmt: skip
+    return out
+
+
+def fairness_markdown(res: dict) -> str:  # type: ignore[type-arg]
+    def pct(x: float) -> str:
+        return f"{100 * x:.0f}%"
+
+    def rng(vals: list[float], f: object = pct) -> str:
+        return f"{f(min(vals))} to {f(max(vals))}"  # type: ignore[operator]
+
+    md = ["## Fairness of the booking\n"]
+    for key, label in (("team_volume", "Team volume"), ("recorded_capacity", "Recorded capacity")):
+        fr = res[key]["fairness"]
+        md.append(
+            f"**{label}**, switch on against the earliest-slot booking, calls on randomly assigned cases from the cutoff; groups of at least "
+            f"{fr['min_group_calls']} calls (protected attributes and proxies from `gold.c360_restricted`, aggregates only). Low-to-high across groups:\n\n"
+            "| Attribute | Groups | Calls moved | Gain in predicted RPC vs earliest (pts) | Booked from 17:00 | Gap in predicted RPC between groups, earliest -> booked (pts) | At least as good as earliest, observed rates (lowest / highest) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|"
+        )
+        for a, x in fr["attributes"].items():
+            g = list(x["groups"].values())
+            gains = [i["gain_vs_earliest_pts"] for i in g]
+            md.append(
+                f"| {a} | {len(g)} | {rng([i['moved'] for i in g])} | {min(gains):+.1f} to {max(gains):+.1f} | {rng([i['evening'] for i in g])} "
+                f"| {x['gap_pts_off']:.1f} -> {x['gap_pts_on']:.1f} | {x['four_fifths_as_good_observed']:.2f}{' (below 0.80)' if x['four_fifths_as_good_observed'] < 0.8 else ''} |"
+            )
+        md.append("")
+        bad = {a: x["below_bank"] for a, x in fr["attributes"].items() if x["below_bank"]}
+        md.append(
+            "Groups whose predicted RPC at the booked slot is below what the bank's own hours gave them by more than two standard errors: "
+            + ("; ".join(f"{a}: {', '.join(v)}" for a, v in bad.items()) if bad else "none")
+            + ".\n"
+        )
+    fr = res["team_volume"]["fairness"]["attributes"]
+    worst = min(fr, key=lambda a: fr[a]["four_fifths_as_good_observed"])
+    wider = sorted(((x["gap_pts_on"] - x["gap_pts_off"], a, x) for a, x in fr.items()), reverse=True)
+    low = min(((g, i["vs_bank_pts"], i["vs_bank_se_pts"], i["calls"], a) for a, x in fr.items() for g, i in x["groups"].items()), key=lambda t: t[1] / t[2])
+    md.append(
+        f"**Reading, team volume.** The booking never leaves a group worse off than the earliest slot by its own model "
+        f"(every group's share is 100% by construction) and, judged by each group's own observed hourly rates, the lowest share of calls booked into a slot at least as good as the earliest, "
+        f"against the highest, is {fr[worst]['four_fifths_as_good_observed']:.2f} ({worst}): "
+        f"{'no attribute is under the four-fifths line of 0.80' if all(x['four_fifths_as_good_observed'] >= 0.8 for x in fr.values()) else 'THE FOLLOWING ARE UNDER 0.80: ' + ', '.join(a for a, x in fr.items() if x['four_fifths_as_good_observed'] < 0.8)}. "
+        f"Booking widens the gap in predicted RPC between groups on {sum(w > 0 for w, _, _ in wider)} of {len(fr)} attributes, most on {wider[0][1]} "
+        f"({wider[0][2]['gap_pts_off']:.1f} to {wider[0][2]['gap_pts_on']:.1f} points). The group furthest below the bank's own hours, in standard errors, is "
+        f"{low[4]} = {low[0]} ({low[3]:,} calls): {low[1]:+.1f} points (standard error {low[2]:.1f}).\n"
+    )
+    shown = [a for a in fr if a in SHOW or fr[a]["four_fifths_as_good_observed"] < 0.8 or fr[a]["below_bank"] or fr[a]["gap_pts_on"] > 3]
+    md.append("Per group, team volume, switch on (the attributes the fairness card shows, and any attribute that trips a check or has a gap above 3 points):\n")
+    md.append("| Attribute | Group | Calls | Moved | Predicted RPC: earliest | Predicted RPC: booked | Booked from 17:00 | At least as good, model | At least as good, observed |")
+    md.append("|---|---|---:|---:|---:|---:|---:|---:|---:|")
+    for a in shown:
+        for g, i in fr[a]["groups"].items():
+            md.append(
+                f"| {a} | {g} | {i['calls']:,} | {pct(i['moved'])} | {100 * i['p_earliest']:.1f}% | {100 * i['p_booked']:.1f}% "
+                f"| {pct(i['evening'])} | {pct(i['as_good_model'])} | {pct(i['as_good_observed'])} |"
+            )
+    return "\n".join(md) + "\n"
+
+
 MD = REPO / "docs" / "reports" / "best_hour.md"
 
 
 def to_markdown(res: dict) -> str:  # type: ignore[type-arg]
+    body = _report(res)
+    if "fairness" not in res["team_volume"]:
+        return body
+    head, limits = body.split("\n## Limits", 1)
+    return f"{head}\n{fairness_markdown(res)}\n## Limits{limits}"
+
+
+def _report(res: dict) -> str:  # type: ignore[type-arg]
     h, tv, rc = res["as_historically_booked"], res["team_volume"], res["recorded_capacity"]
     n = res["calls"]
+    order_text = (
+        "largest balance first, as the nightly does"
+        if res.get("order", "decision") == "balance"
+        else "in decision order within a day (the nightly orders by balance, so who gets the scarce hours differs)"
+    )
 
     def row(label: str, r: dict, moved: object = "") -> str:  # type: ignore[type-arg]
         return f"| {label} | {100 * r['predicted_rpc']:.1f}% | {100 * r['observed_hour_rate_estimate']:.1f}% | {moved} |"
@@ -171,14 +322,14 @@ def to_markdown(res: dict) -> str:  # type: ignore[type-arg]
         f"""# Best-hour call booking
 
 Written by `scripts/best_hour_replay.py` on the {n:,} outbound calls on randomly assigned cases from {res["cutoff"]} to the end of the data ({res["days"]} days), booked day by day through
-`kept.nba.ranking.CallCapacity`, the class the nightly batch uses. Nothing here changes the default nightly run: the booking is behind `kept score --best-hour` (or `KEPT_BEST_HOUR=1`) and is off unless asked for.
+`kept.nba.ranking.CallCapacity`, the class the nightly batch uses. **The booking is on by default**: `kept score` uses it whenever `data/exports/models/best_hour.pkl` exists, and the nightly run trains that model when it is missing or a week old (`kept train-best-hour --if-older-than 7`). `--no-best-hour` (or `KEPT_BEST_HOUR=0`) goes back to the earliest-slot booking.
 
 ## What it does
 
 With the switch off, a call goes into the **earliest** half-hour slot with capacity inside the customer's calling hours. With it on, the call goes into the slot with the
 highest predicted chance of reaching the right party, among the free slots **on the same local day as the earliest one** (never a later day), inside the customer's hours
 and the operating hour's capacity, Sunday rules unchanged; ties go to the earlier slot. When it moves a call, the card says so in one line, with the model's numbers
-("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)"; the line goes in the card's why-not text).
+("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)"; the line is the card's `booking_text`, shown under the call window).
 
 **Predictor shipped: a per-case LightGBM** (`data/exports/models/best_hour.pkl`, `kept train-best-hour`): P(right-party contact | local hour, weekday, the 17 model inputs of the uplift model).
 Its inputs are registry inputs only (no language, postal code, accent, age or other protected attribute or proxy; `tests/nba/test_best_hour.py` runs `assert_no_denied`). Fitted on
@@ -235,7 +386,8 @@ Checks, switch on (every booked call; calls with no free slot within a week keep
   A pilot cell (best-hour booking on half the calls, the rest as today) would measure it.
 - Right-party contact is the outcome, not payment: the study found contact itself barely moves payment, so a payment gain is not claimed.
 - Evening capacity is a staffing question. The recorded capacity book is generous; the team-volume book assumes no more evening staff than today.
-- Calls are replayed in decision order within a day; the nightly orders by balance, so who gets the scarce hours differs.
+- The fairness section is a replay on a past window, not a check of tonight's cards. Proposal, not built: a per-group check in the release gate that, each night, reports the share of calls booked into a slot at least as good as the earliest per protected group (and the gap in predicted RPC) and stops the booking switch if a group of 1,000+ calls falls under 0.80 of the best group's. `kept invariance` (tonight's cards must not change when protected attributes are scrambled) has to be run with the booking on, on a machine with the disk for it; it was not run here.
+- Calls are replayed day by day, {order_text}. The nightly books every open case, largest balance first; here only that day's calls compete for the hours.
 - Every customer record allows calls from 07:00, but almost no call was ever made before 08:00 local, so the model has little data there (it treats 07:00 like 08:00); the earliest-slot booking uses 07:00.
 """
     )
@@ -246,9 +398,18 @@ def main() -> None:
     ap.add_argument(
         "--report-only", action="store_true", help="rewrite docs/reports/best_hour.md from best_hour.json"
     )
+    ap.add_argument(
+        "--fairness-only", action="store_true", help="redo the fairness section from the bookings the last full run saved"
+    )
     ap.add_argument("--warehouse", default=str(WAREHOUSE_PATH))
     ap.add_argument("--model", type=Path, default=REPO / "data" / "exports" / "models" / "best_hour.pkl")
     ap.add_argument("--limit", type=int, default=0, help="first N calls only (a quick check)")
+    ap.add_argument(
+        "--order",
+        choices=("balance", "decision"),
+        default="balance",
+        help="booking order within a day: largest balance first, as the nightly (default), or decision order",
+    )
     args = ap.parse_args()
     if args.report_only:
         MD.write_text(to_markdown(json.loads(OUT.read_text())))
@@ -257,10 +418,18 @@ def main() -> None:
     conn.execute("set memory_limit = '6GB'")
     model = bh.load_model(args.model)
     assert model is not None, "run `kept train-best-hour` first"
-    d = calls(conn)
+    model._model.set_params(n_jobs=1)  # one-row predictions: threads only add overhead
+    d = calls(conn).merge(
+        conn.sql("""select t.decision_id, f.balance_at_risk as balance from features_train.training_rows t
+            join features_train.case_features f on f.case_id = t.case_id and f.as_of = t.decision_at - interval 1 second
+            where t.action = 'call'""").df(),
+        on="decision_id",
+        how="left",
+    )
+    d["neg_balance"] = -d.balance.astype(float).fillna(0.0)  # `kept score` books the largest balances first
     test = (
         d[d.decision_at >= bh.CUTOFF]
-        .sort_values(["day", "decision_id"])
+        .sort_values(["day", "neg_balance", "decision_id"] if args.order == "balance" else ["day", "decision_id"])
         .head(args.limit or None)
         .reset_index(drop=True)
     )
@@ -273,7 +442,7 @@ def main() -> None:
     actual = pd.DataFrame({"hour": test.hour, "weekday": test.weekday})
     res: dict[str, object] = {
         "auc": float(roc_auc_score(test.rpc, model.p_rows(test, test.hour, test.weekday))),
-        "calls": len(test), "model": model.model_version, "cutoff": f"{bh.CUTOFF:%Y-%m-%d}", "days": int(test.day.nunique()),
+        "calls": len(test), "order": args.order, "model": model.model_version, "cutoff": f"{bh.CUTOFF:%Y-%m-%d}", "days": int(test.day.nunique()),
         "as_historically_booked": {
             "predicted_rpc": float(model.p_rows(test, actual.hour, actual.weekday).mean()), "observed_rpc": float(test.rpc.mean()),
             "observed_hour_rate_estimate": float(np.mean([rate[min(rate, key=lambda k: abs(k - int(x)))] for x in actual.hour])),
@@ -281,6 +450,8 @@ def main() -> None:
         },
     }  # fmt: skip
     p_bank = model.p_rows(test, actual.hour, actual.weekday)
+    pre = d[d.decision_at < bh.CUTOFF]
+    labels_test, labels_pre = group_labels(conn, test), group_labels(conn, pre).set_axis(pre.index)
 
     def gap(a: np.ndarray, b: np.ndarray) -> list[float]:  # a minus b in points: mean and a 95% case-bootstrap interval
         codes, rng = pd.factorize(test.case_id)[0], np.random.default_rng(0)
@@ -291,17 +462,26 @@ def main() -> None:
             bs.append(float((w * d).sum() / w.sum()))
         return [100 * float((a - b).mean()), *(100 * np.quantile(bs, [0.025, 0.975])).tolist()]
 
-    for name, units in (("team_volume", team_volume(test)), ("recorded_capacity", recorded)):
-        off, on = run(test, units, None), run(test, units, model)
-        so, sn = summary(test, off, model, rate), summary(test, on, model, rate)
-        res[name] = {
-            "off": {k: v for k, v in so.items() if k != "_p"}, "on": {k: v for k, v in sn.items() if k != "_p"},
-            "on_minus_bank_pts": gap(sn["_p"], p_bank), "on_minus_off_pts": gap(sn["_p"], so["_p"]),  # type: ignore[arg-type]
-            "share_moved_from_earliest": on["moved"] / len(test),  # type: ignore[operator]
-            "share_hour_differs_from_off": float((on["booked"].hour.to_numpy() != off["booked"].hour.to_numpy()).mean()),  # type: ignore[attr-defined]
-        }  # fmt: skip
-        print(name, json.dumps(res[name], indent=1, default=float), flush=True)
-        OUT.write_text(json.dumps(res, indent=1, default=float))
+    if args.fairness_only:
+        res, books = json.loads(OUT.read_text()), pickle.loads(BOOKINGS.read_bytes())
+    else:
+        books = {}
+        for name, units in (("team_volume", team_volume(test)), ("recorded_capacity", recorded)):
+            off, on = run(test, units, None), run(test, units, model)
+            books[name] = (off, on)
+            so, sn = summary(test, off, model, rate), summary(test, on, model, rate)
+            res[name] = {
+                "off": {k: v for k, v in so.items() if k != "_p"}, "on": {k: v for k, v in sn.items() if k != "_p"},
+                "on_minus_bank_pts": gap(sn["_p"], p_bank), "on_minus_off_pts": gap(sn["_p"], so["_p"]),  # type: ignore[arg-type]
+                "share_moved_from_earliest": on["moved"] / len(test),  # type: ignore[operator]
+                "share_hour_differs_from_off": float((on["booked"].hour.to_numpy() != off["booked"].hour.to_numpy()).mean()),  # type: ignore[attr-defined]
+            }  # fmt: skip
+            print(name, json.dumps(res[name], indent=1, default=float), flush=True)
+            OUT.write_text(json.dumps(res, indent=1, default=float))
+        BOOKINGS.write_bytes(pickle.dumps(books))  # so the fairness section can be redone without the 20-minute replay
+    for name, (off, on) in books.items():
+        res[name]["fairness"] = fairness(test, labels_test, labels_pre, pre, off, on, model, p_bank)
+    OUT.write_text(json.dumps(res, indent=1, default=float))
     MD.write_text(to_markdown(res))
     print(f"wrote {OUT} and {MD}")
 

@@ -1663,6 +1663,8 @@ export interface components {
             legacy_text?: string | null;
             /** Why Not Text */
             why_not_text?: string | null;
+            /** Booking Text */
+            booking_text?: string | null;
             /**
              * Checks
              * @default []

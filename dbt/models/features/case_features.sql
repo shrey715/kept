@@ -1,6 +1,6 @@
 -- The feature table Feast serves: one row per (case_id, as_of), columns = feature_registry.FEATURES.
 -- Account, payroll and cash-flow features: account_features.sql; text features: text_features.sql
--- (C's text_signals).
+-- (C's text_signals); the bank's context at as_of: context_features.sql.
 select
     s.case_id,
     x.golden_customer_id,
@@ -31,12 +31,23 @@ select
     cast(t.promised_amount as decimal(14, 2))     as promised_amount,
     t.dispute_flag                                as dispute_flag,
     t.cease_request_flag                          as cease_request_flag,
-    t.third_party_present_flag                    as third_party_present_flag
+    t.third_party_present_flag                    as third_party_present_flag,
+    c.pending_ptp                                 as pending_ptp,
+    cast(c.ptp_due_in_days as integer)            as ptp_due_in_days,
+    cast(c.n_out_7d as integer)                   as n_out_7d,
+    cast(c.n_out_30d as integer)                  as n_out_30d,
+    cast(c.n_rpc_30d as integer)                  as n_rpc_30d,
+    c.days_since_contact                          as days_since_contact,
+    c.last_rpc                                    as last_rpc,
+    c.last_ptp_made                               as last_ptp_made,
+    c.paid_prev7                                  as paid_prev7,
+    cast(c.weekday as integer)                    as weekday
 from {{ ref('feature_spine') }} s
 left join {{ ref('promise_features') }} p using (case_id, as_of)
 left join {{ ref('contact_features') }} h using (case_id, as_of)
 left join {{ ref('cohort_features') }} k using (case_id, as_of)
 left join {{ ref('text_features') }} t using (case_id, as_of)
+left join {{ ref('context_features') }} c using (case_id, as_of)
 left join {{ ref('account_features') }} a using (case_id, as_of)
 left join {{ ref('identity_crosswalk') }} x
     -- coll_customer_ref is a collections key (as in A's int_open_case); as a crm key it missed 3%

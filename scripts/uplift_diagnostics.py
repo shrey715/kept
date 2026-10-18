@@ -27,13 +27,12 @@ import pandas as pd
 from lightgbm import LGBMRegressor
 from sklearn.metrics import roc_auc_score
 
-from kept.contracts.feature_registry import model_inputs
 from kept.nba.causal import blp, case_bootstrap, crossfit, dr_qini, folds, gate_qini
-from kept.nba.train import ACTIONS, CONTEXT_COLS, load_rows
+from kept.nba.train import ACTIONS, CONTEXT_COLS, base_inputs, load_rows
 from kept.nba.uplift import TLearnerUplift, _frame
 
 REPO = Path(__file__).resolve().parents[1]
-COLS = list(model_inputs())
+COLS = base_inputs()
 ARMS = ("call", "sms_payment_link", "email")
 CUT = datetime(2026, 8, 15)
 # context at the decision, same sources as the label (contact_history, promises_to_pay); never the decision's own contact
