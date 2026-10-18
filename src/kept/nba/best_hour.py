@@ -55,19 +55,23 @@ def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
 class BestHourModel:
     model_version: str
 
-    def __init__(self, model: Any, version: str) -> None:
+    def __init__(self, model: Any, version: str, columns: Sequence[str] | None = None) -> None:
         self._model, self.model_version = model, version
+        self._columns = list(columns or [])  # the inputs it was fitted on, so a later registry change can't break it
+
+    def _inputs(self) -> list[str]:
+        return getattr(self, "_columns", None) or list(model_inputs())  # models pickled before this have none
 
     def p_rpc(self, features: pd.DataFrame, slots: Sequence[tuple[int, int]]) -> np.ndarray:
         """Chance a call reaches the right party, for one case (`features`: one row of `model_inputs()`), at each
         (local hour, weekday) slot."""
-        x = pd.concat([features[list(model_inputs())]] * len(slots), ignore_index=True)
+        x = pd.concat([features[self._inputs()]] * len(slots), ignore_index=True)
         x["hour"], x["weekday"] = [h for h, _ in slots], [w for _, w in slots]
         return np.asarray(self._model.predict_proba(_frame(x))[:, 1])
 
     def p_rows(self, features: pd.DataFrame, hours: Sequence[int], weekdays: Sequence[int]) -> np.ndarray:
         """`p_rpc` for many cases at once: row i of `features` at local hour hours[i] and weekday weekdays[i]."""
-        x = features[list(model_inputs())].reset_index(drop=True)
+        x = features[self._inputs()].reset_index(drop=True)
         x["hour"], x["weekday"] = list(hours), list(weekdays)
         return np.asarray(self._model.predict_proba(_frame(x))[:, 1])
 
@@ -88,7 +92,7 @@ def train(rows: pd.DataFrame, *, cutoff: datetime = CUTOFF) -> tuple[BestHourMod
         "rpc_rate_test": float(y[~fit].mean()),
         "auc_test": float(roc_auc_score(y[~fit], p)),
     }
-    return BestHourModel(m, f"besthour-lgbm-{cutoff:%Y%m%d}"), metrics
+    return BestHourModel(m, f"besthour-lgbm-{cutoff:%Y%m%d}", model_inputs()), metrics
 
 
 def save(model: BestHourModel, path: Path) -> None:

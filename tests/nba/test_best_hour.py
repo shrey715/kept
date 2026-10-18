@@ -126,6 +126,16 @@ def test_trained_model_prefers_the_evening_when_the_data_say_so() -> None:
     p = model.p_rpc(rows.iloc[[0]], [(9, 2), (18, 2)])
     assert p[1] > p[0] + 0.15 and metrics["auc_test"] > 0.6
 
+    # the model keeps its own columns: a feature added to the registry later (and so to the frame) changes nothing
+    wider = rows.iloc[[0, 0]].assign(brand_new_input=1.0)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("kept.nba.best_hour.model_inputs", lambda: [*model_inputs(), "brand_new_input"])
+        assert (model.p_rpc(wider.iloc[[0]], [(9, 2), (18, 2)]) == p).all()
+        assert (model.p_rows(wider, [9, 18], [2, 2]) == model.p_rows(rows.iloc[[0, 0]], [9, 18], [2, 2])).all()
+        del model._columns  # a pickle from before the columns were stored uses the registry's current list
+        with pytest.raises(KeyError):  # ... which here has the extra input, absent from `rows`
+            model.p_rpc(rows.iloc[[0]], [(9, 2)])
+
 
 @pytest.mark.parametrize("on", [False, True])
 def test_the_card_says_when_best_hour_moved_the_call(make_ctx: Any, on: bool) -> None:
