@@ -95,7 +95,7 @@ much better; uplift targeting is unproven (no gain against what the bank did on 
 business case pays back in 99.97% of simulated draws.
 **If asked "did you beat the bank's model?":** not alone, and we don't claim to. A wider model on the same kinds of
 inputs the bank's score uses matches it (0.697 against 0.702, interval −1.9 to +1.0 points). Ours exists the moment a
-promise is made, about nine days before the bank's score, and averaged with it the two reach 0.763 (+6.1 points). The
+promise is made, about nine days before the bank's score, and averaged with it the two reach 0.764 (+6.1 points). The
 bank keeps its model and gains ours.
 **If asked "why is uplift so small?":** the bank's randomised test says contact intensity barely moves outcomes, and on
 clean outcomes the doubly robust effect of a call is +0.2 points [−0.2, +0.7]. We tried X-, DR- and R-learners and a

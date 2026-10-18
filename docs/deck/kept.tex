@@ -240,11 +240,11 @@
 \begin{frame}
   \kicker{Decisions, and the alternative we rejected}\frametitle{Why it's built this way}
   \source{docs/reports/decisions.md}
-  \scriptsize\renewcommand{\arraystretch}{1.08}
+  \scriptsize\renewcommand{\arraystretch}{0.98}
   \begin{tabular}{@{}L{2.9cm}L{2.9cm}L{7.3cm}@{}}
     \toprule
     \textbf{We chose} & \textbf{Instead of} & \textbf{Because} \\ \midrule
-    Timing: payday and the hour of the call & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts; evening calls reach the right party \KeveningGap\ pts more \\
+    Timing: payday and the call hour & more channels or intensity & the bank's A/B: strategies keep promises at the same rate; payday timing adds \KpayMoney\ pts; evening calls reach the right party \KeveningGap\ pts more \\
     Uplift per action, behind a gate & a propensity-to-pay score & uplift asks the right question, but contact barely moves payment (a call \KcallEffect\ pts [\KcallEffectCI]); the gate keeps a weak model out \\
     Local models for everything & a hosted model & not cost (Haiku 5.5: USD \KdecBfourHaiku\ a year, ours \KdecBfourLocal); customer data stays inside (OSFI B-10, E-23, PIPEDA, Law 25) \\
     Certified metrics first & free-form SQL from a model & router and certified metrics: \KdecBfivePlain\ to \KdecBfiveRoute\ right of \KdecBfiveOf\ (\KdecBfivePlainPct\ to \KdecBfiveRoutePct) \\
