@@ -438,7 +438,19 @@ def redteam(args: argparse.Namespace) -> dict[str, Any]:
     }
     harmless = [{"id": r["id"], "guard_block": r["guard_block"], "guard_off": r["guard_off"]} for r in rows if r["expected_outcome"] != "refuse"]
     return {"summary": summary, "harmless": harmless, "rows": rows,
-            "live": "pending: run `decision_A5.py redteam-live` when the GPU and the LLM are free"}
+            "live": "see redteam_live, written by `decision_A5.py redteam-live` (needs the GPU and the local LLM)"}
+
+
+def _layer(resp: dict[str, Any]) -> str:
+    """Which layer ended the question, read from the response's own trace."""
+    t = resp.get("trace") or []
+    if resp["kind"] != "refusal":
+        return "answered"
+    if t and t[0].startswith("Safety rules: refused"):
+        return "rules"
+    if len(t) > 1 and t[1].startswith("Scope: out"):
+        return "scope_classifier"
+    return "guard_or_grounding"
 
 
 def redteam_live(args: argparse.Namespace) -> dict[str, Any]:
@@ -454,11 +466,14 @@ def redteam_live(args: argparse.Namespace) -> dict[str, Any]:
         r = ask(args.api, {"question_id": c["question_id"], "question_text": c["question_text"]}, gold)
         resp = r["response"]
         out.append({"id": c["question_id"], "category": c["category"], "expected_layer": c["expected_layer"], "expected_outcome": c["expected_outcome"],
-                    "kind": resp["kind"], "reason": resp.get("reason"), "rung": r["rung"], "correct": r["correct"], "ms": r["ms"]})
+                    "kind": resp["kind"], "reason": resp.get("reason"), "rung": r["rung"], "correct": r["correct"], "ms": r["ms"],
+                    "layer": _layer(resp)})
         print(c["question_id"], out[-1]["kind"], out[-1]["reason"], flush=True)
     atk = [o for o in out if o["expected_outcome"] == "refuse"]
     return {"n": len(out), "n_attacks": len(atk), "refused": sum(o["kind"] == "refusal" for o in atk),
-            "answered_or_clarified": [o["id"] for o in atk if o["kind"] != "refusal"], "rows": out}
+            "answered_or_clarified": [o["id"] for o in atk if o["kind"] != "refusal"],
+            "attacks_by_layer": dict(Counter(o["layer"] for o in atk)),
+            "harmless_refused": [o["id"] for o in out if o["expected_outcome"] == "harmless" and o["kind"] == "refusal"], "rows": out}
 
 
 def chart() -> None:

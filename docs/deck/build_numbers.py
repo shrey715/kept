@@ -9,6 +9,7 @@ No number in kept.tex is typed by hand: rerun this after a report changes and th
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -17,7 +18,8 @@ import duckdb
 from kept.app.portfolio import overview
 
 REPO = Path(__file__).resolve().parents[2]
-REPORTS = REPO / "data" / "exports" / "reports"
+DATA = Path(os.environ.get("KEPT_DATA_DIR", REPO / "data"))  # a git worktree has no data/: point at the checkout's
+REPORTS = DATA / "exports" / "reports"
 
 
 def load(name: str) -> dict:  # type: ignore[type-arg]
@@ -36,7 +38,7 @@ def main() -> None:
         load("drift_data.json"),
     )
     inv = load("invariance_protected.json")
-    p = overview(duckdb.connect(str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"), read_only=True))
+    p = overview(duckdb.connect(str(DATA / "warehouse" / "scratch_copy.duckdb"), read_only=True))
     tot, roi, pay = biz["total"], biz["year1_roi"], biz["payback_months"]
     m: dict[str, str] = {
         # tonight's book
@@ -80,7 +82,7 @@ def main() -> None:
     sim, be = biz["simulation"], biz["breakeven_payday_pts"]
     best, ut = ul["best"], ul["test"]
     BANK = "The bank's strategy"
-    con = duckdb.connect(str(REPO / "data" / "warehouse" / "scratch_copy.duckdb"), read_only=True)
+    con = duckdb.connect(str(DATA / "warehouse" / "scratch_copy.duckdb"), read_only=True)
     per_week = con.execute(
         "select count(*) / 52.0 from silver.promises_to_pay"
         " where ptp_created_ts >= date '2025-09-28' and ptp_created_ts < date '2026-09-28'"  # the 12 months to the snapshot
@@ -119,7 +121,7 @@ def main() -> None:
         "weeksFive": f"{weeks(ev['payday_kept'][0] / 100, 0.05):.0f}", "weeksTwenty": f"{weeks(ev['payday_kept'][0] / 100, 0.20):.0f}",
     }
     # the decision evidence (docs/reports/decisions.md): data/exports/reports/decision_<id>.json
-    d = {i: load(f"decision_{i}.json") for i in ("A1", "A2", "A3", "B4", "B5", "B6", "B7", "B9", "B10", "C2")}
+    d = {i: load(f"decision_{i}.json") for i in ("A1", "A2", "A3", "A5", "B1", "B3", "B4", "B5", "B6", "B7", "B9", "B10", "C2")}
     A1 = d["A1"]
 
     def a1(engine: str, wl: str, scale: int) -> str:  # seconds, or why there is no number
@@ -138,6 +140,19 @@ def main() -> None:
     b10 = d["B10"]["test"]["total"]["models"]
     bd, c2, b6 = d["B10"]["paired_bootstrap_top30_live_vs_response"]["diff"], d["C2"]["systems"], d["B6"]["embedders"]["BAAI/bge-m3"]["configs"]
     pc = lambda x: f"{100 * x:.1f}\\%"  # noqa: E731
+    b1, b3, a5 = d["B1"], d["B3"], d["A5"]["redteam_live"]
+    m |= {  # B1: which model; B3: llama.cpp against Ollama; A5: the live red team
+        **{f"decBone{k}{what}": v for k, name in (("Live", "live"), ("Fourteen", "qwen3-14b"), ("Eight", "qwen3-8b"), ("Gemma", "gemma3-12b"))
+           for what, v in (("Vram", f"{b1[name]['vram']['peak_mib']:,}"), ("Right", str(b1[name]["asks"]["all"]["right"])),
+                           ("Conf", str(b1[name]["asks"]["all"]["wrong_but_confident"])), ("Median", f"{b1[name]['asks']['all']['median_s']:g}"),
+                           ("Notes", f"{b1[name]['extract']['notes']['fields']['hardship_signal']['f1']:g}" if name != "live" else f"{b1['live']['extract_from_doc']['Hardship']['notes_f1']:g}"),
+                           ("Briefs", f"{b1[name]['briefs']['median_s']:g}" if "briefs" in b1[name] else "not run"))},
+        "decBoneOf": str(b1["live"]["asks"]["all"]["graded"]),
+        "decBthreeCtx": f"{b3['ollama_default']['context']['openai_endpoint']['prompt_tokens_reported']:,}", "decBthreeSent": f"{b3['llamacpp']['context']['prompt_tokens_sent']:,}",
+        "decBthreeLlama": f"{b3['llamacpp']['throughput']['parallel_1']['tps_median']:g}", "decBthreeMatched": f"{b3['ollama_matched']['throughput']['parallel_1']['tps_median']:g}",
+        "decBthreeLlamaSec": f"{b3['llamacpp']['extraction']['seconds']}", "decBthreeMatchedSec": f"{b3['ollama_matched']['extraction']['seconds']}",
+        "decAfiveRefused": str(a5["refused"]), "decAfiveAttacks": str(a5["n_attacks"]), "decAfiveAnswered": str(len(a5["answered_or_clarified"])),
+    }
     m |= {
         "decAoneRollTen": rr[10], "decAoneRollForty": rr[40], "decAoneSparkTen": a1("spark", "roll_rate", 10).split()[0],
         "decAoneMaxScale": f"{max(r['scale'] for r in A1['runs'] if r['engine'] == 'duckdb')}",

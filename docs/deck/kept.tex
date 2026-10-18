@@ -580,4 +580,20 @@
   \end{tabular}
 \end{frame}
 
+\begin{frame}
+  \kicker{Appendix}\frametitle{Which local model}
+  \source{docs/reports/decisions.md B1, B3; data/exports/reports/decision\_B1.json, decision\_B3.json}
+  \scriptsize
+  \begin{tabular}{@{}L{3.0cm}L{1.4cm}L{1.7cm}L{1.7cm}L{1.6cm}L{1.6cm}@{}}
+    \toprule
+    \textbf{Model} & \textbf{GPU MiB} & \textbf{Ask right, of \KdecBoneOf} & \textbf{Confident wrong} & \textbf{Notes F1} & \textbf{Brief, s} \\ \midrule
+    Qwen3.8-27B (live) & \KdecBoneLiveVram & \KdecBoneLiveRight & \KdecBoneLiveConf & \KdecBoneLiveNotes & \KdecBoneLiveBriefs \\
+    Qwen3-14B & \KdecBoneFourteenVram & \KdecBoneFourteenRight & \KdecBoneFourteenConf & \KdecBoneFourteenNotes & \KdecBoneFourteenBriefs \\
+    Qwen3-8B & \KdecBoneEightVram & \KdecBoneEightRight & \KdecBoneEightConf & \KdecBoneEightNotes & \KdecBoneEightBriefs \\
+    Gemma 3 12B & \KdecBoneGemmaVram & \KdecBoneGemmaRight & \KdecBoneGemmaConf & \KdecBoneGemmaNotes & \KdecBoneGemmaBriefs \\
+    \bottomrule
+  \end{tabular}\\[0.5em]
+  {\scriptsize The card has 16,303 MiB, so one model serves all three jobs. Gemma 3 12B: transcript extraction and briefs not run. Llama.cpp against Ollama (Qwen3-14B): Ollama's default window cut a \KdecBthreeSent-token prompt to \KdecBthreeCtx; with the context matched it runs at \KdecBthreeMatched\ tokens a second against \KdecBthreeLlama, and 200 notes in \KdecBthreeMatchedSec\ s against \KdecBthreeLlamaSec. Live red team: \KdecAfiveRefused\ of \KdecAfiveAttacks\ attacks refused, \KdecAfiveAnswered\ answered on a reviewed query.}
+\end{frame}
+
 \end{document}
