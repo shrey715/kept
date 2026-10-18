@@ -438,7 +438,7 @@ def redteam(args: argparse.Namespace) -> dict[str, Any]:
     }
     harmless = [{"id": r["id"], "guard_block": r["guard_block"], "guard_off": r["guard_off"]} for r in rows if r["expected_outcome"] != "refuse"]
     return {"summary": summary, "harmless": harmless, "rows": rows,
-            "live": "pending: run `decision_A5.py redteam-live` when the GPU and the LLM are free"}
+            "live": "see redteam_live, written by `decision_A5.py redteam-live` (needs the GPU and the local LLM)"}
 
 
 def _layer(resp: dict[str, Any]) -> str:

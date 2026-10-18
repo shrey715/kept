@@ -155,6 +155,13 @@ def audit_calls(path: Path, purpose: str) -> dict[str, object]:
             "malformed_calls": sum(p.get("error") == "ValueError" for p in ps), "failed_calls": sum(bool(p.get("error")) for p in ps)}
 
 
+def parse_extract(out: str) -> tuple[re.Match[str] | None, dict[str, dict[str, object]]]:
+    m = re.search(r"(\d+) ok, (\d+) errors, (\d+)s", out)
+    fields = {g[0]: {"f1": float(g[1]), "precision": float(g[2]), "recall": float(g[3]), "pass": g[4] == "PASS"}
+              for g in re.findall(r"^\s+(\w+)\s+f1 ([\d.]+)\s+p ([\d.]+)\s+r ([\d.]+)\s+(PASS|FAIL)", out, re.M)}
+    return m, fields
+
+
 def extract(tag: str) -> dict[str, object]:
     res: dict[str, object] = {}
     for source in ("notes", "transcripts"):
@@ -164,9 +171,7 @@ def extract(tag: str) -> dict[str, object]:
         cmd = f"{SCOPE.format(cap='7G')} {sys.executable} {REPO}/scripts/eval_extraction.py --source {source} --split holdout --workers 2"
         p = subprocess.run(shlex.split(cmd), env=env, cwd=REPO, capture_output=True, text=True)
         (OUT / f"{tag}_extract_{source}.txt").write_text(p.stdout + p.stderr)
-        m = re.search(r"(\d+) ok, (\d+) errors, (\d+)s", p.stdout)
-        fields = {g[0]: {"f1": float(g[1]), "precision": float(g[2]), "recall": float(g[3]), "pass": g[4] == "PASS"}
-                  for g in re.findall(r"^\s+(\w+)\s+f1 ([\d.]+)\s+p ([\d.]+)\s+r ([\d.]+)\s+(PASS|FAIL)", p.stdout, re.M)}
+        m, fields = parse_extract(p.stdout)
         res[source] = {"ok": int(m[1]) if m else 0, "errors": int(m[2]) if m else None, "seconds": int(m[3]) if m else None, "fields": fields,
                        **audit_calls(audit, "text.extract")} | ({} if m else {"crashed": p.stderr[-400:]})
     return res
@@ -289,6 +294,13 @@ def report() -> None:
     for m in MODELS:
         f = OUT / f"{m}.json"
         res[m] = json.loads(f.read_text()) if f.exists() else {}
+    for m, r in res.items():  # a step that did not finish keeps no JSON entry: take what its log holds, and leave the rest absent ("not run")
+        for source in ("notes", "transcripts"):
+            txt = OUT / f"{m}_extract_{source}.txt"
+            if txt.exists() and source not in r.get("extract", {}):
+                mm, fields = parse_extract(txt.read_text())
+                if mm and fields:
+                    r.setdefault("extract", {})[source] = {"ok": int(mm[1]), "errors": int(mm[2]), "seconds": int(mm[3]), "fields": fields}
     live = res["live"]
     live["asks"] = b5.summarise(b5.REPORTS / "decision_B5", "live")  # type: ignore[index]
     live["extract_from_doc"] = gate_doc()  # type: ignore[index]
