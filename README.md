@@ -10,8 +10,8 @@ then a promise sized to the customer's payday and spare cash. A person releases 
 
 ![Kept architecture](docs/architecture/architecture.png)
 
-Full-size: [`docs/architecture/architecture.pdf`](docs/architecture/architecture.pdf) (TikZ source: `architecture.tex`;
-orange border = changed from our 2 Oct [design](docs/design/SharpeShooters_SystemDesign.pdf)).
+Full-size: [`docs/architecture/architecture.pdf`](docs/architecture/architecture.pdf) (draw.io source: [`architecture.drawio`](docs/architecture/architecture.drawio), opens in app.diagrams.net;
+our 2 Oct [design](docs/design/SharpeShooters_SystemDesign.pdf) is the starting point).
 
 ## Deliverables
 
@@ -341,7 +341,7 @@ The evidence behind each change: [`docs/reports/decisions.md`](docs/reports/deci
 QUALITY_REPORT.pdf                  deliverable 4
 contracts/c360_customer.odcs.yaml   deliverable 3: data contract (ODCS, from DC-COLL-001)
 docs/
-  architecture/   deliverable 2: architecture.png / .pdf, drawn in TikZ (architecture.tex)
+  architecture/   deliverable 2: architecture.png / .pdf, drawn in draw.io (architecture.drawio)
   reports/        business case, fairness, drift, benchmark, quality: PDFs + LaTeX sources + figures
   deck/           deliverable 7: the pitch deck
   design/         our 2 Oct system design
