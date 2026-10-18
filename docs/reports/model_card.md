@@ -8,8 +8,8 @@ LightGBM on six point-in-time features, isotonic-calibrated; trained on promises
 
 | Measure | Value |
 |---|---:|
-| AUC | 0.610 |
-| Brier score | 0.221 |
+| AUC | 0.611 |
+| Brier score | 0.220 |
 | Kept rate in the test window | 35.4% |
 
 Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728, a gain of 2.5 AUC points [1.9, 3.3] on the same promises (`docs/reports/evidence.md` §6). A first version scored 0.92 because one feature, `amount_ratio`, encoded the outcome; it was removed. Read as published, the bank's score overstates the kept rate by about 24 points; recalibrated, it is as well calibrated as ours, so calibration is not our edge: ours exists when the promise is made, about 9 days before the bank's score, and adds to it (`evidence.md` §7).
@@ -18,24 +18,24 @@ Alone it ranks promises less well than the bank's own score (AUC 0.702); combine
 
 | Predicted | Observed | Promises |
 |---:|---:|---:|
-| 14.4% | 9.2% | 273 |
-| 26.6% | 24.8% | 9,489 |
-| 35.9% | 32.3% | 23,044 |
-| 45.3% | 39.3% | 10,834 |
-| 55.5% | 50.3% | 3,672 |
-| 63.8% | 57.7% | 2,563 |
-| 74.2% | 67.4% | 760 |
+| 8.5% | 14.9% | 830 |
+| 16.3% | 19.4% | 1,515 |
+| 25.7% | 28.4% | 13,658 |
+| 34.8% | 32.9% | 18,003 |
+| 44.2% | 40.9% | 11,361 |
+| 54.5% | 55.9% | 4,465 |
+| 63.9% | 67.7% | 814 |
 
 **What drives it (share of mean |TreeSHAP|)**
 
 | Feature | Share |
 |---|---:|
-| Days from promise to due date | 44.7% |
-| Days past due when promised | 42.5% |
-| Broken promises, prior 90 days | 3.6% |
-| Days from last payday to due date | 3.2% |
-| Share of past promises kept | 3.1% |
-| Days from due date to next payday | 2.8% |
+| Days past due when promised | 43.7% |
+| Days from promise to due date | 41.9% |
+| Broken promises, prior 90 days | 4.3% |
+| Days from due date to next payday | 3.6% |
+| Share of past promises kept | 3.5% |
+| Days from last payday to due date | 2.9% |
 
 ## Uplift model: which action changes the outcome?
 
