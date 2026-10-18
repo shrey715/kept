@@ -21,7 +21,6 @@ from pathlib import Path
 import duckdb
 import numpy as np
 
-from kept.contracts.feature_registry import model_inputs
 from kept.nba import promise_model
 from kept.nba.explain import DRIVER_LABELS
 from kept.nba.train import load_rows
@@ -132,7 +131,7 @@ def uplift_card(conn: duckdb.DuckDBPyConnection, *, sample: int = 4000, seed: in
     model = pickle.loads((MODELS / "uplift.pkl").read_bytes())
     rows = load_rows(conn)
     late = rows[rows.decision_at >= UPLIFT_CUTOFF]
-    cols = list(model_inputs())
+    cols = list(model._columns)  # the live model's own inputs
     lift = model.uplift(late[cols])
     contacts = [a.value for a in model.actions if a.value != "wait"]
     wait = (late.action == "wait").to_numpy()

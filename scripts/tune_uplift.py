@@ -21,8 +21,7 @@ from pathlib import Path
 
 import duckdb
 
-from kept.contracts.feature_registry import model_inputs
-from kept.nba.train import ACTIONS, evaluate, load_rows, promote
+from kept.nba.train import ACTIONS, base_inputs, evaluate, load_rows, promote
 from kept.nba.uplift import DEFAULT_PARAMS, TLearnerUplift
 
 REPO = Path(__file__).resolve().parents[1]
@@ -41,7 +40,7 @@ SPACE = {
 
 def fit(rows, params: dict, until: datetime, seed: int = 0) -> TLearnerUplift:  # type: ignore[no-untyped-def]
     early = (rows.decision_at < until).to_numpy()
-    X = rows[list(model_inputs())]
+    X = rows[base_inputs()]
     return TLearnerUplift(ACTIONS, params=params, seed=seed).fit(
         X[early],
         action=rows.action[early],

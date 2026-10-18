@@ -31,7 +31,24 @@ REASON_TEMPLATES: Mapping[str, str] = {
     "cohort_recovery_rate": "{value} of similar past cases recovered",
     "cohort_kept_rate": "{value} of promises in similar past cases were kept",
     "promise_intent": "Said they intend to pay",
+    "pending_ptp": "{value}",
+    "ptp_due_in_days": "{value}",
+    "n_out_7d": "{value} contacts from us in the last 7 days",
+    "n_out_30d": "{value} contacts from us in the last 30 days",
+    "n_rpc_30d": "Reached {value} times in the last 30 days",
+    "days_since_contact": "Last contacted {value} days ago",
+    "last_rpc": "{value}",
+    "last_ptp_made": "{value}",
+    "paid_prev7": "{value}",
+    "weekday": "It is a {value}",
 }
+_YES_NO = {  # a True/False input as a full sentence
+    "pending_ptp": ("Has an open promise to pay", "Has no open promise to pay"),
+    "last_rpc": ("Our last contact reached them", "Our last contact did not reach them"),
+    "last_ptp_made": ("Our last contact ended in a promise", "Our last contact ended without a promise"),
+    "paid_prev7": ("Paid something in the last 7 days", "Has not paid in the last 7 days"),
+}
+_WEEKDAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")  # duckdb dayofweek
 _RATES = {
     "kept_promise_ratio",
     "answer_rate",
@@ -54,6 +71,18 @@ def _fmt(feature: str, v: object) -> str:
         if v == 0:
             return "Pay lands today"
         return f"Pay lands in {days}" if v > 0 else f"Expected pay date passed {days} ago"
+    if feature in _YES_NO and isinstance(v, (bool, int)):
+        return _YES_NO[feature][0 if v else 1]
+    if feature == "ptp_due_in_days" and isinstance(v, int):
+        n = abs(v)
+        days = f"{n} day{'' if n == 1 else 's'}"
+        if v == 0:
+            return "A promise is due today"
+        return f"A promise is due in {days}" if v > 0 else f"A promise was due {days} ago and is still open"
+    if feature == "days_since_contact" and isinstance(v, (int, float)):
+        return f"{v:.0f}"
+    if feature == "weekday" and isinstance(v, int) and 0 <= v <= 6:
+        return _WEEKDAYS[v]
     if feature in _TRENDS and isinstance(v, (int, float)):
         return "down" if v < 0 else "up" if v > 0 else "flat"
     return str(getattr(v, "value", v))

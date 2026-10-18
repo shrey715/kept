@@ -64,11 +64,10 @@ def test_study_features_are_clean() -> None:
     """The offline studies' inputs (17 registry inputs + decision context, hour and weekday for the call-hour model) contain no outcome
     column, no protected attribute and no proxy (age, postal code, language, ...)."""
     from kept.contracts.data_contract import load_data_contract
-    from kept.contracts.feature_registry import model_inputs
     from kept.features.store import assert_no_denied
-    from kept.nba.train import CONTEXT_COLS
+    from kept.nba.train import CONTEXT_COLS, base_inputs
 
-    cols = [*model_inputs(), *CONTEXT_COLS, "hour"]
+    cols = [*base_inputs(), *CONTEXT_COLS, "hour"]
     assert_no_denied(pd.DataFrame(columns=cols))
     c = load_data_contract()
     assert not set(cols) & (c.protected_attributes | c.proxy_attributes)

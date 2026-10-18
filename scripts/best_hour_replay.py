@@ -81,7 +81,7 @@ def run(
 ) -> dict[str, object]:
     """Book every call of `test` day by day; booked hour and weekday per call, and the checks."""
     cap = CallCapacity(units, tz=OPERATING_TZ, length=WINDOW, best_hour=model)
-    op, inputs = ZoneInfo(OPERATING_TZ), list(bh.model_inputs())
+    op, inputs = ZoneInfo(OPERATING_TZ), bh.base_inputs()
     booked: dict[int, tuple[int, int]] = {}
     earliest: dict[int, tuple[int, int]] = {}  # the earliest free slot when the call was booked (= booked if not moved)
     moved = later_day = outside = unbooked = (

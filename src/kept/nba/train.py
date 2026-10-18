@@ -42,28 +42,33 @@ def pool_nudges(rows: pd.DataFrame) -> pd.DataFrame:
     return rows.assign(action=rows.action.replace(nudge))
 
 
-# decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
+# What the bank knew before deciding (dbt context_features.sql): registry inputs of the next challenger.
+# The live champion was fitted without them and selects its own columns (the study calls them "context").
 CONTEXT_COLS = [
     "pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d",
     "days_since_contact", "last_rpc", "last_ptp_made", "paid_prev7", "weekday",
 ]  # fmt: skip
 
 
+def base_inputs() -> list[str]:
+    """The registry's model inputs without CONTEXT_COLS: what the live champion, the best-hour model and the
+    studies' "17 inputs" baseline are built on."""
+    return [n for n in model_inputs() if n not in CONTEXT_COLS]
+
+
 def load_rows(
     conn: duckdb.DuckDBPyConnection, *, source: str = "training_rows", extras: bool = False
 ) -> pd.DataFrame:
-    """The live model's rows. extras=True (offline studies) adds the account-sourced outcomes (paid_clean_14d,
-    paid_amt_14d, covered), cured_30d and the context at the decision (features_train.decision_context). With
-    extras every row is kept and `covered` says whether its "no" can be trusted; "training_weeks" is the
-    one-row-per-case-landmark table."""
+    """The model rows: every registry input a second before the decision (`model_inputs()`, the context inputs
+    included). extras=True (offline studies) adds the account-sourced outcomes (paid_clean_14d, paid_amt_14d,
+    covered) and cured_30d. With extras every row is kept and `covered` says whether its "no" can be trusted;
+    "training_weeks" is the one-row-per-case-landmark table."""
     cols = ", ".join(f"f.{n}" for n in model_inputs())
     more = ""
     if extras:
         more = """, t.paid_clean_14d, t.paid_amt_14d, t.covered, t.paid_14d_known,
                coalesce(c.cure_flag and c.cure_date <= cast(t.label_at as date) + 30, false) as cured_30d,
-               x.pending_ptp, x.ptp_due_in_days, x.n_out_7d, x.n_out_30d, x.n_rpc_30d, x.days_since_contact,
-               x.last_rpc, x.last_ptp_made, x.paid_prev7, x.weekday, c.primary_product, t.crm_customer_id"""
-    join_x = "join features_train.decision_context x using (decision_id)" if extras else ""
+               c.primary_product, t.crm_customer_id"""
     where = "where t.paid_14d_known" if not extras else ""
     return conn.sql(f"""
         select t.decision_id, t.case_id, t.decision_at, t.action, t.paid_14d,
@@ -72,7 +77,6 @@ def load_rows(
         join features_train.case_features f
             on f.case_id = t.case_id and f.as_of = t.decision_at - interval 1 second
         join silver.collections_cases c on c.case_id = t.case_id
-        {join_x}
         {where}
         order by t.decision_at, t.decision_id""").df()
 

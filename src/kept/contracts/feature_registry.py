@@ -278,6 +278,98 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         "A third party was on the call; feeds hard stops",
         model_input=False,
     ),
+    # --- what the bank knew at as_of: recent outbound contacts and their outcomes, open promise, recent payment, weekday
+    # (dbt context_features.sql). Inputs of the next challenger: the live champion selects its own columns and ignores them.
+    FeatureSpec(
+        "pending_ptp",
+        "bool",
+        FeatureOrigin.SQL,
+        (
+            "silver.promises_to_pay.ptp_created_ts",
+            "silver.promises_to_pay.ptp_status",
+            "silver.promises_to_pay.status_ts",
+        ),
+        "D",
+        "The customer has a promise to pay made and not yet resolved",
+    ),
+    FeatureSpec(
+        "ptp_due_in_days",
+        "int",
+        FeatureOrigin.SQL,
+        ("silver.promises_to_pay.ptp_due_date", "silver.promises_to_pay.status_ts"),
+        "D",
+        "Days from as_of to the earliest due date among the customer's unresolved promises",
+    ),
+    FeatureSpec(
+        "n_out_7d",
+        "int",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.contact_ts_utc", "silver.contact_history.direction"),
+        "D",
+        "Outbound contacts on the case in the 7 days before as_of (the count behind contacts_last_7d, as a model input)",
+    ),
+    FeatureSpec(
+        "n_out_30d",
+        "int",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.contact_ts_utc", "silver.contact_history.direction"),
+        "D",
+        "Outbound contacts on the case in the 30 days before as_of",
+    ),
+    FeatureSpec(
+        "n_rpc_30d",
+        "int",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.rpc_flag", "silver.contact_history.contact_ts_utc"),
+        "D",
+        "Outbound contacts on the case that reached the right party in the 30 days before as_of",
+    ),
+    FeatureSpec(
+        "days_since_contact",
+        "float",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.contact_ts_utc", "silver.contact_history.direction"),
+        "D",
+        "Days since the last outbound contact on the case, within the last 30 days (None if none)",
+    ),
+    FeatureSpec(
+        "last_rpc",
+        "bool",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.rpc_flag", "silver.contact_history.contact_ts_utc"),
+        "D",
+        "The last outbound contact in the last 30 days reached the right party (None if none)",
+    ),
+    FeatureSpec(
+        "last_ptp_made",
+        "bool",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.ptp_made_flag", "silver.contact_history.contact_ts_utc"),
+        "D",
+        "The last outbound contact in the last 30 days ended in a promise (None if none)",
+    ),
+    FeatureSpec(
+        "paid_prev7",
+        "bool",
+        FeatureOrigin.SQL,
+        (
+            "silver.contact_history.payment_taken_flag",
+            "silver.contact_history.link_payment_flag",
+            "silver.contact_history.app_payment_after_contact_flag",
+            "silver.promises_to_pay.paid_date",
+            "silver.promises_to_pay.ptp_status",
+        ),
+        "D",
+        "A payment in the 7 days before as_of: a contact payment flag, or a kept promise paid",
+    ),
+    FeatureSpec(
+        "weekday",
+        "int",
+        FeatureOrigin.SQL,
+        ("silver.contact_history.contact_ts_utc",),  # in training as_of is a second before the contact being decided
+        "D",
+        "Weekday of as_of's UTC date (Sunday 0, the nightly's date; in training, the decision's date)",
+    ),
 )
 
 # Outcomes and treatment assignment for the CURRENT decision: never a training input
