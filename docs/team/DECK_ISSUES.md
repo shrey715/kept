@@ -90,8 +90,9 @@ tuning, drift and fairness). Left: the video link (DK-18: the team's URL), and a
   - Source: `docs/reports/business_case.pdf`, `data/exports/reports/business_data.json`.
 - [~] **DK-12 · Measured, not assumed: the evidence ladder**
   - Randomised: +6.1 pts of promised money paid when due just after payday (95% CI 2.8–10.6).
-  - Off-policy estimate (labelled as an estimate): 38.6–42.0% paid in 14 days under Kept's policy against
-    32.4–32.5% for the bank's; two estimators agree.
+  - Off-policy estimate (labelled as an estimate): Kept's choice of action against what the bank did, on a clean
+    outcome, is 0 per 1,000 decisions [−7, +8]: no measurable gain in who to contact. (The earlier 38.6–42.0% vs
+    32.4–32.5% used the bank's recommendation field, which is look-ahead, and is withdrawn.)
   - Model quality: promise model AUC 0.61 on 50,653 held-out promises with a reliability curve; ours plus the bank's
     score 0.728 against 0.702.
   - Source: `docs/reports/evidence.md` §1, §2, §6; `data/exports/reports/model_card.json`.

@@ -8,35 +8,37 @@ under random rankings.
 
 ## Validation (fitted before 15 Jul, scored 15 Jul to 15 Aug)
 
-| Arm | Noise (1 sd) | The bank's strategy | T-learner (as live) | X-learner | DR-learner | DR-learner, more regularised |
-|---|---:|---:|---:|---:|---:|---:|
-| call | 0.0009 | +0.0009 | -0.0019 | -0.0014 | +0.0004 | +0.0020 |
-| sms payment link | 0.0012 | -0.0086 | +0.0064 | +0.0033 | +0.0063 | +0.0070 |
-| email | 0.0013 | -0.0001 | +0.0049 | +0.0047 | +0.0085 | +0.0089 |
+| Arm | Noise (1 sd) | T-learner (as live) | X-learner | DR-learner | DR-learner, more regularised |
+|---|---:|---:|---:|---:|---:|
+| call | 0.0009 | -0.0019 | -0.0014 | +0.0004 | +0.0020 |
+| sms payment link | 0.0013 | +0.0064 | +0.0033 | +0.0063 | +0.0070 |
+| email | 0.0012 | +0.0049 | +0.0047 | +0.0085 | +0.0089 |
 
 Chosen for the test by the sum over arms in noise units: **DR-learner, more regularised**.
 
 ## Test, scored once (fitted before 15 Aug, scored on the 141,350 decisions after)
 
-| Arm | Noise (1 sd) | The bank's strategy | Champion (live) | DR-learner, more regularised |
-|---|---:|---:|---:|---:|
-| call | 0.0015 | +0.0173 | +0.0080 | +0.0093 |
-| sms payment link | 0.0020 | -0.0424 | +0.0020 | +0.0060 |
-| email | 0.0022 | +0.0005 | +0.0052 | -0.0010 |
+| Arm | Noise (1 sd) | Champion (live) | DR-learner, more regularised |
+|---|---:|---:|---:|
+| call | 0.0015 | +0.0071 | +0.0093 |
+| sms payment link | 0.0023 | +0.0036 | +0.0060 |
+| email | 0.0018 | +0.0032 | -0.0010 |
 
 The gate's own metric on the same test decisions:
 
 | Model | Qini, calls | Qini, any contact | Noise (calls, any) |
 |---|---:|---:|---:|
-| Champion (live) | +0.0073 | +0.0008 | 0.0003, 0.0003 |
+| Champion (live) | +0.0040 | +0.0002 | 0.0003, 0.0003 |
 | DR-learner, more regularised | +0.0021 | +0.0004 | 0.0003, 0.0003 |
 
 ## What it shows
 
 - **No learner beats the live model on every arm.** The causal learner wins on some arms and loses on others, and the
   arms that win on validation don't all win on the test. The gate keeps the live model, correctly.
-- **On SMS and email, both Kept models beat the bank's strategy** on the doubly robust score. **On calls, the bank's
-  targeting scores higher** on that measure while the gate's measure says the opposite: who gets a call is the arm
-  most shaped by the bank's own choices, and the two scores disagree there.
+- **There is no comparison with the bank's targeting.** An earlier version scored the bank's recommendation field as a
+  rule; that field is the last recommendation shown as of the snapshot, so it encodes how each case ended
+  (`uplift_improvement.md`) and the column was removed.
+- **The scores are noisy and the DR evaluation here is the old one** (old label, nuisance models on the 17 inputs only);
+  `uplift_improvement.md` repeats the comparison on a clean outcome over several seeds.
 - The bank's randomised cells say contact intensity barely changes outcomes (`evidence.md` §1), so a small uplift
   signal is the expected result. Kept's main lever is the due date (`evidence.md` §2, §2a).

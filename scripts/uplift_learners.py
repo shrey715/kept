@@ -7,7 +7,8 @@ The gate's Qini (kept.nba.train.evaluate) compares treated and untreated decisio
 which action, so that comparison is biased. The doubly robust Qini sorts decisions by a candidate's uplift and adds up
 AIPW pseudo-outcomes from nuisance models that no candidate uses (one outcome model with the action as an input, one
 propensity model). Candidates are compared on a validation window (15 Jul to 15 Aug, fitted before it); the chosen one
-is then scored once on the test decisions (from 15 Aug), next to the champion and the bank's strategy.
+is then scored once on the test decisions (from 15 Aug), next to the champion. There is no "bank's strategy" column: the
+bank's recommendation field is the last one shown as of the snapshot (look-ahead), not a decision-time rule.
 """
 
 from __future__ import annotations
@@ -28,7 +29,6 @@ from kept.contracts.enums import Action
 from kept.contracts.feature_registry import model_inputs
 from kept.nba.causal import CLIP, CausalUplift, Nuisance, case_bootstrap, gate_qini
 from kept.nba.causal import dr_qini as dr_qini_w
-from kept.nba.legacy import legacy_to_action
 from kept.nba.train import ACTIONS, CONTEXT_COLS, evaluate, load_rows
 from kept.nba.uplift import TLearnerUplift, _frame
 
@@ -142,14 +142,10 @@ def dr_qini(score: np.ndarray, phi: np.ndarray) -> float:
 
 def judge(models: dict[str, Any], ev: pd.DataFrame, out: Any, prop: Any) -> dict[str, dict[str, float]]:
     rng = np.random.default_rng(0)
-    legacy = ev.nba_recommendation_last.map(lambda c: (a := legacy_to_action(c)) and a.value)
     res: dict[str, dict[str, float]] = {}
     for act in ARMS:
         m, phi = pseudo(ev, out, prop, act)
         row = {"noise": float(np.std([dr_qini(rng.random(len(phi)), phi) for _ in range(100)]))}
-        row["The bank's strategy"] = dr_qini(
-            (legacy[m] == act).to_numpy(float) + 1e-9 * rng.random(m.sum()), phi
-        )
         for name, mdl in models.items():
             row[name] = dr_qini(mdl.uplift(ev[m])[act].to_numpy(), phi)
         res[act] = row
@@ -387,9 +383,11 @@ The gate's own metric on the same test decisions:
 
 - **No learner beats the live model on every arm.** The causal learner wins on some arms and loses on others, and the
   arms that win on validation don't all win on the test. The gate keeps the live model, correctly.
-- **On SMS and email, both Kept models beat the bank's strategy** on the doubly robust score. **On calls, the bank's
-  targeting scores higher** on that measure while the gate's measure says the opposite: who gets a call is the arm
-  most shaped by the bank's own choices, and the two scores disagree there.
+- **There is no comparison with the bank's targeting.** An earlier version scored the bank's recommendation field as a
+  rule; that field is the last recommendation shown as of the snapshot, so it encodes how each case ended
+  (`uplift_improvement.md`) and the column was removed.
+- **The scores are noisy and the DR evaluation here is the old one** (old label, nuisance models on the 17 inputs only);
+  `uplift_improvement.md` repeats the comparison on a clean outcome over several seeds.
 - The bank's randomised cells say contact intensity barely changes outcomes (`evidence.md` §1), so a small uplift
   signal is the expected result. Kept's main lever is the due date (`evidence.md` §2, §2a).
 """)

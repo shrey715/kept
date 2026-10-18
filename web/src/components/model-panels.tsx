@@ -7,7 +7,7 @@ import { useState } from "react";
 import { ACTION_LABEL, type Action } from "@/lib/api";
 import { SectionTitle } from "./page-header";
 
-type Arm = { decisions: number; contacts: number; cost_per_contact: number; end: number; qini: number; qini_bank: number; curve: { frac: number; model: number; bank: number; lo: number; hi: number }[] };
+type Arm = { decisions: number; contacts: number; cost_per_contact: number; end: number; qini: number; curve: { frac: number; model: number; lo: number; hi: number }[] };
 const ARM_LABEL: Record<string, string> = { call: "Calls", nudge: "Digital nudges", any: "Any contact" };
 const ARM_NOUN: Record<string, string> = { call: "call candidates", nudge: "nudge candidates", any: "contact candidates" };
 
@@ -161,8 +161,9 @@ function PromiseCard({ p }: { p: Card["promise"] }) {
   );
 }
 
-/** Qini curves per arm: extra payments as more decisions are contacted, best-ranked first, for the model, the bank's
- * strategy and random order (shaded: the 5th-95th percentile of 30 random rankings). The slider reads one point. */
+/** Qini curves per arm: extra payments as more decisions are contacted, best-ranked first, for the model and random
+ * order (shaded: the 5th-95th percentile of 30 random rankings). The slider reads one point. There is no curve for the
+ * bank's strategy: its recommendation field is the last one shown as of the snapshot, so it is not a decision-time rule. */
 function UpliftCard({ u }: { u: Card["uplift"] }) {
   const actions = Object.keys(u.importance);
   const [a, setA] = useState(actions[0]);
@@ -174,16 +175,16 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
   const W = 320;
   const H = 210;
   const pts = A ? A.curve : [];
-  const vals = pts.flatMap((c) => [c.model, c.bank, c.lo, c.hi]);
+  const vals = pts.flatMap((c) => [c.model, c.lo, c.hi]);
   const lo = Math.min(0, ...vals);
   const hi = Math.max(1, ...vals);
   const x = (v: number) => 14 + v * (W - 24);
   const y = (v: number) => H - 22 - ((v - lo) / (hi - lo)) * (H - 40);
-  const line = (k: "model" | "bank") => pts.map((c) => `${x(c.frac)},${y(c[k])}`).join(" ");
+  const line = pts.map((c) => `${x(c.frac)},${y(c.model)}`).join(" ");
   const band = pts.length ? `${pts.map((c) => `${x(c.frac)},${y(c.hi)}`).join(" ")} ${[...pts].reverse().map((c) => `${x(c.frac)},${y(c.lo)}`).join(" ")}` : "";
   const i = Math.round((at / 100) * (pts.length - 1));
   const p = pts[i];
-  const peak = pts.reduce((m, c) => (c.model > m.model ? c : m), pts[0] ?? { frac: 0, model: 0, bank: 0, lo: 0, hi: 0 });
+  const peak = pts.reduce((m, c) => (c.model > m.model ? c : m), pts[0] ?? { frac: 0, model: 0, lo: 0, hi: 0 });
   const saved = A ? Math.round((1 - at / 100) * A.contacts) : 0;
   const fmt = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString("en-CA")}`;
   return (
@@ -210,8 +211,7 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
           <svg viewBox={`0 0 ${W} ${H}`} className="k-qini" role="img" aria-label={`Qini curves for ${ARM_LABEL[arm]}`}>
             <polygon points={band} className="band" />
             <line x1={x(0)} y1={y(0)} x2={x(1)} y2={y(0)} className="axis" />
-            <motion.polyline key={arm + "b"} points={line("bank")} className="bank" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.8 }} />
-            <motion.polyline key={arm + "m"} points={line("model")} className="model" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }} />
+            <motion.polyline key={arm + "m"} points={line} className="model" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1 }} />
             {p && (
               <g>
                 <line x1={x(p.frac)} x2={x(p.frac)} y1={14} y2={H - 22} className="cursor" />
@@ -224,7 +224,6 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
           </svg>
           <Flex gap="3" wrap="wrap" mt="1" className="k-qini-legend">
             <span data-k="model">Kept&apos;s model</span>
-            <span data-k="bank">The bank&apos;s strategy</span>
             <span data-k="band">Random order (90% band)</span>
           </Flex>
           <label className="k-qini-slider">
@@ -234,16 +233,15 @@ function UpliftCard({ u }: { u: Card["uplift"] }) {
             <input type="range" min={0} max={100} step={5} value={at} onChange={(e) => setAt(Number(e.target.value))} aria-label="Share contacted" />
           </label>
           {p && (
-            <Grid columns="3" gap="2" mt="2">
+            <Grid columns="2" gap="2" mt="2">
               <Stat label="Kept's model" value={fmt(p.model)} note="extra payments" />
-              <Stat label="The bank's strategy" value={fmt(p.bank)} note="extra payments" />
               <Stat label="Contacts saved" value={saved.toLocaleString("en-CA")} note={`about $${Math.round(saved * A.cost_per_contact).toLocaleString("en-CA")} in contact cost`} />
             </Grid>
           )}
         </>
       )}
       <Text as="p" size="1" color="gray" mt="2">
-        Measured on decisions the model never saw, against waiting. Actions were chosen by the bank, so this compares what happened, not a trial; the gate checks every new model against noise before it goes live.
+        Measured on decisions the model never saw, against waiting. Actions were chosen by the bank, so this compares what happened, not a trial, and it is not corrected for who the bank chose to contact; the gate checks every new model against noise before it goes live.
       </Text>
       <Flex gap="2" mt="3" wrap="wrap">
         {actions.map((k) => (

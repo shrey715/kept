@@ -85,22 +85,25 @@ at promise time, but in this data a full-balance promise is all but certain to b
 That is too clean to be real behaviour, so we treat it as an artefact of how the data was generated and **headline the
 leak-free model**. Kept's promise model drops this feature (phase 2).
 
-## 4. Kept's contact policy, estimated off-policy
+## 4. Kept's contact policy against what the bank did, off-policy
 
-| Policy (on the 141,350 decisions from 15 Aug) | Paid within 14 days: doubly robust | Inverse propensity |
-|---|---:|---:|
-| What the bank actually did | 29.1% (observed) | |
-| The bank's strategy recommendation (60% of decisions) | 32.5% [32.1, 32.9] | 32.4% [31.2, 33.5] |
-| Kept's model, on those same decisions (60% of decisions) | 38.6% [38.1, 39.1] | 42.0% [40.1, 43.7] |
-| Kept's model: the action it scores best | 37.2% [36.8, 37.6] | 39.7% [38.2, 41.1] |
-| Wait: contact nobody | 22.4% [21.2, 23.4] | 22.4% [22.0, 22.8] |
+| Kept's model against what the bank did (decisions from 15 Aug) | Decisions kept | Bank, observed | Kept, doubly robust | Kept minus bank, per 1,000 decisions [95% CI] | Actions changed |
+|---|---:|---:|---:|---:|---:|
+| Clean outcome: account-sourced payments, covered cases | 54,363 of 124,042 (44%) | 13.5% [13.1, 14.0] | 13.5% [12.6, 14.4] | **0** [-7, +8] | 84% |
+| Same rows, old label (payments flagged on the contact row included) | 54,363 of 124,042 (44%) | 22.1% [21.6, 22.6] | 26.3% [25.0, 27.4] | **+42** [+31, +52] | 84% |
+| Old label, every decision with a known outcome (as first published) | 65,051 of 141,350 (46%) | 33.8% [33.2, 34.4] | 37.5% [36.2, 38.7] | **+37** [+27, +45] | 84% |
 
-Paired on the same decisions, Kept's choice against the bank's: **+61 customers paying within 14 days per 1,000 decisions** [+55, +67] (doubly robust).
-
-Which action to take wasn't randomised (the bank's strategy chose it), so these are estimates: the doubly robust one
-uses the live uplift model plus a model of how the bank picked actions; the inverse-propensity one uses only the latter.
-They agree. The doubly robust number for Kept leans optimistic, because Kept picks the action its own outcome model
-scores best. A randomised pilot cell is the way to confirm it; the bank already runs four.
+Read the first row. On the clean outcome, **Kept's choice of action is no better than what the bank did**: the interval
+on the difference includes zero. The bigger gain on the old label (rows 2 and 3) comes from SMS and email payments that
+exist only as flags on the contact row and leave no trace in the account records (`uplift_improvement.md`), so it is not
+evidence of a better choice of whom to contact. Which action to take wasn't randomised (the bank chose it), so every
+number here is an estimate: outcome models per action and a model of how the bank chose, cross-fitted by case, on the
+decisions where the bank had a real chance (5% to 95%) of choosing Kept's action; the bank's value is simply what
+happened on those same decisions. The earlier version of this section compared Kept's choice with the bank's
+recommendation field (+61 per 1,000, 38.6-42.0% against 32.4-32.5%); that field is the last recommendation shown as of
+the snapshot, so it encodes how each case ended, and the comparison is withdrawn. **What Kept can claim measured is
+timing** (§2, and the best hour to call, `docs/reports/best_hour.md`), not a better choice of whom to contact; a randomised
+pilot cell is the way to find out whether targeting adds anything.
 
 ## 5. One primary metric, and the guards
 
@@ -169,8 +172,8 @@ on the 45 days before the cut; the test promises were scored once.
 |---|---:|---:|---:|---:|
 | Bank's ptp_break v2.1 | 0.702 | — | 0.695 | — |
 | Kept, 6 features (as shipped) | 0.625 | -7.8 [-9.4, -6.1] | 0.601 | -9.4 [-11.0, -7.8] |
-| Kept, wide: LightGBM | 0.696 | -0.6 [-2.2, +0.9] | 0.690 | -0.5 [-2.1, +1.1] |
-| Kept, wide: LightGBM + random forest, averaged ranks | 0.697 | -0.5 [-1.9, +1.0] | 0.694 | -0.1 [-1.8, +1.5] |
+| Kept, wide: LightGBM | 0.696 | -0.6 [-2.3, +0.8] | 0.690 | -0.5 [-2.1, +1.1] |
+| Kept, wide: LightGBM + random forest, averaged ranks | 0.697 | -0.5 [-1.9, +1.0] | 0.694 | -0.1 [-1.7, +1.6] |
 | Kept's wide model and the bank's score, averaged ranks | 0.764 | +6.1 [+5.1, +6.9] | 0.757 | +6.2 [+5.3, +7.2] |
 
 79 inputs, trained on the 164,363 promises made before the cut, recent ones weighted more (half-life 30 days).

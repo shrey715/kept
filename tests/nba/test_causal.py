@@ -72,3 +72,24 @@ def test_study_features_are_clean() -> None:
     assert_no_denied(pd.DataFrame(columns=cols))
     c = load_data_contract()
     assert not set(cols) & (c.protected_attributes | c.proxy_attributes)
+
+
+def test_policy_value_recovers_a_known_policy_and_logged_value() -> None:
+    """Two actions, the logged choice confounded with x, the best action flips at x = 0.5: the best policy beats the logged
+    actions by about its true margin, and a policy equal to the logged actions has gap zero."""
+    pytest.importorskip("lightgbm")
+    from kept.nba.causal import policy_value
+
+    rng = np.random.default_rng(0)
+    n = 12_000
+    x = rng.uniform(0, 1, n)
+    a = np.where(rng.uniform(size=n) < 0.15 + 0.7 * x, "b", "a")
+    p_y = np.where(a == "b", 0.2 + 0.5 * (x > 0.5), 0.5 - 0.3 * (x > 0.5))
+    df = pd.DataFrame({"case_id": np.arange(n), "action": a, "y": (rng.uniform(size=n) < p_y).astype(int), "x": x})
+    best = np.where(x > 0.5, "b", "a")
+    v = policy_value(df, ["x"], best, "y")
+    v = v[(v.e_pi >= 0.05) & (v.e_pi <= 0.95)]
+    true_gap = (np.where(best == "b", 0.7, 0.5) - p_y)[v.index].mean()
+    assert (v.psi - v.y).mean() == pytest.approx(true_gap, abs=0.03)
+    same = policy_value(df, ["x"], a, "y")
+    assert (same.psi - same.y).mean() == pytest.approx(0.0, abs=0.01)

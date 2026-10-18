@@ -88,13 +88,13 @@ NUDGES = ("sms_payment_link", "email", "push")
 
 def arm_curves(late, lift, contacts, rng, steps: int = 41, draws: int = 30) -> dict[str, object]:  # type: ignore[no-untyped-def]
     """Per arm (calls, digital nudges, any contact) against waiting: extra payments as the share contacted grows,
-    for the model's ranking, the bank's strategy (its recommendation, ties broken at random) and random order
-    (the 5th-95th percentile band of 30 random rankings). Gains are payments, as in qini_curve."""
+    for the model's ranking and random order (the 5th-95th percentile band of 30 random rankings). Gains are payments,
+    as in qini_curve. There is no curve for "the bank's strategy": the only per-case field for it,
+    collections_cases.nba_recommendation_last, is the last recommendation as of the snapshot, so it encodes how the case
+    ended and is not a decision-time rule (docs/reports/uplift_improvement.md)."""
     from kept.contracts.enums import Action
     from kept.nba.engine import DEFAULT_CONTACT_COST
-    from kept.nba.legacy import legacy_to_action
 
-    legacy = late.nba_recommendation_last.map(lambda c: (x := legacy_to_action(c)) and x.value).to_numpy()
     wait = (late.action == "wait").to_numpy()
     y_all = late.paid_14d.to_numpy(dtype=int)
     out: dict[str, object] = {}
@@ -108,27 +108,20 @@ def arm_curves(late, lift, contacts, rng, steps: int = 41, draws: int = 30) -> d
         if not t.any() or t.all():
             continue
         model = lift[list(members)].max(axis=1).to_numpy()[both]
-        bank = np.isin(legacy[both], members).astype(float) + 1e-9 * rng.random(both.sum())
         frac, g_model = qini_curve(model, t, y)
-        _, g_bank = qini_curve(bank, t, y)
         pick = np.linspace(0, len(frac) - 1, steps).astype(int)
         rand = np.array([qini_curve(rng.random(len(t)), t, y)[1][pick] for _ in range(draws)])
         lo, hi = np.percentile(rand, [5, 95], axis=0)
         mix = late.action[arm].value_counts()
         cost = sum(float(DEFAULT_CONTACT_COST[Action(a)]) * n for a, n in mix.items()) / int(t.sum())
-        recommended = np.isin(legacy[both], members)  # where the bank's strategy picks this arm
         out[name] = {
-            "bank_recommended": int(recommended.sum()),
-            # of those, the share the model expects to add under half a point of payment chance
-            "bank_low_uplift_share": float((model[recommended] < 0.005).mean()) if recommended.any() else None,
             "decisions": int(both.sum()),
             "contacts": int(t.sum()),
             "cost_per_contact": round(cost, 4),  # the engine's contact costs, over this arm's actual mix
             "end": float(g_model[-1]),
             "qini": float(qini_coefficient(model, t, y)),
-            "qini_bank": float(qini_coefficient(bank, t, y)),
             "curve": [
-                {"frac": float(frac[i]), "model": float(g_model[i]), "bank": float(g_bank[i]), "lo": float(a), "hi": float(b)}
+                {"frac": float(frac[i]), "model": float(g_model[i]), "lo": float(a), "hi": float(b)}
                 for i, a, b in zip(pick, lo, hi, strict=True)
             ],
         }
@@ -223,6 +216,13 @@ def to_markdown(card: dict) -> str:  # type: ignore[type-arg]
         "",
         "The signal is small and the gate treats it that way: a challenger replaces the champion only if it beats it "
         "by more than the noise on held-out decisions (`docs/reports/tuning.md`: a 40-candidate search did not).",
+        "",
+        "Two cautions from `docs/reports/uplift_improvement.md`. The gate's noise is the spread under random rankings; "
+        "retraining on a different seed moves the call Qini by more than that. And there is no comparison with the "
+        "bank's targeting: the bank's recommendation field is the last one shown as of the snapshot, so it encodes how "
+        "each case ended and is not a decision-time rule. On a clean outcome (account-sourced payments) with doubly "
+        "robust scoring, the call ranking adds less than calling every call decision; contact itself barely moves "
+        "payment, and call timing is where the evidence is stronger.",
         "",
         "**Strongest inputs per action (mean |TreeSHAP|, percentage points)**",
         "",
