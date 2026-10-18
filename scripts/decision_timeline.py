@@ -1,5 +1,5 @@
-"""The decision timeline for docs/reports/decisions.md: each major design decision on the day it landed, with the
-measured number that triggered it (from git history and the reports named in the register).
+"""The decision timeline for docs/reports/decisions.md: each major design decision on the day it landed,
+with the measured number that triggered it (from git history and the reports named in the register).
 
     uv run python scripts/decision_timeline.py      # -> docs/reports/figures/dec_timeline.png
 """
@@ -12,19 +12,54 @@ from reportlib import BLUE, INK, KEPT, MUTED, plt, save, style, tidy
 
 # (day, decision, the number that triggered it, kept or switched)
 DECISIONS = [
-    (date(2026, 10, 3), "T-learner uplift on randomly assigned cases", "Qini against random rankings", "kept"),
+    (
+        date(2026, 10, 3),
+        "T-learner uplift on randomly assigned cases",
+        "Qini against random rankings",
+        "kept",
+    ),
     (date(2026, 10, 3), "Exact keys, then Splink, then a steward", "precision 99.3%, recall 198/200", "kept"),
     (date(2026, 10, 3), "Splink trained on a 1-in-5 sample", "all 3.84M keys ran out of 30 GB", "switched"),
     (date(2026, 10, 4), "Champion/challenger gate on Qini", "tuned model lost, 0.0029 vs 0.0073", "kept"),
-    (date(2026, 10, 9), "Leaky promise feature dropped", "AUC 0.92 was amount_ratio; honest 0.63", "switched"),
+    (
+        date(2026, 10, 9),
+        "Leaky promise feature dropped",
+        "AUC 0.92 was amount_ratio; honest 0.63",
+        "switched",
+    ),
     (date(2026, 10, 10), "Whisper large-v3-turbo on calls", "WER 9.4% vs the bank's 12.4%", "kept"),
     (date(2026, 10, 12), "Schema-constrained extraction replies", "malformed replies 152 to 0", "switched"),
-    (date(2026, 10, 12), "Hybrid policy search (BM25 + bge-m3)", "French and paraphrased questions", "switched"),
-    (date(2026, 10, 14), "Local models only, on llama.cpp", "Ollama cut the prompt to 4,096 tokens", "switched"),
+    (
+        date(2026, 10, 12),
+        "Hybrid policy search (BM25 + bge-m3)",
+        "French MRR 0.26 BM25 only, 0.56 hybrid",
+        "switched",
+    ),
+    (
+        date(2026, 10, 14),
+        "Local models only, on llama.cpp",
+        "Ollama cut the prompt to 4,096 tokens",
+        "switched",
+    ),
     (date(2026, 10, 15), "Qwen3.8-27B for every LLM call", "drill 27/30 vs 22/30 on Gemma 3 12B", "switched"),
-    (date(2026, 10, 15), "Promises due on payday, not the day after", "+7.7 pts kept vs 1-3 days before", "switched"),
-    (date(2026, 10, 15), "No new hardship review on a running plan", "Red cards 38,187 to 33,646", "switched"),
-    (date(2026, 10, 15), "Calls booked into hours with capacity", "56% of calls over capacity to 0", "switched"),
+    (
+        date(2026, 10, 15),
+        "Promises due on payday, not the day after",
+        "+7.7 pts kept vs 1-3 days before",
+        "switched",
+    ),
+    (
+        date(2026, 10, 15),
+        "No new hardship review on a running plan",
+        "Red cards 38,187 to 33,646",
+        "switched",
+    ),
+    (
+        date(2026, 10, 15),
+        "Calls booked into hours with capacity",
+        "56% of calls over capacity to 0",
+        "switched",
+    ),
 ]
 
 

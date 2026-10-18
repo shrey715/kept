@@ -30,7 +30,8 @@ More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs
 
 ## Results (real data, 12 Oct)
 
-Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one.
+Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one. Every design decision, the alternatives we measured and
+the number that decided it are in [`docs/reports/decisions.md`](docs/reports/decisions.md).
 
 | Area | Result |
 |---|---|
@@ -40,7 +41,7 @@ Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has t
 | Privacy | 785,594 notes and calls redacted before any model, **0** leaks in a full scan |
 | Text | **every** extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00 / 1.00** ([gate](docs/reports/extraction_gate.md)) |
 | Voice | Whisper, local: word error rate **9.4%** vs the bank's speech-to-text at 12.4%; hardship from the recording itself F1 **0.98** ([voice](docs/reports/voice_wer.md)) |
-| Models | leaky promise feature found and dropped (AUC 0.92 → 0.63, calibrated within 7 pts); a wide model matches the bank's score (0.697 vs 0.702), and the two averaged reach 0.764 (+6.1 points, 95% CI 5.1–6.9; [evidence](docs/reports/evidence.md) §3, §6, §8) |
+| Models | leaky promise feature found and dropped (AUC 0.92 → 0.63, calibrated within 7 pts); a wide model matches the bank's score (0.697 vs 0.702), and the two averaged reach 0.763 (+6.1 points, 95% CI 5.1–6.9; [evidence](docs/reports/evidence.md) §3, §6, §8) |
 | Decisions | **96,000** cards a night; payday-dated plans on cards; the pay link asks the customer's payday when the bank doesn't know it |
 | Ask | released dev split **21 of 21**; stress suite **35 of 42**; unseen drill **26 of 30**; refusals all right; hybrid search finds French sections; every answer cites its SQL or source ([accuracy](docs/reports/ask_accuracy.md)) |
 | Fairness | any-contact ratio **0.87–1.00** on every protected attribute; scrambling all of them changes **0 of 96,000** decisions ([fairness](docs/reports/fairness_report.pdf)) |
@@ -227,6 +228,8 @@ cd web && pnpm lint && npx tsc --noEmit
 ```
 
 ## What changed from the design, and why
+
+The evidence behind each change: [`docs/reports/decisions.md`](docs/reports/decisions.md).
 
 - **UI (D):** a Next.js app with Radix Themes instead of the plan's single static page, so the
   demo covers every role's flow (queue, approvals, audit, Ask) and the guided script. It needs

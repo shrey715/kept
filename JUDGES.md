@@ -29,7 +29,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
 | It is the payday: due on payday vs 1–3 days either side **+7.7 to +8.3 pts** kept; the same customer on vs off payday **+4.0** (CI 1.1–7.4); fake paydays show nothing | evidence §2a | same |
 | The bank's own A/B cells can't tell its strategies apart | evidence §1 | same |
 | Kept's contact policy, off-policy: **38.6–42.0%** paid in 14 days vs the bank strategy's **32.4–32.5%** on the same decisions | evidence §4 | same |
-| A leaky feature found and removed (promise AUC 0.92 → 0.63), and a wide model on the bank's kinds of inputs matches the bank's score alone (0.697 vs 0.702, CI includes zero); averaged with it, 0.764 (+6.1 AUC points, 95% CI 5.1–6.9) | evidence §3, §6, §8 | same |
+| A leaky feature found and removed (promise AUC 0.92 → 0.63), and a wide model on the bank's kinds of inputs matches the bank's score alone (0.697 vs 0.702, CI includes zero); averaged with it, 0.763 (+6.1 AUC points, 95% CI 5.1–6.9) | evidence §3, §6, §8 | same |
 | Every extracted field passes F1 ≥ 0.80 on held-out notes and calls; hardship recall **1.00** | [`docs/reports/extraction_gate.md`](docs/reports/extraction_gate.md) | `uv run python scripts/eval_extraction.py --source transcripts --split holdout` |
 | Whisper on 2,000 calls: **9.4%** word error rate vs the bank's speech-to-text at 12.4%, even across noise and accents | [`docs/reports/voice_wer.md`](docs/reports/voice_wer.md) | `uv run python scripts/voice_wer.py --report-only` |
 | One person per customer: precision **99.3%** (300 links by hand), recall **99%** (198 of 200 planted duplicates, no wrong merges) | [`QUALITY_REPORT.pdf`](QUALITY_REPORT.pdf), [`docs/reports/identity_recall.md`](docs/reports/identity_recall.md) | `uv run python scripts/identity_injection.py` |
@@ -60,7 +60,7 @@ recorded call also has a **Calls** panel: the recording and its transcript, with
   small numbers or explained by recorded hardship; a minimum-events rule marks four more as too few to judge.
 - **Kept's shipped promise model alone ranks worse than the bank's** (AUC 0.625 vs 0.702). A wider model on the bank's
   kinds of inputs (repayment record, balances, bureau, cash flow, payroll) matches the bank's score (0.697, gap −0.5,
-  interval −1.9 to +1.0) and, averaged with it, reaches 0.764 (+6.1, interval 5.1–6.9), evidence §8. It is not wired
+  interval −1.9 to +1.0) and, averaged with it, reaches 0.763 (+6.1, interval 5.1–6.9), evidence §8. It is not wired
   into the cards yet: the cards still use the six-feature model.
 - **Sign-in is a demo persona picker.** The API enforces every role rule itself (case scope, aggregates only for
   analysts, masking for everyone but compliance), but it takes the caller's role from the request. In production the
