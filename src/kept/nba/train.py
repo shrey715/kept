@@ -41,16 +41,38 @@ def pool_nudges(rows: pd.DataFrame) -> pd.DataFrame:
     return rows.assign(action=rows.action.replace(nudge))
 
 
-def load_rows(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+# decision context (features_train.decision_context), offline studies only: what the bank knew before deciding
+CONTEXT_COLS = [
+    "pending_ptp", "ptp_due_in_days", "n_out_7d", "n_out_30d", "n_rpc_30d",
+    "days_since_contact", "last_rpc", "last_ptp_made", "paid_prev7", "weekday",
+]  # fmt: skip
+
+
+def load_rows(
+    conn: duckdb.DuckDBPyConnection, *, source: str = "training_rows", extras: bool = False
+) -> pd.DataFrame:
+    """The live model's rows. extras=True (offline studies) adds the account-sourced outcomes (paid_clean_14d,
+    paid_amt_14d, covered), cured_30d and the context at the decision (features_train.decision_context). With
+    extras every row is kept and `covered` says whether its "no" can be trusted; "training_weeks" is the
+    one-row-per-case-landmark table."""
     cols = ", ".join(f"f.{n}" for n in model_inputs())
+    more = ""
+    if extras:
+        more = """, t.paid_clean_14d, t.paid_amt_14d, t.covered, t.paid_14d_known,
+               coalesce(c.cure_flag and c.cure_date <= cast(t.label_at as date) + 30, false) as cured_30d,
+               x.pending_ptp, x.ptp_due_in_days, x.n_out_7d, x.n_out_30d, x.n_rpc_30d, x.days_since_contact,
+               x.last_rpc, x.last_ptp_made, x.paid_prev7, x.weekday, c.primary_product, t.crm_customer_id"""
+    join_x = "join features_train.decision_context x using (decision_id)" if extras else ""
+    where = "where t.paid_14d_known" if not extras else ""
     return conn.sql(f"""
         select t.decision_id, t.case_id, t.decision_at, t.action, t.paid_14d,
-               c.nba_recommendation_last, {cols}
-        from features_train.training_rows t
+               c.nba_recommendation_last, {cols}{more}
+        from features_train.{source} t
         join features_train.case_features f
             on f.case_id = t.case_id and f.as_of = t.decision_at - interval 1 second
         join silver.collections_cases c on c.case_id = t.case_id
-        where t.paid_14d_known
+        {join_x}
+        {where}
         order by t.decision_at, t.decision_id""").df()
 
 
