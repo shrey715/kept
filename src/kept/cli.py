@@ -397,6 +397,8 @@ NIGHTLY = (
     ("extract", ["extract", "--new"]),  # C: tonight's notes -> text.extractions
     ("features", ["features"]),  # rebuilds text_signals, then features, Feast
     ("parity", ["parity"]),
+    # the call booking's model (`kept score` uses it when it exists): retrained when missing or a week old
+    ("train-best-hour", ["train-best-hour", "--if-older-than", "7"]),
     ("score", ["score"]),
     ("invariance", ["invariance"]),  # 0 of tonight's cards may change when protected attributes are scrambled
 )
@@ -508,10 +510,17 @@ def train_promises(args: argparse.Namespace) -> int:
 
 def train_best_hour(args: argparse.Namespace) -> int:
     """P(right-party contact | local hour, weekday, case inputs): behind `kept score --best-hour`."""
+    import time
+
     import duckdb
 
     from kept.nba import best_hour as bh
 
+    if args.if_older_than is not None and args.out.exists():
+        age = (time.time() - args.out.stat().st_mtime) / 86400
+        if age < args.if_older_than:
+            print(f"{args.out} is {age:.1f} days old (limit {args.if_older_than:g}): not retraining")
+            return 0
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
         conn.execute("set memory_limit = '3GB'; set threads = 2")
         rows = bh.load(conn)
@@ -883,15 +892,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             p.add_argument(
                 "--best-hour",
-                action="store_true",
-                default=os.environ.get("KEPT_BEST_HOUR") == "1",
-                help="book calls into the likeliest-to-answer hour, same day (env KEPT_BEST_HOUR=1)",
+                action=argparse.BooleanOptionalAction,
+                default={"0": False, "1": True}.get(os.environ.get("KEPT_BEST_HOUR", "")),
+                help="book calls into the likeliest-to-answer hour of their day. Default: on when "
+                "models/best_hour.pkl exists. --no-best-hour (or KEPT_BEST_HOUR=0) books the earliest slot",
             )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
         if name == "train-best-hour":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "best_hour.pkl")
             p.add_argument("--cutoff", type=datetime.fromisoformat, default=datetime(2026, 8, 15))
+            p.add_argument(
+                "--if-older-than",
+                type=float,
+                default=None,
+                metavar="DAYS",
+                help="do nothing when --out exists and is newer than this (the nightly passes 7)",
+            )
         if name == "train":
             p.add_argument(
                 "--cutoff",

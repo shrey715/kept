@@ -50,7 +50,7 @@ def test_a_failing_gate_publishes_nothing(tmp_path: Path) -> None:
 def test_resume_and_skip(tmp_path: Path) -> None:
     calls, run = _run()
     assert nightly(argparse.Namespace(start="extract", skip=["extract"]), run=run, exports=tmp_path) == 0
-    assert calls == [["features"], ["parity"], ["score"], ["invariance"]]
+    assert calls == [["features"], ["parity"], dict(NIGHTLY)["train-best-hour"], ["score"], ["invariance"]]
     assert nightly(argparse.Namespace(start="nope", skip=[]), run=run, exports=tmp_path) == 2
 
 

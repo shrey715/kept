@@ -131,7 +131,9 @@ def test_trained_model_prefers_the_evening_when_the_data_say_so() -> None:
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr("kept.nba.best_hour.model_inputs", lambda: [*model_inputs(), "brand_new_input"])
         assert (model.p_rpc(wider.iloc[[0]], [(9, 2), (18, 2)]) == p).all()
-        assert (model.p_rows(wider, [9, 18], [2, 2]) == model.p_rows(rows.iloc[[0, 0]], [9, 18], [2, 2])).all()
+        assert (
+            model.p_rows(wider, [9, 18], [2, 2]) == model.p_rows(rows.iloc[[0, 0]], [9, 18], [2, 2])
+        ).all()
         del model._columns  # a pickle from before the columns were stored uses the registry's current list
         with pytest.raises(KeyError):  # ... which here has the extra input, absent from `rows`
             model.p_rpc(rows.iloc[[0]], [(9, 2)])
@@ -187,3 +189,47 @@ def test_the_card_says_when_best_hour_moved_the_call(make_ctx: Any, on: bool) ->
         assert "19:00" in card.headline
     else:
         assert local.hour < 19 and "Booked" not in (card.why_not_text or "")
+
+
+def test_booking_is_on_by_default_when_the_model_exists(tmp_path: Any) -> None:
+    from kept.nba.best_hour import BestHourModel, save
+    from kept.nba.score import _hour_model
+
+    path = tmp_path / "best_hour.pkl"
+    assert _hour_model(None, path) is None and _hour_model(False, path) is None  # no model: the earliest slot
+    with pytest.raises(FileNotFoundError):
+        _hour_model(True, path)  # asked for it explicitly: say so
+    save(BestHourModel(None, "v", ["a"]), path)
+    assert _hour_model(None, path) is not None and _hour_model(True, path) is not None
+    assert _hour_model(False, path) is None  # --no-best-hour / KEPT_BEST_HOUR=0
+
+
+def test_the_nightly_retrains_the_model_weekly_before_scoring(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import argparse
+    import os
+    import time
+
+    import duckdb
+
+    from kept import cli
+
+    names = [n for n, _ in cli.NIGHTLY]
+    assert names.index("parity") < names.index("train-best-hour") < names.index("score")
+    argv = dict(cli.NIGHTLY)["train-best-hour"]
+    assert argv[-2:] == ["--if-older-than", "7"]
+
+    out = tmp_path / "best_hour.pkl"
+    out.write_bytes(b"x")
+    args = argparse.Namespace(out=out, if_older_than=7.0, cutoff=datetime(2026, 8, 15))
+    assert cli.train_best_hour(args) == 0 and out.read_bytes() == b"x"  # fresh: left alone
+
+    def opened(*a: Any, **k: Any) -> None:
+        raise RuntimeError("opened the warehouse")
+
+    monkeypatch.setattr(duckdb, "connect", opened)
+    old = time.time() - 8 * 86400
+    os.utime(out, (old, old))
+    with pytest.raises(RuntimeError, match="opened the warehouse"):
+        cli.train_best_hour(args)  # a week old: it goes to retrain
