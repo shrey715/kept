@@ -244,7 +244,10 @@ def dr_compare(
         ok = ((o.e >= CLIP[0]) & (o.e <= CLIP[1])).to_numpy()
         frame = ev[mask][ok].reset_index(drop=True)
         phi = o.phi.to_numpy()[ok]
-        res = _paired(champs, challs, frame, [k], lambda score, _k, w, phi=phi: dr_qini(score, phi, w), reps=reps, seed=seed)
+        def stat(score: np.ndarray, _k: str, w: np.ndarray, phi: np.ndarray = phi) -> float:
+            return dr_qini(score, phi, w)
+
+        res = _paired(champs, challs, frame, [k], stat, reps=reps, seed=seed)
         out[k] = {**res[k], "rows": float(len(frame)), "overlap": float(ok.mean())}
     return out
 
