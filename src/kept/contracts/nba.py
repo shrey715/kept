@@ -223,6 +223,7 @@ class NBACard(_Frozen):
     similar_cases_text: str | None = None  # "(descriptive, not causal)"
     legacy_text: str | None = None  # the bank's current strategy for this case, next to ours
     why_not_text: str | None = None  # the chosen action against the runner-up: payment chance, net value
+    booking_text: str | None = None  # the call was booked later in the day: they likelier answer then
     checks: tuple[CheckResult, ...] = ()
     hardship_banner: str | None = None
     hard_stop: HardStopResult | None = None

@@ -84,6 +84,11 @@ export function NbaCard({ card, balance }: { card: NBACard; balance?: number }) 
                   ? `${ACTION_LABEL[p.action]} · approve by ${when(p.expires_at)}`
                   : !card.hard_stop?.blocked && card.no_action_reason}
               </Text>
+              {card.booking_text && (
+                <Text as="p" color="gray" size="1" mt="1">
+                  {card.booking_text}
+                </Text>
+              )}
             </motion.div>
           </AnimatePresence>
           {p?.sizing && (
