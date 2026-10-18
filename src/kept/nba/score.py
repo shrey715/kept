@@ -260,6 +260,16 @@ def call_capacity(
     return CallCapacity(units, tz=OPERATING_TZ, length=WINDOW, best_hour=best_hour)
 
 
+def _hour_model(
+    best_hour: bool | None, path: Path = EXPORT_DIR / "models" / "best_hour.pkl"
+) -> BestHourModel | None:
+    """The booking model per the switch: None = use it if it exists, True = it must exist, False = off."""
+    model = None if best_hour is False else load_best_hour(path)
+    if model is None and best_hour:
+        raise FileNotFoundError("--best-hour needs models/best_hour.pkl: run `kept train-best-hour`")
+    return model
+
+
 def score(
     warehouse: Path | str,
     *,
@@ -267,15 +277,12 @@ def score(
     holdout_salt: str,
     now: datetime,
     audit_log: DuckDBAuditLog,
-    best_hour: bool = False,
+    best_hour: bool | None = None,
 ) -> pd.DataFrame:
     """Score every open case and write nba.cards. Returns the cards table. best_hour: book each call into the
-    hour the customer likeliest answers (models/best_hour.pkl from `kept train-best-hour`; none: an error)."""
-    hour_model = None
-    if best_hour:
-        hour_model = load_best_hour(EXPORT_DIR / "models" / "best_hour.pkl")
-        if hour_model is None:
-            raise FileNotFoundError("--best-hour needs models/best_hour.pkl: run `kept train-best-hour`")
+    hour the customer likeliest answers (models/best_hour.pkl, `kept train-best-hour`). None (the default): on
+    when that model exists; True: on, an error without it; False: the earliest slot."""
+    hour_model = _hour_model(best_hour)
     with duckdb.connect(str(warehouse), read_only=True) as conn:
         bulk = load(conn)
         calls = call_capacity(conn, hour_model)

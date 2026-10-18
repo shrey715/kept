@@ -133,6 +133,18 @@ class FeatureVector(BaseModel):
     cease_request_flag: bool | None = None
     third_party_present_flag: bool | None = None
 
+    # What the bank knew at as_of (recent contacts, open promise, recent payment, weekday)
+    pending_ptp: bool | None = None
+    ptp_due_in_days: int | None = None
+    n_out_7d: int | None = None
+    n_out_30d: int | None = None
+    n_rpc_30d: int | None = None
+    days_since_contact: float | None = None
+    last_rpc: bool | None = None
+    last_ptp_made: bool | None = None
+    paid_prev7: bool | None = None
+    weekday: int | None = None
+
     @field_validator("as_of")
     @classmethod
     def _aware(cls, v: datetime) -> datetime:

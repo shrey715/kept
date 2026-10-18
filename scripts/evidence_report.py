@@ -305,15 +305,14 @@ def off_policy(con: duckdb.DuckDBPyConnection) -> str:
     resample whole cases. The bank's own recommendation field is not used: it is look-ahead (docs/reports/uplift_improvement.md)."""
     import pickle
 
-    from kept.contracts.feature_registry import model_inputs
     from kept.nba.causal import CLIP, case_bootstrap, policy_value
-    from kept.nba.train import CONTEXT_COLS, load_rows
+    from kept.nba.train import CONTEXT_COLS, base_inputs, load_rows
 
     model = pickle.loads((REPO / "data" / "exports" / "models" / "uplift.pkl").read_bytes())
     rows = load_rows(con, extras=True)
     for c in ("last_rpc", "last_ptp_made"):
         rows[c] = rows[c].astype(float)
-    cols = [*model_inputs(), *CONTEXT_COLS]
+    cols = [*base_inputs(), *CONTEXT_COLS]
     late = (rows.decision_at >= TRAIN_CUTOFF).to_numpy()
     pi = np.full(len(rows), "wait", dtype=object)
     pi[late] = model.predict_proba(rows[late][list(model._columns)]).idxmax(axis=1).to_numpy()

@@ -397,6 +397,8 @@ NIGHTLY = (
     ("extract", ["extract", "--new"]),  # C: tonight's notes -> text.extractions
     ("features", ["features"]),  # rebuilds text_signals, then features, Feast
     ("parity", ["parity"]),
+    # the call booking's model (`kept score` uses it when it exists): retrained when missing or a week old
+    ("train-best-hour", ["train-best-hour", "--if-older-than", "7"]),
     ("score", ["score"]),
     ("invariance", ["invariance"]),  # 0 of tonight's cards may change when protected attributes are scrambled
 )
@@ -508,10 +510,17 @@ def train_promises(args: argparse.Namespace) -> int:
 
 def train_best_hour(args: argparse.Namespace) -> int:
     """P(right-party contact | local hour, weekday, case inputs): behind `kept score --best-hour`."""
+    import time
+
     import duckdb
 
     from kept.nba import best_hour as bh
 
+    if args.if_older_than is not None and args.out.exists():
+        age = (time.time() - args.out.stat().st_mtime) / 86400
+        if age < args.if_older_than:
+            print(f"{args.out} is {age:.1f} days old (limit {args.if_older_than:g}): not retraining")
+            return 0
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
         conn.execute("set memory_limit = '3GB'; set threads = 2")
         rows = bh.load(conn)
@@ -525,6 +534,8 @@ def train_best_hour(args: argparse.Namespace) -> int:
 
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
+    import json
+
     import duckdb
     from dotenv import load_dotenv
 
@@ -541,12 +552,20 @@ def train(args: argparse.Namespace) -> int:
             seed=args.seed,
             force=args.promote,
             pooled=args.pool_nudges,
+            champion=args.champion,
+            seeds=args.seeds,
+            policy=not args.no_policy_value,
         )
     finally:
         conn.close()
     for k, v in result.items():
         print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
-    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {args.out}")
+    report = EXPORT_DIR / "reports" / "train_gate.json"  # the gate's numbers, for reports and the deck
+    report.parent.mkdir(parents=True, exist_ok=True)
+    meta = {"cutoff": args.cutoff.isoformat(), "out": str(args.out)}
+    report.write_text(json.dumps({**result, **meta}, indent=1))
+    held = args.champion or args.out
+    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {held}")
     return 0
 
 
@@ -883,15 +902,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             p.add_argument(
                 "--best-hour",
-                action="store_true",
-                default=os.environ.get("KEPT_BEST_HOUR") == "1",
-                help="book calls into the likeliest-to-answer hour, same day (env KEPT_BEST_HOUR=1)",
+                action=argparse.BooleanOptionalAction,
+                default={"0": False, "1": True}.get(os.environ.get("KEPT_BEST_HOUR", "")),
+                help="book calls into the likeliest-to-answer hour of their day. Default: on when "
+                "models/best_hour.pkl exists. --no-best-hour (or KEPT_BEST_HOUR=0) books the earliest slot",
             )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
         if name == "train-best-hour":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "best_hour.pkl")
             p.add_argument("--cutoff", type=datetime.fromisoformat, default=datetime(2026, 8, 15))
+            p.add_argument(
+                "--if-older-than",
+                type=float,
+                default=None,
+                metavar="DAYS",
+                help="do nothing when --out exists and is newer than this (the nightly passes 7)",
+            )
         if name == "train":
             p.add_argument(
                 "--cutoff",
@@ -905,6 +932,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "--promote", action="store_true", help="make the new model the champion without the gate"
             )
             p.add_argument("--pool-nudges", action="store_true", help="one arm for email, push and SMS (#80)")
+            p.add_argument(
+                "--champion",
+                type=Path,
+                default=None,
+                help="judge against this model instead of --out, so --out can be a scratch path",
+            )
+            p.add_argument("--seeds", type=int, default=3, help="seeds each side is averaged over")
+            p.add_argument("--no-policy-value", action="store_true", help="skip the value against the bank")
         if name == "parity":
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")

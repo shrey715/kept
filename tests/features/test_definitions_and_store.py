@@ -10,6 +10,7 @@ import pytest
 from kept.contracts.feature_registry import OUTCOME_DENY_LIST, STATED_REASON_FIELDS
 from kept.features.definitions import (
     answer_rate,
+    bank_context,
     broken_promises_90d,
     cohort_rate,
     contacts_last_7d,
@@ -183,3 +184,70 @@ def test_assert_no_denied_names_the_column(col: str) -> None:
 
 def test_assert_no_denied_passes_clean_frame() -> None:
     assert_no_denied(pd.DataFrame({"case_id": ["C-1"], "max_dpd": [1]}))
+
+
+# ----------------------------------------------------------------- the bank's context at as_of
+def _out(rows: list[tuple[float, bool, bool]]) -> pd.DataFrame:
+    """(days before as_of, rpc, ptp made) -> the case's outbound contacts"""
+    return pd.DataFrame(
+        [{"contact_ts_utc": AS_OF - timedelta(days=d), "rpc_flag": r, "ptp_made_flag": m} for d, r, m in rows],
+        columns=["contact_ts_utc", "rpc_flag", "ptp_made_flag"],
+    )
+
+
+_NO_CONTACTS = pd.DataFrame(
+    columns=["contact_ts_utc", "payment_taken_flag", "link_payment_flag", "app_payment_after_contact_flag"]
+)
+_NO_PROMISES = pd.DataFrame(
+    columns=["ptp_created_ts", "ptp_due_date", "ptp_status", "status_ts", "paid_date"]
+)
+
+
+def test_context_with_nothing_known() -> None:
+    c = bank_context(_out([]), _NO_CONTACTS, _NO_PROMISES, as_of=AS_OF)
+    assert c["pending_ptp"] is False and c["paid_prev7"] is False
+    assert (c["n_out_7d"], c["n_out_30d"], c["n_rpc_30d"]) == (0, 0, 0)
+    assert c["days_since_contact"] is None and c["last_rpc"] is None and c["ptp_due_in_days"] is None
+    assert c["weekday"] == 1  # Monday 28 Sep 2026; duckdb counts Sunday as 0
+
+
+def test_context_contacts_window_and_last_outcome() -> None:
+    out = _out([(1, True, True), (3, False, False), (10, True, False), (29.5, True, False), (31, True, True)])
+    c = bank_context(out, _NO_CONTACTS, _NO_PROMISES, as_of=AS_OF)
+    assert (c["n_out_7d"], c["n_out_30d"], c["n_rpc_30d"]) == (2, 4, 3)  # the 31-day-old contact is outside
+    assert c["days_since_contact"] == pytest.approx(1.0)
+    assert (c["last_rpc"], c["last_ptp_made"]) == (True, True)
+    later = pd.concat([out, _out([(-1, True, True)])])  # a contact a day after as_of never counts
+    assert bank_context(later, _NO_CONTACTS, _NO_PROMISES, as_of=AS_OF)["n_out_30d"] == 4
+
+
+def test_context_open_promise_and_recent_payment() -> None:
+    created = AS_OF - timedelta(days=5)
+    promises = pd.DataFrame(
+        [
+            {"ptp_created_ts": created, "ptp_due_date": (AS_OF + timedelta(days=4)).date(), "ptp_status": "open",
+             "status_ts": pd.NaT, "paid_date": None},
+            {"ptp_created_ts": created, "ptp_due_date": (AS_OF + timedelta(days=9)).date(), "ptp_status": "broken",
+             "status_ts": AS_OF + timedelta(days=1), "paid_date": None},  # resolved after as_of: still open at as_of
+            {"ptp_created_ts": created, "ptp_due_date": (AS_OF - timedelta(days=1)).date(), "ptp_status": "kept",
+             "status_ts": AS_OF - timedelta(days=2), "paid_date": (AS_OF - timedelta(days=2)).date()},
+        ]
+    )  # fmt: skip
+    c = bank_context(_out([]), _NO_CONTACTS, promises, as_of=AS_OF)
+    assert c["pending_ptp"] is True and c["ptp_due_in_days"] == 4
+    assert c["paid_prev7"] is True  # the kept promise was paid two days ago
+    paid = pd.DataFrame([{"contact_ts_utc": AS_OF - timedelta(days=3), "payment_taken_flag": None,
+                          "link_payment_flag": True, "app_payment_after_contact_flag": None}])  # fmt: skip
+    assert bank_context(_out([]), paid, _NO_PROMISES, as_of=AS_OF)["paid_prev7"] is True
+    old = paid.assign(contact_ts_utc=AS_OF - timedelta(days=8))
+    assert bank_context(_out([]), old, _NO_PROMISES, as_of=AS_OF)["paid_prev7"] is False
+
+
+def test_context_day_is_the_decisions_own_when_as_of_is_a_second_before_midnight() -> None:
+    as_of = datetime(2026, 9, 28, 23, 59, 59, tzinfo=UTC)  # a decision at midnight: Tuesday 29 Sep
+    promises = pd.DataFrame(
+        [{"ptp_created_ts": as_of - timedelta(days=2), "ptp_due_date": date(2026, 10, 1), "ptp_status": "open",
+          "status_ts": pd.NaT, "paid_date": None}]
+    )  # fmt: skip
+    c = bank_context(_out([]), _NO_CONTACTS, promises, as_of=as_of)
+    assert c["weekday"] == 2 and c["ptp_due_in_days"] == 2
