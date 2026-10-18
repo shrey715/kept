@@ -66,6 +66,12 @@ model = [
     "httpx>=0.27",
 ]
 all = ["kept[data,ask,text,model]"]
+analysis = [
+    "econml>=0.17.0",
+    "polars>=1.0",
+    "pyspark>=4.2",
+    "psycopg[binary]>=3.2",
+]
 
 [project.scripts]
 kept = "kept.cli:main"

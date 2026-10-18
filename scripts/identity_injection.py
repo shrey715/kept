@@ -4,6 +4,8 @@ else moves. docs/reports/identity_recall.md.
 
     uv run python scripts/identity_injection.py [--warehouse copy.duckdb] [--sample-mod 20] [--per-kind 40]
 
+`measure(..., splink=False)` runs the same test with exact keys only (decision A4, scripts/decision_A4.py).
+
 Precision is checked by hand (300 links, quality report). Recall can't be measured against the CRM's own duplicate
 pointer (duplicate_of_crm_id), because the matcher uses that pointer as an exact rule. So this plants new CRM
 records copied from real customers, with no national ID and no duplicate pointer (only the probabilistic matcher
@@ -15,13 +17,18 @@ from __future__ import annotations
 
 import argparse
 import random
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from typing import Any
+from unittest.mock import patch
 
 import duckdb
 import pandas as pd
 
 from kept.config import WAREHOUSE_PATH
-from kept.data.identity.pipeline import run_matching
+from kept.data.identity import pipeline
+from kept.data.identity.pipeline import PAIR, run_matching
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "identity_recall.md"
@@ -50,22 +57,34 @@ def partition(crosswalk: pd.DataFrame) -> set[frozenset[str]]:
     return {frozenset(s) for _, s in keys.groupby(crosswalk.golden_customer_id)}
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--warehouse", default=str(WAREHOUSE_PATH))
-    ap.add_argument("--sample-mod", type=int, default=20)
-    ap.add_argument("--per-kind", type=int, default=40)
-    a = ap.parse_args()
+@contextmanager
+def no_splink() -> Iterator[None]:
+    """Evaluation only (decision A4): the matcher with its Splink stage switched off, exact keys alone.
+    Patches the pipeline module for the duration; live runs never enter this."""
+    empty = pd.DataFrame(
+        {c: pd.Series(dtype=object) for c in [*PAIR, "rule"]} | {"score": pd.Series(dtype=float)}
+    )
+    with (
+        patch.object(pipeline, "train_model", lambda *a, **k: {}),
+        patch.object(pipeline, "score_pairs", lambda *a, **k: empty.copy()),
+    ):
+        yield
+
+
+def measure(
+    warehouse: str, sample_mod: int = 20, per_kind: int = 40, *, splink: bool = True
+) -> dict[str, Any]:
+    """Plant the duplicates, run the matcher with and without them; splink=False: exact keys only."""
     g = random.Random(0)
-    src = duckdb.connect(a.warehouse, read_only=True)
-    sample = f"dob is not null and hash(dob) % {a.sample_mod} = 0"
+    src = duckdb.connect(warehouse, read_only=True)
+    sample = f"dob is not null and hash(dob) % {sample_mod} = 0"
     records = src.execute(f"select * from silver.int_identity_records where {sample}").df()
     evidence = src.execute("select * from silver.int_identity_evidence").df()
     src.close()
     crm = records[
         (records.source_system == "crm") & records.name_key.notna() & records.first_name_key.notna()
     ]
-    originals = crm.sample(len(KINDS) * a.per_kind, random_state=0).to_dict("records")
+    originals = crm.sample(len(KINDS) * per_kind, random_state=0).to_dict("records")
     planted = []
     for i, r in enumerate(originals):
         kind = list(KINDS)[i % len(KINDS)]
@@ -91,9 +110,10 @@ def main() -> None:
         con.register("e", evs)
         con.execute("create table silver.int_identity_records as select * from r")
         con.execute("create table silver.int_identity_evidence as select * from e")
-        return run_matching(
-            con, sample_mod=a.sample_mod, train_sample_mod=1, verdicts=pd.DataFrame()
-        ).crosswalk
+        with no_splink() if not splink else nullcontext():
+            return run_matching(
+                con, sample_mod=sample_mod, train_sample_mod=1, verdicts=pd.DataFrame()
+            ).crosswalk
 
     base, injected = run([]), run(planted)
     golden = dict(
@@ -112,6 +132,25 @@ def main() -> None:
     size = injected.groupby("golden_customer_id").size()
     missed = [p for p, ok in zip(planted, found.merged, strict=True) if not ok]
     wrong = sum(size[golden["crm:" + p["key"]]] > 1 for p in missed)  # a miss that joined someone else
+    clusters = len(partition(base))
+    return {
+        "found": found,
+        "planted": planted,
+        "missed": missed,
+        "wrong": int(wrong),
+        "moved": moved,
+        "clusters": clusters,
+    }
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--warehouse", default=str(WAREHOUSE_PATH))
+    ap.add_argument("--sample-mod", type=int, default=20)
+    ap.add_argument("--per-kind", type=int, default=40)
+    a = ap.parse_args()
+    m = measure(a.warehouse, a.sample_mod, a.per_kind)
+    found, planted, missed, wrong, moved = m["found"], m["planted"], m["missed"], m["wrong"], m["moved"]
     rows = "\n".join(
         f"| {k} | {int(g_.merged.sum())} of {len(g_)} | {100 * g_.merged.mean():.0f}% |"
         for k, g_ in found.groupby("kind", sort=False)
@@ -133,7 +172,7 @@ the same {100 // a.sample_mod}% sample of people (by date of birth) with and wit
 steward can join (a missed link, not a wrong one).
 
 **Nothing else moved, almost:** with the planted records taken back out, {moved} of the clean run's
-{len(partition(base)):,} clusters aren't exactly as they were. The matcher is retrained on each run's records (its
+{m["clusters"]:,} clusters aren't exactly as they were. The matcher is retrained on each run's records (its
 weights come from the data), so a borderline pair can land the other side of the threshold.
 """)
     print(

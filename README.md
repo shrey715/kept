@@ -10,8 +10,8 @@ then a promise sized to the customer's payday and spare cash. A person releases 
 
 ![Kept architecture](docs/architecture/architecture.png)
 
-Full-size: [`docs/architecture/architecture.pdf`](docs/architecture/architecture.pdf) (TikZ source: `architecture.tex`;
-orange border = changed from our 2 Oct [design](docs/design/SharpeShooters_SystemDesign.pdf)).
+Full-size: [`docs/architecture/architecture.pdf`](docs/architecture/architecture.pdf) (draw.io source: [`architecture.drawio`](docs/architecture/architecture.drawio), opens in app.diagrams.net;
+our 2 Oct [design](docs/design/SharpeShooters_SystemDesign.pdf) is the starting point).
 
 ## Deliverables
 
@@ -30,7 +30,8 @@ More reports: [business case](docs/reports/business_case.pdf) · [fairness](docs
 
 ## Results (real data, 12 Oct)
 
-Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one.
+Each result links to the report that produces it; [`JUDGES.md`](JUDGES.md) has the command to reproduce each one. Every design decision, the alternatives we measured and
+the number that decided it are in [`docs/reports/decisions.md`](docs/reports/decisions.md).
 
 | Area | Result |
 |---|---|
@@ -229,6 +230,8 @@ cd web && pnpm lint && npx tsc --noEmit
 
 ## What changed from the design, and why
 
+The evidence behind each change: [`docs/reports/decisions.md`](docs/reports/decisions.md).
+
 - **UI (D):** a Next.js app with Radix Themes instead of the plan's single static page, so the
   demo covers every role's flow (queue, approvals, audit, Ask) and the guided script. It needs
   Node on the demo machine.
@@ -339,7 +342,7 @@ cd web && pnpm lint && npx tsc --noEmit
 QUALITY_REPORT.pdf                  deliverable 4
 contracts/c360_customer.odcs.yaml   deliverable 3: data contract (ODCS, from DC-COLL-001)
 docs/
-  architecture/   deliverable 2: architecture.png / .pdf, drawn in TikZ (architecture.tex)
+  architecture/   deliverable 2: architecture.png / .pdf, drawn in draw.io (architecture.drawio)
   reports/        business case, fairness, drift, benchmark, quality: PDFs + LaTeX sources + figures
   deck/           deliverable 7: the pitch deck
   design/         our 2 Oct system design

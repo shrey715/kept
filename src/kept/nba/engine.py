@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (docstrings)
 """Runs stages 1-7 and builds the NBA card. Implements NBAEngine."""
 
 from __future__ import annotations
@@ -109,6 +110,7 @@ class KeptEngine:
         drift_alarm: Sequence[str] = (),
         promise_model: PromiseModel | None = None,
         call_capacity: CallCapacity | None = None,
+        rank_promises: bool = False,
     ) -> None:
         """proposals: where new proposals are stored for the release gate (Releaser reads it).
         programs: hardship programmes the case is eligible for, named for the banner
@@ -125,6 +127,7 @@ class KeptEngine:
         self._drift = tuple(drift_alarm)  # model inputs that shifted overnight (#86): Green goes to a person
         self._promise = promise_model  # explains a sized promise on the card, never ranks it (#79)
         self._calls = call_capacity  # the nightly batch books calls into hours with capacity
+        self._rank_promises = rank_promises  # value promise asks by reach x agree x keep (`_ask_chain`); off by default
 
     def payment_options(
         self, case_id: str, now: datetime, stated: StatedPay | None = None
@@ -222,8 +225,13 @@ class KeptEngine:
         if sizing is None:
             p_paid = {a: p for a, p in p_paid.items() if a not in _SIZED}
 
+        chain = self._ask_chain(ctx, fv, X, sizing, slot, set(p_paid)) if self._rank_promises else None
         ranked = score_actions(  # stage 6
-            p_paid=p_paid, balance_at_risk=ctx.balance_at_risk, contact_cost=self._cost, burden=self._burden
+            p_paid=p_paid,
+            balance_at_risk=ctx.balance_at_risk,
+            contact_cost=self._cost,
+            burden=self._burden,
+            p_kept_given_promise=chain,
         )
         best = ranked[0]
         if best.action is Action.WAIT and _protective_status(ctx) is not HardshipStatus.NONE:
@@ -286,25 +294,63 @@ class KeptEngine:
             hardship_banner=self._banner(ctx),
         )
 
+    def _ask_chain(
+        self,
+        ctx: CaseContext,
+        fv: FeatureVector,
+        X: pd.DataFrame,
+        sizing: PromiseSizing | None,
+        slot: tuple[datetime, datetime] | None,
+        allowed: set[Action],
+    ) -> dict[Action, float] | None:
+        """What a promise ask is worth as a probability, for `score_actions`' p_kept_given_promise: P(the call reaches the
+        right party at its slot) x P(a promise is made | reached) x P(kept | promise). P(reached) comes from the best-hour
+        model at the slot's local hour when the capacity book has one, else the promise model's overall rate; the other two
+        from the promise model (observed rate of promises made on reached calls, and its kept chance for this sizing).
+        None (the asks keep scoring like the call) when a piece is missing. ponytail: one P(promise | reached) for everyone,
+        and the plan reuses the promise's kept chance; segment it if the check below ever supports turning this on."""
+        pm_ = self._promise
+        agree = getattr(pm_, "p_promise_given_rpc", None)
+        if pm_ is None or sizing is None or agree is None or not (set(_SIZED) & allowed):
+            return None
+        try:
+            p_kept = self._p_kept(ctx, fv, sizing)[0]
+            reach = getattr(pm_, "p_rpc", None)
+            hour_model = self._calls.best_hour if self._calls is not None else None
+            if hour_model is not None and slot is not None:
+                local = slot[0].astimezone(ZoneInfo(ctx.time_zone))
+                reach = float(hour_model.p_rpc(X, [(local.hour, local.weekday())])[0])
+            if reach is None:
+                return None
+        except Exception:
+            return None
+        return {a: reach * agree * p_kept for a in _SIZED}
+
+    def _p_kept(self, ctx: CaseContext, fv: FeatureVector, sizing: PromiseSizing) -> tuple[float, float]:
+        """The promise model's chance this promise is kept, and if it fell due the day before payday."""
+        assert self._promise is not None
+        today = ctx.now.astimezone(ZoneInfo(ctx.time_zone)).date() if ctx.time_zone else ctx.now.date()
+        freq = ctx.payroll_frequency.value if ctx.payroll_frequency else None
+        common = {
+            "today": today,
+            "payday": sizing.payday,
+            "frequency": freq,
+            "dpd": fv.max_dpd,
+            "prior_broken_90d": fv.broken_promises_90d,
+            "prior_kept_ratio": fv.kept_promise_ratio,
+        }
+        ours = serving_row(due=sizing.due_date, **common)  # type: ignore[arg-type]
+        before = serving_row(due=sizing.payday - timedelta(days=1), **common)  # type: ignore[arg-type]
+        p_ours, p_before = self._promise.p_kept([ours, before])
+        return float(p_ours), float(p_before)
+
     def _sizing_text(self, ctx: CaseContext, fv: FeatureVector, sizing: PromiseSizing) -> str:
         """The sizing rationale, plus the promise model's chance it's kept on this date and on a date
         just before payday (#79). A model failure never costs the card: the rationale stays."""
         if self._promise is None:
             return sizing.rationale
         try:
-            today = ctx.now.astimezone(ZoneInfo(ctx.time_zone)).date() if ctx.time_zone else ctx.now.date()
-            freq = ctx.payroll_frequency.value if ctx.payroll_frequency else None
-            common = {
-                "today": today,
-                "payday": sizing.payday,
-                "frequency": freq,
-                "dpd": fv.max_dpd,
-                "prior_broken_90d": fv.broken_promises_90d,
-                "prior_kept_ratio": fv.kept_promise_ratio,
-            }
-            ours = serving_row(due=sizing.due_date, **common)  # type: ignore[arg-type]
-            before = serving_row(due=sizing.payday - timedelta(days=1), **common)  # type: ignore[arg-type]
-            p_ours, p_before = self._promise.p_kept([ours, before])
+            p_ours, p_before = self._p_kept(ctx, fv, sizing)
         except Exception:
             return sizing.rationale
         chance = f"If they agree, the model gives this promise a {p_ours:.0%} chance of being kept"
@@ -501,8 +547,9 @@ def _scored_as(fitted: Iterable[str], *, protective: bool) -> dict[Action, Actio
     so they take the call model's P(paid). Hardship review only when hardship or vulnerability
     protects the case: with the call's P(paid) and a lower burden it would otherwise beat every call.
     Actions with no model drop out of the ranking.
-    ponytail: borrowed call probability; a P(kept | promise) model (ranking's p_kept_given_promise)
-    is the upgrade for promise and plan."""
+    ponytail: borrowed call probability: promise and plan tie with the call, so a call that can carry a sized ask
+    asks. `KeptEngine(rank_promises=True)` values them instead by reach x agree x keep (`_ask_chain`, ranking's
+    p_kept_given_promise): off by default, because nothing offline can test it (see docs/reports/promise_ranking.md)."""
     names = set(fitted)
     out = {a: a for a in Action if a.value in names}
     if Action.EMAIL in out:  # a pooled "digital nudge" model (kept train --pool-nudges) scores all three

@@ -376,6 +376,7 @@ def score(args: argparse.Namespace) -> int:
         now=args.now or datetime.now(UTC),
         audit_log=audit,
         best_hour=args.best_hour,
+        rank_promises=args.rank_promises,
     )
     took = time.perf_counter() - t0
     print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
@@ -500,7 +501,9 @@ def train_promises(args: argparse.Namespace) -> int:
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
         conn.execute("set memory_limit = '3GB'; set threads = 2")
         rows = pm.load(conn)
-    model, metrics = pm.train(rows)
+    model, metrics = pm.train(rows, cutoff=args.cutoff)
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:  # the rates `--rank-promises` chains
+        model.p_rpc, model.p_promise_given_rpc = pm.call_rates(conn, args.cutoff)
     pm.save(model, args.out)
     for k, v in metrics.items():
         print(f"{k:>22}  {v:.4f}")
@@ -828,6 +831,12 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
 }
 
 
+def pm_cutoff() -> datetime:
+    from kept.nba.promise_model import CUTOFF
+
+    return CUTOFF
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kept")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -907,8 +916,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 help="book calls into the likeliest-to-answer hour of their day. Default: on when "
                 "models/best_hour.pkl exists. --no-best-hour (or KEPT_BEST_HOUR=0) books the earliest slot",
             )
+        if name == "score":
+            p.add_argument(
+                "--rank-promises",
+                action="store_true",
+                default=os.environ.get("KEPT_RANK_PROMISES") == "1",
+                help="value promise asks by reach x agree x keep (needs promise.pkl; off by default)",
+            )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
+            p.add_argument(
+                "--cutoff",
+                type=datetime.fromisoformat,
+                default=pm_cutoff(),
+                help="calibrate on the 14 days before it, check on promises from it on",
+            )
         if name == "train-best-hour":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "best_hour.pkl")
             p.add_argument("--cutoff", type=datetime.fromisoformat, default=datetime(2026, 8, 15))
