@@ -137,7 +137,7 @@ def markdown(c: dict, wd: dict) -> str:  # type: ignore[type-arg]
         "|---|---|---|",
         *[f"| {k} | {100 * m['predicted']:.1f}% / {100 * m['observed']:.1f}% | {100 * ho['after']['months'][k]['predicted']:.1f}% / {100 * ho['after']['months'][k]['observed']:.1f}% |" for k, m in ho["before"]["months"].items()],
         "",
-        "What is left is not the level but the shape: since the fall, promises due soon are kept more than the trees expect and promises due in a month less (days to due flattened), which a two-number map cannot follow. Retraining the trees on the recent regime only, or weighting recent promises, scored worse (AUC 0.56 to 0.60 against 0.62 on the validation window), so the trees are unchanged. "
+        "What is left is not the level but the shape: since the fall, promises due soon are kept more than the trees expect and promises due in a month less (days to due flattened), which a two-number map cannot follow. The mean gap closes (the first table), the worst band gap barely moves, and the model now runs a little low in the last month. Weighting recent promises in the trees, or fitting them closer to the cutoff, scored worse on the validation window in a trial not repeated here, so the trees are unchanged. "
         "`kept train-promises --cutoff <date>` moves the calibration window forward as promises resolve; it is not a nightly step.\n",
         "## The wide model, and what serving can supply\n",
         f"The §8 model (79 inputs) on the same split: AUC **{wd['wide_all']:.3f}** on {wd['promises_test']:,} test promises; the six inputs the card uses, fitted the same way: **{wd['six']:.3f}**. A subset ships only if it keeps most of that gain ({wd['wide_all'] - wd['six']:.3f}).\n",

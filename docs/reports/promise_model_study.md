@@ -42,7 +42,7 @@ By month of the promise, held-out (predicted / observed):
 | 2026-08 | 40.8% / 35.5% | 37.0% / 35.5% |
 | 2026-09 | 35.7% / 34.8% | 31.8% / 34.8% |
 
-What is left is not the level but the shape: since the fall, promises due soon are kept more than the trees expect and promises due in a month less (days to due flattened), which a two-number map cannot follow. Retraining the trees on the recent regime only, or weighting recent promises, scored worse (AUC 0.56 to 0.60 against 0.62 on the validation window), so the trees are unchanged. `kept train-promises --cutoff <date>` moves the calibration window forward as promises resolve; it is not a nightly step.
+What is left is not the level but the shape: since the fall, promises due soon are kept more than the trees expect and promises due in a month less (days to due flattened), which a two-number map cannot follow. The mean gap closes (the first table), the worst band gap barely moves, and the model now runs a little low in the last month. Weighting recent promises in the trees, or fitting them closer to the cutoff, scored worse on the validation window in a trial not repeated here, so the trees are unchanged. `kept train-promises --cutoff <date>` moves the calibration window forward as promises resolve; it is not a nightly step.
 
 ## The wide model, and what serving can supply
 
