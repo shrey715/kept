@@ -8,7 +8,7 @@ Written by `scripts/best_hour_replay.py` on the 59,603 outbound calls on randoml
 With the switch off, a call goes into the **earliest** half-hour slot with capacity inside the customer's calling hours. With it on, the call goes into the slot with the
 highest predicted chance of reaching the right party, among the free slots **on the same local day as the earliest one** (never a later day), inside the customer's hours
 and the operating hour's capacity, Sunday rules unchanged; ties go to the earlier slot. When it moves a call, the card says so in one line, with the model's numbers
-("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)").
+("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)"; the line goes in the card's why-not text).
 
 **Predictor shipped: a per-case LightGBM** (`data/exports/models/best_hour.pkl`, `kept train-best-hour`): P(right-party contact | local hour, weekday, the 17 model inputs of the uplift model).
 Its inputs are registry inputs only (no language, postal code, accent, age or other protected attribute or proxy; `tests/nba/test_best_hour.py` runs `assert_no_denied`). Fitted on
@@ -17,29 +17,30 @@ A per-case model was servable cleanly, so the fall-back observed-rate table was 
 
 ## Result (a prediction, not a measured payment gain)
 
-Two capacity books: **team volume** is what the team actually handled per weekday and hour (average over the window's dates, rounded up), the limit the study used;
-**recorded capacity** is `silver.channel_capacity` as `kept score` reads it (far above the calls made). Predicted RPC is the model's own estimate at the booked hour;
-the last column re-values the same bookings with the observed RPC rate by hour before the cutoff, with no per-case model.
+**Headline, against what the bank actually did, at today's team volume: predicted right-party contact 43.4% to 45.1%, +1.6 [+1.5, +1.8] points** (95% case-bootstrap interval).
+"What the bank did" is the hour every one of these calls was actually made at, valued by the same model. Team volume is what the team handled per weekday and hour (average over the window's dates, rounded up): the booking may not use more evening hours than the team works today.
+
+Other baselines, each named:
+
+- **Against Kept's current earliest-slot booking** (40.8%): +4.2 [+3.9, +4.5] points at team volume. That baseline is itself worse than the bank's own timing (40.8% against 43.4%): the earliest free hour is the first hour of the day, the least answered, so today's booking loses contact the bank's calls had.
+- **With the full recorded capacity** (`silver.channel_capacity`, as `kept score` reads it; far above the calls made, so it is only real if the team staffs the evening capacity it has on paper): 57.0%, +13.6 [+13.4, +13.8] points against the bank's hours and +26.5 [+26.4, +26.7] against the earliest-slot booking (30.5%).
+- The study (`uplift_improvement.md`) estimated +7.4 points against the hours as booked with a simpler capacity model (each evening hour capped by the total handled over the window, extra context inputs, no booking class). This replay is the more careful one and gets less (+1.6 [+1.5, +1.8] at team volume); likely reasons, not separated: the cap here is per date, calls are booked one at a time through the real booking class, capacity is in bank time while calls are in customer time, and the model here has only inputs available at serving (AUC 0.717, the study's 0.729).
 
 | Booking | Predicted right-party contact | Observed hourly rate, same bookings | Calls moved off their earliest slot |
 |---|---:|---:|---:|
-| As historically booked | 43.4% | 43.9% |  |
-| Team volume, switch off | 40.8% | 45.3% |  |
-| Team volume, switch on | 45.1% | 49.8% | 84% |
+| The bank: hours actually called at | 43.4% | 47.8% |  |
+| Team volume, switch off (earliest slot) | 40.8% | 45.3% |  |
+| **Team volume, switch on** | 45.1% | 49.8% | 84% |
 | Recorded capacity, switch off | 30.5% | 35.9% |  |
 | Recorded capacity, switch on | 57.0% | 61.3% | 100% |
 
-Switch on against off: **+4.2 points** at team volume (+4.5 on observed hourly rates),
-+26.5 points at recorded capacity (+25.4).
-Against the hours the calls were actually made at: +1.6 points at team volume, +13.6 at recorded capacity.
-The headline is the team-volume figure, the one that assumes no more staff in the evening than today.
-"Off" is below "as historically booked" because the booking being replaced puts calls into the earliest free hour: with all customers allowed from 07:00 (local), almost every call goes into the first hours of the day at recorded capacity.
-The study's capacity-respecting estimate against the hours as booked was +7.4 points (50.9% against 43.5%); this replay gets less (+1.6) than the study's figure.
-Likely reasons, not separated: the study capped each evening hour by the total handled over the whole window, here the cap is per date; calls here are booked one at a time in decision order through the real booking class; capacity is in bank time while calls are in customer time; and the model here has only inputs available at serving (AUC 0.717, the study's 0.729).
+The last column re-values the same bookings with the observed right-party rate by hour before the cutoff, with no per-case model: +2.0 points against the bank's hours (47.8%; their actual outcome was 43.9%) at team volume.
+
+**This is a large operational change.** With the switch on, **84% of calls** are booked into a different hour than the earliest free one (100% at recorded capacity), and the day's hour mix shifts toward the late afternoon and evening, as below. Agents' shifts, not the model, decide whether those hours exist.
 
 Share of calls by local hour:
 
-| Hour | As historically booked | Team volume, off | Team volume, on | Recorded, off | Recorded, on |
+| Hour (customer-local) | The bank's hours | Team volume, off | Team volume, on | Recorded, off | Recorded, on |
 |---:|---:|---:|---:|---:|---:|
 | 5:00 | 0% | 0% | 0% | 0% | 0% |
 | 7:00 | 0% | 5% | 10% | 31% | 0% |

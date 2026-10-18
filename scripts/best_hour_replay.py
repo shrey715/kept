@@ -129,6 +129,7 @@ def summary(
     b: pd.DataFrame = r["booked"]  # type: ignore[assignment]
     p = model.p_rows(test, b.hour, b.weekday)
     return {
+        "_p": p,
         "predicted_rpc": float(p.mean()),
         "observed_hour_rate_estimate": float(np.mean([rate[min(rate, key=lambda k: abs(k - int(h)))] for h in b.hour])),  # nearest hour with calls
         "hour_mix": {int(h): int(n) for h, n in b.hour.value_counts().sort_index().items()},
@@ -142,11 +143,13 @@ MD = REPO / "docs" / "reports" / "best_hour.md"
 
 def to_markdown(res: dict) -> str:  # type: ignore[type-arg]
     h, tv, rc = res["as_historically_booked"], res["team_volume"], res["recorded_capacity"]
-    h = {**h, "observed_hour_rate_estimate": h["observed_rpc"]}  # the calls' own outcomes
     n = res["calls"]
 
     def row(label: str, r: dict, moved: object = "") -> str:  # type: ignore[type-arg]
         return f"| {label} | {100 * r['predicted_rpc']:.1f}% | {100 * r['observed_hour_rate_estimate']:.1f}% | {moved} |"
+
+    def ci(g: list) -> str:  # type: ignore[type-arg]
+        return f"{g[0]:+.1f} [{g[1]:+.1f}, {g[2]:+.1f}]"
 
     def share(mix: dict, hr: int) -> str:  # type: ignore[type-arg]
         return f"{100 * mix.get(str(hr), mix.get(hr, 0)) / n:.0f}%"
@@ -175,7 +178,7 @@ Written by `scripts/best_hour_replay.py` on the {n:,} outbound calls on randomly
 With the switch off, a call goes into the **earliest** half-hour slot with capacity inside the customer's calling hours. With it on, the call goes into the slot with the
 highest predicted chance of reaching the right party, among the free slots **on the same local day as the earliest one** (never a later day), inside the customer's hours
 and the operating hour's capacity, Sunday rules unchanged; ties go to the earlier slot. When it moves a call, the card says so in one line, with the model's numbers
-("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)").
+("Booked 18:00: this customer is likelier to answer then (62% chance of reaching them, against 41% at 07:00)"; the line goes in the card's why-not text).
 
 **Predictor shipped: a per-case LightGBM** (`data/exports/models/best_hour.pkl`, `kept train-best-hour`): P(right-party contact | local hour, weekday, the 17 model inputs of the uplift model).
 Its inputs are registry inputs only (no language, postal code, accent, age or other protected attribute or proxy; `tests/nba/test_best_hour.py` runs `assert_no_denied`). Fitted on
@@ -184,29 +187,30 @@ A per-case model was servable cleanly, so the fall-back observed-rate table was 
 
 ## Result (a prediction, not a measured payment gain)
 
-Two capacity books: **team volume** is what the team actually handled per weekday and hour (average over the window's dates, rounded up), the limit the study used;
-**recorded capacity** is `silver.channel_capacity` as `kept score` reads it (far above the calls made). Predicted RPC is the model's own estimate at the booked hour;
-the last column re-values the same bookings with the observed RPC rate by hour before the cutoff, with no per-case model.
+**Headline, against what the bank actually did, at today's team volume: predicted right-party contact {100 * h['predicted_rpc']:.1f}% to {100 * tv['on']['predicted_rpc']:.1f}%, {ci(tv['on_minus_bank_pts'])} points** (95% case-bootstrap interval).
+"What the bank did" is the hour every one of these calls was actually made at, valued by the same model. Team volume is what the team handled per weekday and hour (average over the window's dates, rounded up): the booking may not use more evening hours than the team works today.
+
+Other baselines, each named:
+
+- **Against Kept's current earliest-slot booking** ({100 * tv['off']['predicted_rpc']:.1f}%): {ci(tv['on_minus_off_pts'])} points at team volume. That baseline is itself worse than the bank's own timing ({100 * tv['off']['predicted_rpc']:.1f}% against {100 * h['predicted_rpc']:.1f}%): the earliest free hour is the first hour of the day, the least answered, so today's booking loses contact the bank's calls had.
+- **With the full recorded capacity** (`silver.channel_capacity`, as `kept score` reads it; far above the calls made, so it is only real if the team staffs the evening capacity it has on paper): {100 * rc['on']['predicted_rpc']:.1f}%, {ci(rc['on_minus_bank_pts'])} points against the bank's hours and {ci(rc['on_minus_off_pts'])} against the earliest-slot booking ({100 * rc['off']['predicted_rpc']:.1f}%).
+- The study (`uplift_improvement.md`) estimated +7.4 points against the hours as booked with a simpler capacity model (each evening hour capped by the total handled over the window, extra context inputs, no booking class). This replay is the more careful one and gets less ({ci(tv['on_minus_bank_pts'])} at team volume); likely reasons, not separated: the cap here is per date, calls are booked one at a time through the real booking class, capacity is in bank time while calls are in customer time, and the model here has only inputs available at serving (AUC {res['auc']:.3f}, the study's 0.729).
 
 | Booking | Predicted right-party contact | Observed hourly rate, same bookings | Calls moved off their earliest slot |
 |---|---:|---:|---:|
-{row("As historically booked", h)}
-{row("Team volume, switch off", tv["off"])}
-{row("Team volume, switch on", tv["on"], f"{100 * tv['share_moved_from_earliest']:.0f}%")}
-{row("Recorded capacity, switch off", rc["off"])}
-{row("Recorded capacity, switch on", rc["on"], f"{100 * rc['share_moved_from_earliest']:.0f}%")}
+{row('The bank: hours actually called at', h)}
+{row('Team volume, switch off (earliest slot)', tv['off'])}
+{row('**Team volume, switch on**', tv['on'], f"{100 * tv['share_moved_from_earliest']:.0f}%")}
+{row('Recorded capacity, switch off', rc['off'])}
+{row('Recorded capacity, switch on', rc['on'], f"{100 * rc['share_moved_from_earliest']:.0f}%")}
 
-Switch on against off: **{100 * (tv['on']['predicted_rpc'] - tv['off']['predicted_rpc']):+.1f} points** at team volume ({100 * (tv['on']['observed_hour_rate_estimate'] - tv['off']['observed_hour_rate_estimate']):+.1f} on observed hourly rates),
-{100 * (rc['on']['predicted_rpc'] - rc['off']['predicted_rpc']):+.1f} points at recorded capacity ({100 * (rc['on']['observed_hour_rate_estimate'] - rc['off']['observed_hour_rate_estimate']):+.1f}).
-Against the hours the calls were actually made at: {100 * (tv['on']['predicted_rpc'] - h['predicted_rpc']):+.1f} points at team volume, {100 * (rc['on']['predicted_rpc'] - h['predicted_rpc']):+.1f} at recorded capacity.
-The headline is the team-volume figure, the one that assumes no more staff in the evening than today.
-"Off" is below "as historically booked" because the booking being replaced puts calls into the earliest free hour: with all customers allowed from 07:00 (local), almost every call goes into the first hours of the day at recorded capacity.
-The study's capacity-respecting estimate against the hours as booked was +7.4 points (50.9% against 43.5%); this replay gets less ({100 * (tv['on']['predicted_rpc'] - h['predicted_rpc']):+.1f}) than the study's figure.
-Likely reasons, not separated: the study capped each evening hour by the total handled over the whole window, here the cap is per date; calls here are booked one at a time in decision order through the real booking class; capacity is in bank time while calls are in customer time; and the model here has only inputs available at serving (AUC 0.717, the study's 0.729).
+The last column re-values the same bookings with the observed right-party rate by hour before the cutoff, with no per-case model: {100 * (tv['on']['observed_hour_rate_estimate'] - h['observed_hour_rate_estimate']):+.1f} points against the bank's hours ({100 * h['observed_hour_rate_estimate']:.1f}%; their actual outcome was {100 * h['observed_rpc']:.1f}%) at team volume.
+
+**This is a large operational change.** With the switch on, **{100 * tv['share_moved_from_earliest']:.0f}% of calls** are booked into a different hour than the earliest free one ({100 * rc['share_moved_from_earliest']:.0f}% at recorded capacity), and the day's hour mix shifts toward the late afternoon and evening, as below. Agents' shifts, not the model, decide whether those hours exist.
 
 Share of calls by local hour:
 
-| Hour | As historically booked | Team volume, off | Team volume, on | Recorded, off | Recorded, on |
+| Hour (customer-local) | The bank's hours | Team volume, off | Team volume, on | Recorded, off | Recorded, on |
 |---:|---:|---:|---:|---:|---:|
 """
         + "\n".join(
@@ -272,13 +276,27 @@ def main() -> None:
         "calls": len(test), "model": model.model_version, "cutoff": f"{bh.CUTOFF:%Y-%m-%d}", "days": int(test.day.nunique()),
         "as_historically_booked": {
             "predicted_rpc": float(model.p_rows(test, actual.hour, actual.weekday).mean()), "observed_rpc": float(test.rpc.mean()),
+            "observed_hour_rate_estimate": float(np.mean([rate[min(rate, key=lambda k: abs(k - int(x)))] for x in actual.hour])),
             "hour_mix": {int(h): int(n) for h, n in actual.hour.value_counts().sort_index().items()},
         },
     }  # fmt: skip
+    p_bank = model.p_rows(test, actual.hour, actual.weekday)
+
+    def gap(a: np.ndarray, b: np.ndarray) -> list[float]:  # a minus b in points: mean and a 95% case-bootstrap interval
+        codes, rng = pd.factorize(test.case_id)[0], np.random.default_rng(0)
+        n, d = codes.max() + 1, a - b
+        bs = []
+        for _ in range(200):  # resample whole cases
+            w = np.bincount(rng.integers(0, n, n), minlength=n)[codes]
+            bs.append(float((w * d).sum() / w.sum()))
+        return [100 * float((a - b).mean()), *(100 * np.quantile(bs, [0.025, 0.975])).tolist()]
+
     for name, units in (("team_volume", team_volume(test)), ("recorded_capacity", recorded)):
         off, on = run(test, units, None), run(test, units, model)
+        so, sn = summary(test, off, model, rate), summary(test, on, model, rate)
         res[name] = {
-            "off": summary(test, off, model, rate), "on": summary(test, on, model, rate),
+            "off": {k: v for k, v in so.items() if k != "_p"}, "on": {k: v for k, v in sn.items() if k != "_p"},
+            "on_minus_bank_pts": gap(sn["_p"], p_bank), "on_minus_off_pts": gap(sn["_p"], so["_p"]),  # type: ignore[arg-type]
             "share_moved_from_earliest": on["moved"] / len(test),  # type: ignore[operator]
             "share_hour_differs_from_off": float((on["booked"].hour.to_numpy() != off["booked"].hour.to_numpy()).mean()),  # type: ignore[attr-defined]
         }  # fmt: skip
