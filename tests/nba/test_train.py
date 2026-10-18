@@ -150,3 +150,22 @@ def test_pooled_nudge_arm() -> None:
         _scored_as(["wait", "email", "push", "sms_payment_link", "call"], protective=False)[Action.PUSH]
         is Action.PUSH
     )
+
+
+def test_a_champion_fitted_on_17_inputs_ignores_the_context_inputs() -> None:
+    """The live model selects its own columns: the registry's context inputs change none of tonight's scores."""
+    pytest.importorskip("lightgbm")
+    from kept.nba.train import CONTEXT_COLS, base_inputs
+    from kept.nba.uplift import TLearnerUplift
+
+    rows = _rows().iloc[:1_000]
+    model = TLearnerUplift(ACTIONS).fit(
+        rows[base_inputs()],
+        action=rows.action,
+        paid_14d=rows.paid_14d,
+        is_random_assignment=pd.Series(True, index=rows.index),
+    )
+    served = rows.assign(**{c: 1.0 for c in CONTEXT_COLS})
+    changed = served.assign(**{c: 7.0 for c in CONTEXT_COLS})
+    assert (model.predict_proba(served) == model.predict_proba(changed)).all().all()
+    assert set(CONTEXT_COLS) <= set(model_inputs()) and not set(CONTEXT_COLS) & set(model._columns)
