@@ -500,7 +500,7 @@ def train_promises(args: argparse.Namespace) -> int:
     with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:
         conn.execute("set memory_limit = '3GB'; set threads = 2")
         rows = pm.load(conn)
-    model, metrics = pm.train(rows)
+    model, metrics = pm.train(rows, cutoff=args.cutoff)
     pm.save(model, args.out)
     for k, v in metrics.items():
         print(f"{k:>22}  {v:.4f}")
@@ -828,6 +828,12 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
 }
 
 
+def pm_cutoff() -> datetime:
+    from kept.nba.promise_model import CUTOFF
+
+    return CUTOFF
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="kept")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -909,6 +915,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")
+            p.add_argument(
+                "--cutoff",
+                type=datetime.fromisoformat,
+                default=pm_cutoff(),
+                help="calibrate on the 14 days before it, check on promises from it on",
+            )
         if name == "train-best-hour":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "best_hour.pkl")
             p.add_argument("--cutoff", type=datetime.fromisoformat, default=datetime(2026, 8, 15))

@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (docstrings and comments)
 """P(kept | promise) (#79): how likely a promise is to be kept, from what's known when it's made.
 
 Trained on resolved promises (kept vs partially kept or broken), time split. Used to *size and explain*
@@ -42,10 +43,13 @@ SOURCE_COLUMNS = (
 )
 PERIOD_DAYS = {"weekly": 7, "biweekly": 14, "semi_monthly": 15, "monthly": 30}  # semi-monthly: 15 days here
 CUTOFF = datetime(2026, 7, 15)  # fit on promises made before, check on promises made after
-# the kept rate fell from ~63% (2016 to May 2026) to ~35% (Jun to Sep 2026): the trees learn the ranking from
-# the long history, then the last CALIBRATE_DAYS before the cutoff map scores to today's rate (isotonic),
-# so the card's "N% chance" is honest (worst decile gap 22 -> 7 points)
-CALIBRATE_DAYS = 60
+# The kept rate fell from ~63% (2016 to Apr 2026) through 52% (May), 42% (Jun) and 37% (Jul) to ~35% (Aug, Sep):
+# the trees learn the ranking from the long history, then the last CALIBRATE_DAYS before the cutoff map scores to
+# today's rate, so the card's "N% chance" is honest. 60 days of isotonic still straddled the fall and left the
+# model 4 points high on the held-out window (5 to 7 in each band); a logistic (Platt) map on the last 14 days,
+# chosen on 15 Jun to 15 Jul before the held-out window was scored, takes the mean gap to about 0
+# (docs/reports/promise_model_study.md). The trees stop at the same day the calibration window starts.
+CALIBRATE_DAYS = 14
 
 
 def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -80,6 +84,29 @@ def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         order by p.created, p.ptp_id""").df()
 
 
+class PlattCalibrator:
+    """sigmoid(a + b * logit(p)): two numbers fitted on a short, recent window, so a level shift in the kept rate is
+    followed without refitting a free-form curve on a few thousand promises."""
+
+    def __init__(self, a: float, b: float) -> None:
+        self.a, self.b = a, b
+
+    @classmethod
+    def fit(cls, p: np.ndarray, kept: np.ndarray) -> PlattCalibrator:
+        from sklearn.linear_model import LogisticRegression  # type: ignore[import-untyped]
+
+        lr = LogisticRegression(C=1e6).fit(_logit(p).reshape(-1, 1), kept)
+        return cls(float(lr.intercept_[0]), float(lr.coef_[0][0]))
+
+    def predict(self, p: np.ndarray) -> np.ndarray:
+        return np.asarray(1 / (1 + np.exp(-(self.a + self.b * _logit(np.asarray(p))))))
+
+
+def _logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(p, 1e-4, 1 - 1e-4)
+    return np.asarray(np.log(p / (1 - p)))
+
+
 class PromiseModel:
     def __init__(self, model: Any, calibrator: Any = None) -> None:
         self._model = model
@@ -92,21 +119,30 @@ class PromiseModel:
         return np.asarray(calibrator.predict(p)) if calibrator is not None else p
 
 
-def train(rows: pd.DataFrame, *, cutoff: datetime = CUTOFF) -> tuple[PromiseModel, dict[str, float]]:
-    """LightGBM on promises made before cutoff minus CALIBRATE_DAYS, isotonic calibration on the
-    CALIBRATE_DAYS before cutoff; AUC, Brier and calibration on the promises from cutoff on."""
+def train(
+    rows: pd.DataFrame,
+    *,
+    cutoff: datetime = CUTOFF,
+    calibrate_days: int = CALIBRATE_DAYS,
+    method: str = "platt",
+) -> tuple[PromiseModel, dict[str, float]]:
+    """LightGBM on promises made before cutoff minus `calibrate_days`, calibration (`method`: "platt", or "isotonic" as
+    before) on the `calibrate_days` before cutoff; AUC, Brier and calibration on the promises from cutoff on."""
     from lightgbm import LGBMClassifier
     from sklearn.isotonic import IsotonicRegression  # type: ignore[import-untyped]
     from sklearn.metrics import brier_score_loss, roc_auc_score  # type: ignore[import-untyped]
 
     early = (rows.created < cutoff).to_numpy()
-    fit = (rows.created < cutoff - timedelta(days=CALIBRATE_DAYS)).to_numpy()
+    fit = (rows.created < cutoff - timedelta(days=calibrate_days)).to_numpy()
     calib = early & ~fit
     X = rows[list(FEATURES)].astype(float)
     m = LGBMClassifier(n_estimators=200, num_leaves=15, min_child_samples=200, learning_rate=0.05, verbose=-1)
     m.fit(X[fit], rows.kept[fit])
-    iso = IsotonicRegression(out_of_bounds="clip").fit(
-        np.asarray(m.predict_proba(X[calib]))[:, 1], rows.kept[calib]
+    raw = np.asarray(m.predict_proba(X[calib]))[:, 1]
+    iso = (
+        PlattCalibrator.fit(raw, rows.kept[calib].to_numpy())
+        if method == "platt"
+        else IsotonicRegression(out_of_bounds="clip").fit(raw, rows.kept[calib])
     )
     model = PromiseModel(m, iso)
     p = np.asarray(iso.predict(np.asarray(m.predict_proba(X[~early]))[:, 1]))
@@ -119,6 +155,7 @@ def train(rows: pd.DataFrame, *, cutoff: datetime = CUTOFF) -> tuple[PromiseMode
         "auc": float(roc_auc_score(y, p)),
         "brier": float(brier_score_loss(y, p)),
         "calibration_max_gap": float(max(gaps)),
+        "calibration_mean_gap": float(p.mean() - y.mean()),  # predicted minus observed kept rate
         "kept_rate_test": float(y.mean()),
     }
 

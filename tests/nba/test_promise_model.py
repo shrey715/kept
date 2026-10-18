@@ -167,3 +167,30 @@ def test_no_comparison_when_the_date_makes_no_difference(make_ctx) -> None:  # t
     assert eng._sizing_text(ctx, fv, sizing) == (
         "$120 after payday. If they agree, the model gives this promise a 18% chance of being kept."
     )
+
+
+def test_calibration_follows_a_level_shift_in_the_kept_rate() -> None:
+    """The kept rate falls (70% -> 35%) while the ranking stays: calibrated on the last 14 days, the model's mean
+    prediction on what follows is close to the new rate; the old 60-day isotonic window is still far above it."""
+    pytest.importorskip("lightgbm")
+    rng = np.random.default_rng(1)
+    n = 20_000
+    created = pd.date_range("2025-01-01", periods=n, freq="1h")
+    rows = pd.DataFrame(
+        {
+            "created": created,
+            "days_to_due": rng.integers(1, 30, n),
+            "dpd": rng.integers(1, 90, n),
+            "prior_broken_90d": rng.integers(0, 3, n),
+            "prior_kept_ratio": rng.choice([np.nan, 0.2, 0.8], n),
+            "days_after_pay": rng.integers(0, 14, n),
+            "days_before_next_pay": rng.integers(1, 14, n),
+        }
+    )
+    rate = np.interp(np.arange(n), [0, 15_000, 16_000, n], [0.7, 0.7, 0.35, 0.35])  # a fall, then flat
+    rows["kept"] = (rng.uniform(0, 1, n) < rate * (1.2 - 0.4 * (rows.days_after_pay > 7))).astype(int)
+    cutoff = created[16_100].to_pydatetime()
+    _, new = train(rows, cutoff=cutoff)
+    _, old = train(rows, cutoff=cutoff, calibrate_days=60, method="isotonic")
+    assert abs(new["calibration_mean_gap"]) < 0.03 < old["calibration_mean_gap"]
+    assert abs(new["calibration_mean_gap"]) < abs(old["calibration_mean_gap"])
