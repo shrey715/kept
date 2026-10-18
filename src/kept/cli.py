@@ -534,6 +534,8 @@ def train_best_hour(args: argparse.Namespace) -> int:
 
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
+    import json
+
     import duckdb
     from dotenv import load_dotenv
 
@@ -558,6 +560,10 @@ def train(args: argparse.Namespace) -> int:
         conn.close()
     for k, v in result.items():
         print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
+    report = EXPORT_DIR / "reports" / "train_gate.json"  # the gate's numbers, for reports and the deck
+    report.parent.mkdir(parents=True, exist_ok=True)
+    meta = {"cutoff": args.cutoff.isoformat(), "out": str(args.out)}
+    report.write_text(json.dumps({**result, **meta}, indent=1))
     held = args.champion or args.out
     print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {held}")
     return 0
