@@ -119,7 +119,7 @@ def throughput(base: str) -> dict[str, object]:
         runs = []
         for rep in range(3):
             toks: list[int] = []
-            ts = [threading.Thread(target=lambda p=p: toks.append(gen(p + f" (variant {rep})"))) for p in GEN_PROMPTS[:par]]
+            ts = [threading.Thread(target=lambda p=p, toks=toks, rep=rep: toks.append(gen(p + f" (variant {rep})"))) for p in GEN_PROMPTS[:par]]
             t0 = time.time()
             for t in ts:
                 t.start()
