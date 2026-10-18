@@ -534,6 +534,8 @@ def train_best_hour(args: argparse.Namespace) -> int:
 
 def train(args: argparse.Namespace) -> int:
     """Track D: fit the uplift model on features_train (see kept.nba.train), log to MLflow."""
+    import json
+
     import duckdb
     from dotenv import load_dotenv
 
@@ -550,12 +552,20 @@ def train(args: argparse.Namespace) -> int:
             seed=args.seed,
             force=args.promote,
             pooled=args.pool_nudges,
+            champion=args.champion,
+            seeds=args.seeds,
+            policy=not args.no_policy_value,
         )
     finally:
         conn.close()
     for k, v in result.items():
         print(f"{k:>24}  {v:.4f}" if isinstance(v, float) else f"{k:>24}  {v}")
-    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {args.out}")
+    report = EXPORT_DIR / "reports" / "train_gate.json"  # the gate's numbers, for reports and the deck
+    report.parent.mkdir(parents=True, exist_ok=True)
+    meta = {"cutoff": args.cutoff.isoformat(), "out": str(args.out)}
+    report.write_text(json.dumps({**result, **meta}, indent=1))
+    held = args.champion or args.out
+    print(f"model -> {args.out}" if result["promoted"] else f"champion kept at {held}")
     return 0
 
 
@@ -922,6 +932,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "--promote", action="store_true", help="make the new model the champion without the gate"
             )
             p.add_argument("--pool-nudges", action="store_true", help="one arm for email, push and SMS (#80)")
+            p.add_argument(
+                "--champion",
+                type=Path,
+                default=None,
+                help="judge against this model instead of --out, so --out can be a scratch path",
+            )
+            p.add_argument("--seeds", type=int, default=3, help="seeds each side is averaged over")
+            p.add_argument("--no-policy-value", action="store_true", help="skip the value against the bank")
         if name == "parity":
             p.add_argument("--sample", type=int, default=2000, help="random cases to compare")
             p.add_argument("--all", action="store_true", help="every case in features.case_features")

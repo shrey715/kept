@@ -2,7 +2,7 @@
 """P(right-party contact | the call's local hour and weekday, the case's inputs): the hour a call is likeliest to be answered.
 
 Used only by the nightly booking (`CallCapacity.book_best`, switched on by `kept score --best-hour`); it never ranks actions.
-Inputs are the uplift model's 17 registry inputs (`model_inputs()`, none protected or a proxy) plus the slot's hour and weekday
+Inputs are the uplift model's 17 registry inputs (`base_inputs()`, none protected or a proxy) plus the slot's hour and weekday
 in the customer's own time zone. Trained on outbound calls to randomly assigned cases, time split like the uplift model
 (`kept train-best-hour`). docs/reports/best_hour.md has the method and the replay.
 """
@@ -19,8 +19,10 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from kept.contracts.feature_registry import model_inputs
 from kept.features.store import assert_no_denied
+from kept.nba.train import (
+    base_inputs,  # the 17: not the context inputs (to try: AUC 0.729 with them, 0.717 without)
+)
 from kept.nba.uplift import _frame
 
 CUTOFF = datetime(2026, 8, 15)  # fit on calls before, check on calls from here (the uplift model's split)
@@ -31,13 +33,13 @@ PARAMS: dict[str, Any] = dict(
 
 
 def slot_columns() -> list[str]:
-    return [*model_inputs(), "hour", "weekday"]
+    return [*base_inputs(), "hour", "weekday"]
 
 
 def load(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """One row per outbound call on a randomly assigned case: the inputs a second before it (as `kept train` reads them),
     its local hour and weekday, and whether it reached the right party. Whether a payment followed is not needed here."""
-    cols = ", ".join(f"f.{n}" for n in model_inputs())
+    cols = ", ".join(f"f.{n}" for n in base_inputs())
     d = conn.sql(f"""
         select t.decision_id, t.case_id, t.decision_at, {cols},
                h.contact_hour_local as hour, dayofweek(h.contact_ts_local) as dow, coalesce(h.rpc_flag, false) as rpc
@@ -60,10 +62,10 @@ class BestHourModel:
         self._columns = list(columns or [])  # the inputs it was fitted on, so a later registry change can't break it
 
     def _inputs(self) -> list[str]:
-        return getattr(self, "_columns", None) or list(model_inputs())  # models pickled before this have none
+        return getattr(self, "_columns", None) or base_inputs()  # models pickled before this have none
 
     def p_rpc(self, features: pd.DataFrame, slots: Sequence[tuple[int, int]]) -> np.ndarray:
-        """Chance a call reaches the right party, for one case (`features`: one row of `model_inputs()`), at each
+        """Chance a call reaches the right party, for one case (`features`: one row of `base_inputs()`), at each
         (local hour, weekday) slot."""
         x = pd.concat([features[self._inputs()]] * len(slots), ignore_index=True)
         x["hour"], x["weekday"] = [h for h, _ in slots], [w for _, w in slots]
@@ -92,7 +94,7 @@ def train(rows: pd.DataFrame, *, cutoff: datetime = CUTOFF) -> tuple[BestHourMod
         "rpc_rate_test": float(y[~fit].mean()),
         "auc_test": float(roc_auc_score(y[~fit], p)),
     }
-    return BestHourModel(m, f"besthour-lgbm-{cutoff:%Y%m%d}", model_inputs()), metrics
+    return BestHourModel(m, f"besthour-lgbm-{cutoff:%Y%m%d}", base_inputs()), metrics
 
 
 def save(model: BestHourModel, path: Path) -> None:

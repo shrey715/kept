@@ -40,9 +40,7 @@ def test_train_learns_uplift_and_splits_on_time() -> None:
     model, m = train(rows, cutoff=cutoff)
     assert (m["rows_train"], m["rows_test"]) == (4_200, 1_800)
     assert all(m[f"qini_{a.value}"] > 0 for a in ACTIONS[1:])
-    # the plan's check: the model targets better than the legacy strategy, beyond noise
-    assert m["qini_call"] - m["qini_legacy_call"] > 2 * m["noise_call"]
-    assert m["qini_any_contact"] > m["qini_legacy_any_contact"]
+    assert m["qini_call"] > 2 * m["noise_call"] and not any(k.startswith("qini_legacy") for k in m)  # look-ahead: gone
     # a FeatureVector-style row: object columns with None, bools, an enum string
     serving = pd.DataFrame(
         [
@@ -73,6 +71,68 @@ def test_champion_challenger_gate() -> None:
     assert promote(m(0.013, 0.002), champ)[0] is False  # any contact worse beyond noise
 
 
+def _paired(call: float, any_: float, sd: float = 0.001) -> dict[str, dict[str, float]]:
+    return {"call": {"diff": call, "sd": sd}, "any_contact": {"diff": any_, "sd": sd}}
+
+
+def test_gate_margin_is_the_bootstrap_sd_of_the_paired_difference() -> None:
+    from kept.nba.train import promote
+
+    champ = {"qini_call": 0.01, "qini_any_contact": 0.005}
+    assert promote({}, champ, _paired(0.0035, 0.0)) == (True, "better than the champion beyond noise")  # 3.5 sd on calls
+    assert promote({}, champ, _paired(0.0, 0.0035))[0] is True  # or on any contact
+    assert promote({}, champ, _paired(0.0015, -0.001))[0] is False  # within 2 sd (the old margin was the random-ranking noise)
+    assert promote({}, champ, _paired(0.0035, -0.0035)) == (False, "worse than the champion beyond noise: champion kept")
+    assert promote({}, champ, _paired(-0.01, -0.01))[0] is False  # a clear loss
+    # a wider bootstrap SD (noisier comparison) raises the bar for the same gain
+    assert promote({}, champ, _paired(0.0035, 0.0, sd=0.002))[0] is False
+
+
+def test_gate_blocks_a_challenger_worse_on_the_clean_outcome() -> None:
+    from kept.nba.train import promote
+
+    champ = {"qini_call": 0.01, "qini_any_contact": 0.005}
+    win = _paired(0.005, 0.0)
+    assert promote({}, champ, win, {"call": {"diff": 0.0, "sd": 0.001}, "any_contact": {"diff": -0.001, "sd": 0.001}})[0]
+    why = promote({}, champ, win, {"call": {"diff": -0.003, "sd": 0.001}, "any_contact": {"diff": 0.0, "sd": 0.001}})
+    assert why == (False, "worse than the champion beyond noise on the clean-outcome DR Qini: champion kept")
+
+
+def test_paired_comparison_and_the_dr_check_on_synthetic_rows() -> None:
+    """A model with the signal beats one fitted on shuffled outcomes, beyond 2 bootstrap SDs, on the gate Qini and on the
+    clean-outcome DR Qini; the same model against itself differs by exactly nothing."""
+    pytest.importorskip("lightgbm")
+    from kept.nba.train import compare, dr_compare, fit_model, policy_report, promote
+
+    rows = _rows()
+    rows = rows.assign(paid_clean_14d=rows.paid_14d, covered=True, paid_14d_known=True)
+    cutoff = rows.decision_at.iloc[4_200]
+    good = [fit_model(rows, cutoff, seed=s) for s in (0, 1)]
+    bad_rows = rows.assign(paid_14d=np.random.default_rng(1).permutation(rows.paid_14d.to_numpy()))
+    bad = [fit_model(bad_rows, cutoff, seed=s) for s in (0, 1)]
+    same = compare(good, good, rows, cutoff=cutoff, reps=30)
+    assert same["call"]["diff"] == 0 and same["call"]["sd"] == 0
+    cmp_ = compare(bad, good, rows, cutoff=cutoff, reps=30)
+    assert cmp_["call"]["diff"] > 2 * cmp_["call"]["sd"] > 0 and cmp_["call"]["challenger"] > cmp_["call"]["champion"]
+    dr = dr_compare(bad, good, rows, cutoff=cutoff, reps=30)
+    assert dr["call"]["diff"] > 0 and dr["call"]["overlap"] > 0.5
+    assert promote({}, {"x": 0.0}, cmp_, dr)[0] is True and promote({}, {"x": 0.0}, compare(good, bad, rows, cutoff=cutoff, reps=30))[0] is False
+    pol = policy_report(good[0], rows, cutoff=cutoff, reps=30)
+    assert {"gap_per_1000", "gap_per_1000_lo", "gap_per_1000_hi", "share_changed"} <= set(pol)
+
+
+def test_champion_recipe_is_refitted_at_another_seed_with_its_own_columns() -> None:
+    pytest.importorskip("lightgbm")
+    from kept.nba.train import fit_model
+
+    rows = _rows()
+    champion = fit_model(rows, rows.decision_at.iloc[4_200], seed=0)
+    champion._columns = champion._columns[:5]  # an older model with fewer inputs
+    again = fit_model(rows, rows.decision_at.iloc[4_200], seed=2, like=champion)
+    assert again._columns == champion._columns and again.params["random_state"] == 2
+    assert again.params["num_leaves"] == champion.params["num_leaves"]
+
+
 def test_pooled_nudge_arm() -> None:
     """#80: one arm for email, push and SMS; the engine scores push and SMS with it."""
     pytest.importorskip("lightgbm")
@@ -90,3 +150,22 @@ def test_pooled_nudge_arm() -> None:
         _scored_as(["wait", "email", "push", "sms_payment_link", "call"], protective=False)[Action.PUSH]
         is Action.PUSH
     )
+
+
+def test_a_champion_fitted_on_17_inputs_ignores_the_context_inputs() -> None:
+    """The live model selects its own columns: the registry's context inputs change none of tonight's scores."""
+    pytest.importorskip("lightgbm")
+    from kept.nba.train import CONTEXT_COLS, base_inputs
+    from kept.nba.uplift import TLearnerUplift
+
+    rows = _rows().iloc[:1_000]
+    model = TLearnerUplift(ACTIONS).fit(
+        rows[base_inputs()],
+        action=rows.action,
+        paid_14d=rows.paid_14d,
+        is_random_assignment=pd.Series(True, index=rows.index),
+    )
+    served = rows.assign(**{c: 1.0 for c in CONTEXT_COLS})
+    changed = served.assign(**{c: 7.0 for c in CONTEXT_COLS})
+    assert (model.predict_proba(served) == model.predict_proba(changed)).all().all()
+    assert set(CONTEXT_COLS) <= set(model_inputs()) and not set(CONTEXT_COLS) & set(model._columns)

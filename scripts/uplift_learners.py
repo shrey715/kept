@@ -26,16 +26,15 @@ import pandas as pd
 from lightgbm import LGBMClassifier, LGBMRegressor
 
 from kept.contracts.enums import Action
-from kept.contracts.feature_registry import model_inputs
 from kept.nba.causal import CLIP, CausalUplift, Nuisance, case_bootstrap, gate_qini
 from kept.nba.causal import dr_qini as dr_qini_w
-from kept.nba.train import ACTIONS, CONTEXT_COLS, evaluate, load_rows
+from kept.nba.train import ACTIONS, CONTEXT_COLS, base_inputs, evaluate, load_rows
 from kept.nba.uplift import TLearnerUplift, _frame
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "docs" / "reports" / "uplift_learners.md"
 CUTOFF, VALID_FROM = datetime(2026, 8, 15), datetime(2026, 7, 15)
-COLS = list(model_inputs())
+COLS = base_inputs()
 ARMS = ("call", "sms_payment_link", "email")
 NUIS = dict(
     n_estimators=300,
