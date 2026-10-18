@@ -101,6 +101,9 @@ def save(model: BestHourModel, path: Path) -> None:
 
 
 def load_model(path: Path) -> BestHourModel | None:
-    return (
-        pickle.loads(path.read_bytes()) if path.exists() else None
-    )  # our own file, from kept train-best-hour
+    """The saved model (our own file, from kept train-best-hour), or None."""
+    if not path.exists():
+        return None
+    model: BestHourModel = pickle.loads(path.read_bytes())
+    model._model.set_params(n_jobs=1)  # one case at a time in `kept score`: threads cost 3x the run, no gain
+    return model
