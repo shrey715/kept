@@ -95,7 +95,7 @@
     \textbf{Piece} & \textbf{Here} & \textbf{At the bank} \\ \midrule
     Warehouse & DuckDB file, dbt silver/gold, Feast online store; 20x–40x today's data on 4 GB, never failed & the bank's lakehouse; dbt models carry over \\
     Audit & DuckDB, append-only, SHA-256 chain, \texttt{kept audit-verify}; audit page 7.9 s $\to$ 0.04 s & WORM storage, same chain \\
-    Models & LightGBM uplift + promise, MLflow, gate; uplift Qini \KdecBtenT\ vs \KdecBtenResponse\ for a response model; promise AUC \KwideAuc\ vs \KdecBnineSix & model risk management sign-off \\
+    Models & LightGBM uplift + promise, MLflow, gate; uplift, top 30\%: \KdecBtenTopT\ vs \KdecBtenTopResp\ extra payers per 1,000 for a response model, gain unproven; promise AUC \KwideAuc\ vs \KdecBnineSix & model risk management sign-off \\
     Local language models & Qwen3.8-27B on llama.cpp, Whisper, bge-m3; SetFit reads 760,594 notes in \KdecBsevenSetfitSec\ s, the LLM would take \KdecBsevenLlmDays\ days & an on-prem inference cluster \\
     The Ask's model & the same local Qwen3.8-27B, no hosted API or keys; \KdecBfiveLive\ of \KdecBfiveOf\ right in the pipeline, \KdecBfivePlain\ with one prompt & the bank's approved model \\
     API and app & FastAPI; Next.js workspace; personas; portfolio overview \textasciitilde40 ms & SSO, the bank's design system \\
@@ -588,10 +588,10 @@
     Reading hardship in notes (B7): F1; hours for 760,594 notes & Keyword rules & \KdecBsevenRules & recall \KdecBsevenRulesRecall; \KdecBsevenRulesHours\ h \\
     & SetFit (GPU) & \KdecBsevenSetfit & recall \KdecBsevenSetfitRecall; \KdecBsevenSetfitHours\ h \\
     & LLM & \KdecBsevenLlm & recall \KdecBsevenLlmRecall; \KdecBsevenLlmHours\ h (extrapolated) \\ \midrule
-    Ranking contacts (B10): Qini in noise units; extra payers per 1,000 in the top 30\% & Response model & \KdecBtenResponse & \KdecBtenTopResp\ per 1,000 \\
-    & T-learner (live) & \KdecBtenT & \KdecBtenTopT\ per 1,000 \\
-    & S-learner & \KdecBtenS & \KdecBtenTopS\ per 1,000 (open: pilot decides) \\
-    & Causal forest & \KdecBtenForest & \KdecBtenTopForest\ per 1,000 \\ \midrule
+    Ranking contacts (B10), clean outcome: Qini in noise units; extra payers per 1,000 in the top 30\% (old label) & Response model & \KdecBtenResponse & \KdecBtenTopResp\ per 1,000 (\KdecBtenOldTopResp) \\
+    & T-learner (live) & \KdecBtenT & \KdecBtenTopT\ per 1,000 (\KdecBtenOldTopT); ahead at the top, behind on Qini \\
+    & S-learner & \KdecBtenS & \KdecBtenTopS\ per 1,000 (\KdecBtenOldTopS); open: pilot decides \\
+    & Causal forest & \KdecBtenForest & \KdecBtenTopForest\ per 1,000 (\KdecBtenOldTopForest) \\ \midrule
     Promise model (B9): AUC & Six features & \KdecBnineSix & easy to explain \\
     & Wide model & \KwideAuc & the bank's score: \KdecBnineBank \\
     \bottomrule

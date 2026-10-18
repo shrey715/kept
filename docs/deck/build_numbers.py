@@ -166,7 +166,6 @@ def main() -> None:
     wide_fair = ev["auc|Kept, wide: LightGBM + random forest, averaged ranks|before_due"]
     placebo = [v for k, v in ev.items() if k.startswith("placebo_")]
     sim, be = biz["simulation"], biz["breakeven_payday_pts"]
-    BANK = "The bank's strategy"
     con = duckdb.connect(str(DATA / "warehouse" / "scratch_copy.duckdb"), read_only=True)
     per_week = con.execute(
         "select count(*) / 52.0 from silver.promises_to_pay"
@@ -216,8 +215,8 @@ def main() -> None:
     sc, bq = d["B4"]["scenarios"]["base"], d["B4"]["quota"]
     b5, ac, sp = d["B5"]["settings"], d["B7"]["accuracy"], d["B7"]["speed_s_per_1000"]
     hrs, b9 = d["B7"]["hours_to_label_all_760594"], d["B9"]["models"]
-    b10 = d["B10"]["test"]["total"]["models"]
-    bd, c2, b6 = d["B10"]["paired_bootstrap_top30_live_vs_response"]["diff"], d["C2"]["systems"], d["B6"]["embedders"]["BAAI/bge-m3"]["configs"]
+    b10, b10o = (d["B10"]["test"][k]["total"]["models"] for k in ("clean", "old_label"))  # clean outcome (primary), old label (upper bound)
+    bd, c2, b6 = d["B10"]["paired_bootstrap_top30_live_vs_response"]["clean"]["diff"], d["C2"]["systems"], d["B6"]["embedders"]["BAAI/bge-m3"]["configs"]
     pc = lambda x: f"{100 * x:.1f}\\%"  # noqa: E731
     b1, b3, a5 = d["B1"], d["B3"], d["A5"]["redteam_live"]
     m |= {  # B1: which model; B3: llama.cpp against Ollama; A5: the live red team
@@ -273,9 +272,11 @@ def main() -> None:
         "decBnineBank": f"{d['B9']['bank_auc']:.3f}",
         "decBtenResponse": f"{b10['Response model']['qini_noise_units']:.1f}", "decBtenT": f"{b10['T-learner (live settings)']['qini_noise_units']:.1f}",
         "decBtenChamp": f"{b10['Champion (live)']['qini_noise_units']:.1f}", "decBtenS": f"{b10['S-learner, larger trees']['qini_noise_units']:.1f}",
-        "decBtenForest": f"{b10['Causal forest, larger leaves']['qini_noise_units']:.1f}", "decBtenBank": f"{b10[BANK]['qini_noise_units']:.1f}".replace("-", "−"),
+        "decBtenForest": f"{b10['Causal forest, larger leaves']['qini_noise_units']:.1f}",
         "decBtenTopT": f"{b10['T-learner (live settings)']['per_1000_top30']:.0f}", "decBtenTopResp": f"{b10['Response model']['per_1000_top30']:.0f}",
         "decBtenTopS": f"{b10['S-learner, larger trees']['per_1000_top30']:.0f}", "decBtenTopForest": f"{b10['Causal forest, larger leaves']['per_1000_top30']:.0f}",
+        "decBtenOldTopT": f"{b10o['T-learner (live settings)']['per_1000_top30']:.0f}", "decBtenOldTopResp": f"{b10o['Response model']['per_1000_top30']:.0f}",
+        "decBtenOldTopS": f"{b10o['S-learner, larger trees']['per_1000_top30']:.0f}", "decBtenOldTopForest": f"{b10o['Causal forest, larger leaves']['per_1000_top30']:.0f}",
         "decBtenDiff": f"{bd[0]:.0f} to {bd[1]:.0f}",
         "decBtenAloneT": pc(b10["T-learner (live settings)"]["p_pay_if_left_top30"]).replace(".0", ""),
         "decBtenAloneResp": pc(b10["Response model"]["p_pay_if_left_top30"]).replace(".0", ""),
