@@ -278,6 +278,7 @@ def score(
     now: datetime,
     audit_log: DuckDBAuditLog,
     best_hour: bool | None = None,
+    rank_promises: bool = False,
 ) -> pd.DataFrame:
     """Score every open case and write nba.cards. Returns the cards table. best_hour: book each call into the
     hour the customer likeliest answers (models/best_hour.pkl, `kept train-best-hour`). None (the default): on
@@ -301,6 +302,7 @@ def score(
         drift_alarm=load_alarm(EXPORT_DIR / "features"),
         promise_model=load_model(EXPORT_DIR / "models" / "promise.pkl"),
         call_capacity=calls,
+        rank_promises=rank_promises,
     )
     # larger balances first, so they get the earlier call hours while capacity lasts
     order = sorted(bulk.customers, key=lambda c: (-bulk.cases[c].total_overdue if c in bulk.cases else 0, c))

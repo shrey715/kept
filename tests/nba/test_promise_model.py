@@ -194,3 +194,62 @@ def test_calibration_follows_a_level_shift_in_the_kept_rate() -> None:
     _, old = train(rows, cutoff=cutoff, calibrate_days=60, method="isotonic")
     assert abs(new["calibration_mean_gap"]) < 0.03 < old["calibration_mean_gap"]
     assert abs(new["calibration_mean_gap"]) < abs(old["calibration_mean_gap"])
+
+
+class _Chain(_Fixed):
+    p_rpc = 0.5
+    p_promise_given_rpc = 0.3  # so the chain is 0.5 x 0.3 x 0.6 = 9%
+
+    def p_kept(self, rows):  # type: ignore[no-untyped-def,override]
+        return np.full(len(rows), 0.6)
+
+
+def test_ranking_a_promise_ask_by_its_chain_is_off_by_default_and_changes_the_ask_when_on(make_ctx) -> None:  # type: ignore[no-untyped-def]
+    from kept.contracts import FeatureVector
+    from kept.contracts.enums import Action
+    from kept.nba.engine import KeptEngine
+    from tests.fakes import ConstantScorer, FixedContextBuilder, InMemoryAuditLog, StaticFeatureProvider
+    from tests.nba.test_engine import NOW, PROBS
+
+    TRAINED = {k: v for k, v in PROBS.items() if k not in ("promise_request", "payment_plan", "hardship_review")}
+
+    def action(model, rank):  # type: ignore[no-untyped-def]
+        ctx = make_ctx()
+        fv = FeatureVector(
+            case_id=ctx.case_id,
+            golden_customer_id=ctx.golden_customer_id,
+            as_of=ctx.features_as_of,
+            feature_set_version="fs-0",
+        )
+        eng = KeptEngine(
+            context=FixedContextBuilder({ctx.case_id: ctx}),
+            features=StaticFeatureProvider({ctx.case_id: fv}),
+            scorer=ConstantScorer(TRAINED),  # no promise arms: promise and plan borrow the call's chance
+            audit_log=InMemoryAuditLog(),
+            promise_model=model,
+            rank_promises=rank,
+        )
+        return eng.recommend(ctx.case_id, NOW).proposal.action
+
+    asks = {Action.PROMISE_REQUEST, Action.PAYMENT_PLAN}
+    assert action(_Chain(), False) in asks  # as before: a call that can carry a sized ask asks, tied with the call
+    assert action(_Chain(), True) not in asks  # a 9% chain is worth less than the call's payment chance
+    assert action(None, True) == action(None, False)  # no promise model, no chain: unchanged
+    assert action(_Fixed(), True) == action(_Fixed(), False)  # a model without the observed rates: unchanged
+
+
+def test_the_chain_is_reach_times_agree_times_keep() -> None:
+    from decimal import Decimal
+
+    from kept.contracts.enums import Action
+    from kept.nba.ranking import score_actions
+
+    ranked = score_actions(
+        p_paid={Action.WAIT: 0.1, Action.PROMISE_REQUEST: 0.3},
+        balance_at_risk=Decimal(1000),
+        contact_cost={},
+        burden={},
+        p_kept_given_promise={Action.PROMISE_REQUEST: 0.5 * 0.3 * 0.6},
+    )
+    ask = next(s for s in ranked if s.action is Action.PROMISE_REQUEST)
+    assert ask.expected_value == Decimal("-10.00")  # (0.09 - 0.1) x 1000

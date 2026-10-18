@@ -376,6 +376,7 @@ def score(args: argparse.Namespace) -> int:
         now=args.now or datetime.now(UTC),
         audit_log=audit,
         best_hour=args.best_hour,
+        rank_promises=args.rank_promises,
     )
     took = time.perf_counter() - t0
     print(f"{len(cards):,} cards -> nba.cards in {took:.0f}s")
@@ -501,6 +502,8 @@ def train_promises(args: argparse.Namespace) -> int:
         conn.execute("set memory_limit = '3GB'; set threads = 2")
         rows = pm.load(conn)
     model, metrics = pm.train(rows, cutoff=args.cutoff)
+    with duckdb.connect(str(WAREHOUSE_PATH), read_only=True) as conn:  # the rates `--rank-promises` chains
+        model.p_rpc, model.p_promise_given_rpc = pm.call_rates(conn, args.cutoff)
     pm.save(model, args.out)
     for k, v in metrics.items():
         print(f"{k:>22}  {v:.4f}")
@@ -912,6 +915,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 default={"0": False, "1": True}.get(os.environ.get("KEPT_BEST_HOUR", "")),
                 help="book calls into the likeliest-to-answer hour of their day. Default: on when "
                 "models/best_hour.pkl exists. --no-best-hour (or KEPT_BEST_HOUR=0) books the earliest slot",
+            )
+        if name == "score":
+            p.add_argument(
+                "--rank-promises",
+                action="store_true",
+                default=os.environ.get("KEPT_RANK_PROMISES") == "1",
+                help="value promise asks by reach x agree x keep (needs promise.pkl; off by default)",
             )
         if name == "train-promises":
             p.add_argument("--out", type=Path, default=EXPORT_DIR / "models" / "promise.pkl")

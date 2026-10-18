@@ -108,6 +108,10 @@ def _logit(p: np.ndarray) -> np.ndarray:
 
 
 class PromiseModel:
+    # observed over outbound calls (`call_rates`), for ranking a promise ask by its chain; None on models fitted before
+    p_rpc: float | None = None  # a call reaches the right party
+    p_promise_given_rpc: float | None = None  # a reached call ends in a promise
+
     def __init__(self, model: Any, calibrator: Any = None) -> None:
         self._model = model
         self._calibrator = calibrator
@@ -158,6 +162,18 @@ def train(
         "calibration_mean_gap": float(p.mean() - y.mean()),  # predicted minus observed kept rate
         "kept_rate_test": float(y.mean()),
     }
+
+
+def call_rates(conn: duckdb.DuckDBPyConnection, cutoff: datetime = CUTOFF, days: int = 60) -> tuple[float, float]:
+    """(P(right party reached), P(promise made | reached)) over outbound calls in the `days` before `cutoff`, from
+    contact_history (rpc_flag, ptp_made_flag). Overall, not by segment."""
+    r = conn.execute(
+        """select avg(coalesce(rpc_flag, false)::int), avg(ptp_made_flag::int) filter (where rpc_flag)
+           from silver.contact_history where direction = 'outbound' and channel = 'call'
+             and contact_ts_utc < ? and contact_ts_utc >= ? - interval (?) day""",
+        [cutoff, cutoff, days],
+    ).fetchone()
+    return float(r[0]), float(r[1])  # type: ignore[index]
 
 
 def serving_row(

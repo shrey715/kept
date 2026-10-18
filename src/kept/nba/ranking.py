@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (docstrings)
 """Stage 6: rank by uplift x balance at risk - contact cost - burden, within daily capacity.
 
 Costs: contact_history.contact_cost_cad (unit cost per attempt) and channel_capacity.unit_cost_cad.
@@ -40,7 +41,9 @@ def score_actions(
     (WAIT must be present, else ValueError). expected_value = uplift x balance_at_risk, except
     for PROMISE_REQUEST/PAYMENT_PLAN when p_kept_given_promise has the action: then
     expected_value = (p_kept_given_promise[a] - p_paid[WAIT]) x balance_at_risk
-    (a kept smaller plan beats a broken bigger promise). Missing cost/burden -> 0.
+    (a kept smaller plan beats a broken bigger promise). The value is the whole chain, not P(kept | promise) alone:
+    P(reach the right party) x P(promise made | reached) x P(kept | promise), because a customer who is not
+    reached, or does not agree, never makes the promise (engine._ask_chain). Missing cost/burden -> 0.
     Sorted by score desc; ties broken by lower burden, then Action declaration order."""
     if Action.WAIT not in p_paid:
         raise ValueError("p_paid must include WAIT (the baseline)")
