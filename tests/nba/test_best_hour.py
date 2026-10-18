@@ -193,6 +193,9 @@ def test_the_card_says_when_best_hour_moved_the_call(make_ctx: Any, on: bool) ->
 
 
 def test_booking_is_on_by_default_when_the_model_exists(tmp_path: Any) -> None:
+    pytest.importorskip("lightgbm")
+    from lightgbm import LGBMClassifier
+
     from kept.nba.best_hour import BestHourModel, save
     from kept.nba.score import _hour_model
 
@@ -200,7 +203,7 @@ def test_booking_is_on_by_default_when_the_model_exists(tmp_path: Any) -> None:
     assert _hour_model(None, path) is None and _hour_model(False, path) is None  # no model: the earliest slot
     with pytest.raises(FileNotFoundError):
         _hour_model(True, path)  # asked for it explicitly: say so
-    save(BestHourModel(None, "v", ["a"]), path)
+    save(BestHourModel(LGBMClassifier(), "v", ["a"]), path)
     assert _hour_model(None, path) is not None and _hour_model(True, path) is not None
     assert _hour_model(False, path) is None  # --no-best-hour / KEPT_BEST_HOUR=0
 
