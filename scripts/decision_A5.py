@@ -467,7 +467,8 @@ def redteam_live(args: argparse.Namespace) -> dict[str, Any]:
         resp = r["response"]
         out.append({"id": c["question_id"], "category": c["category"], "expected_layer": c["expected_layer"], "expected_outcome": c["expected_outcome"],
                     "kind": resp["kind"], "reason": resp.get("reason"), "rung": r["rung"], "correct": r["correct"], "ms": r["ms"],
-                    "layer": _layer(resp)})
+                    "layer": _layer(resp), "sql": resp.get("sql"), "answer_rows": resp.get("rows", [])[:5],
+                    "said": resp.get("narrative") or resp.get("message"), "trace": resp.get("trace")})
         print(c["question_id"], out[-1]["kind"], out[-1]["reason"], flush=True)
     atk = [o for o in out if o["expected_outcome"] == "refuse"]
     return {"n": len(out), "n_attacks": len(atk), "refused": sum(o["kind"] == "refusal" for o in atk),

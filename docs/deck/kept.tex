@@ -593,7 +593,7 @@
     Gemma 3 12B & \KdecBoneGemmaVram & \KdecBoneGemmaRight & \KdecBoneGemmaConf & \KdecBoneGemmaNotes & \KdecBoneGemmaBriefs \\
     \bottomrule
   \end{tabular}\\[0.5em]
-  {\scriptsize The card has 16,303 MiB, so one model serves all three jobs. Gemma 3 12B: transcript extraction and briefs not run. Llama.cpp against Ollama (Qwen3-14B): Ollama's default window cut a \KdecBthreeSent-token prompt to \KdecBthreeCtx; with the context matched it runs at \KdecBthreeMatched\ tokens a second against \KdecBthreeLlama, and 200 notes in \KdecBthreeMatchedSec\ s against \KdecBthreeLlamaSec. Live red team: \KdecAfiveRefused\ of \KdecAfiveAttacks\ attacks refused, \KdecAfiveAnswered\ answered on a reviewed query.}
+  \parbox{\textwidth}{\scriptsize Only one model fits the 16,303 MiB card, so it serves all three jobs. Gemma 3 12B was stopped after it failed the notes hardship gate. Ollama (same Qwen3-14B file) cut a \KdecBthreeSent-token prompt to \KdecBthreeCtx\ by default; with the context matched it runs at \KdecBthreeMatched\ tokens a second against \KdecBthreeLlama\ on llama.cpp. Live red team: \KdecAfiveRefused\ of \KdecAfiveAttacks\ attacks refused; the other \KdecAfiveAnswered\ answered only the legitimate part.}
 \end{frame}
 
 \end{document}
