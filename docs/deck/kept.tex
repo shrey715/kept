@@ -512,7 +512,7 @@
 
 \begin{frame}
   \kicker{Appendix}\frametitle{What the uplift study found}
-  \source{docs/reports/uplift\_improvement.md}
+  \source{docs/reports/uplift\_improvement.md, best\_hour.md}
   \scriptsize
   \begin{tabular}{@{}L{4.6cm}L{8.7cm}@{}}
     \toprule
@@ -522,7 +522,7 @@
     Kept's choice vs what the bank did & \KoffPolicy\ per 1,000 [\KoffPolicyCI] on a clean outcome; \KoffPolicyOld\ [\KoffPolicyOldCI] on the old label, which counts link payments seen only on the contact row \\
     The bank's recommendation field is look-ahead & it is the last recommendation as of the snapshot, so it encodes how each case ended; not a baseline \\
     The gate's noise understates seed spread & call Qini \KseedLo\ to \KseedHi\ over four seeds of the same recipe \\
-    Timing is the clear win & evening calls reach the right party \KeveningGap\ pts more often [\KeveningGapCI], \KeveningWithin\ pts within the same customer; booking to the best hour is predicted to add \KhourLift\ pts of right-party contact at today's evening volume \\
+    Timing is the clear win & evening calls reach the right party \KeveningGap\ pts more often [\KeveningGapCI], \KeveningWithin\ pts within the same customer; booking to the best hour at today's team volume is predicted to lift right-party contact from \KhourBank\% to \KhourOn\% (\KhourGain\ pts [\KhourGainCI]) against the hours the bank called at, moving \KhourMoved\% of calls (best\_hour.md; the study's simpler model said \KhourLiftStudy\ pts) \\
     \bottomrule
   \end{tabular}
 \end{frame}

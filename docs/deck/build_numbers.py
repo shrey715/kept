@@ -74,7 +74,14 @@ def study_macros() -> dict[str, str]:
         e, w, pl = h["comparable_calls"], h["within_customer"], h["policy"]
         out |= {
             "eveningGap": f"{100 * e['evening_minus_day_rpc']:+.1f}", "eveningGapCI": f"{100 * e['ci'][0]:+.1f} to {100 * e['ci'][1]:+.1f}",
-            "eveningWithin": f"{100 * w['evening_minus_day_rpc']:+.1f}", "hourLift": f"{100 * pl['lift_hourly_capacity']:+.1f}",
+            "eveningWithin": f"{100 * w['evening_minus_day_rpc']:+.1f}", "hourLiftStudy": f"{100 * pl['lift_hourly_capacity']:+.1f}",
+        }  # fmt: skip
+    if (REPORTS / "best_hour.json").exists():  # the booking replay, scripts/best_hour_replay.py: against the bank's own hours, team volume
+        b = load("best_hour.json")
+        tv, g = b["team_volume"], b["team_volume"]["on_minus_bank_pts"]
+        out |= {
+            "hourBank": f"{100 * b['as_historically_booked']['predicted_rpc']:.1f}", "hourOn": f"{100 * tv['on']['predicted_rpc']:.1f}",
+            "hourGain": f"{g[0]:+.1f}", "hourGainCI": f"{g[1]:+.1f} to {g[2]:+.1f}", "hourMoved": f"{100 * tv['share_moved_from_earliest']:.0f}",
         }  # fmt: skip
     return out
 
