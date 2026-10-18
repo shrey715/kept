@@ -183,12 +183,13 @@ def test_the_card_says_when_best_hour_moved_the_call(make_ctx: Any, on: bool) ->
     if on:
         assert (
             local.hour == 19
-            and "Booked 19:00" in (card.why_not_text or "")
-            and "70%" in (card.why_not_text or "")
+            and "Booked 19:00" in (card.booking_text or "")
+            and "70%" in (card.booking_text or "")
+            and "Booked" not in (card.why_not_text or "")
         )
         assert "19:00" in card.headline
     else:
-        assert local.hour < 19 and "Booked" not in (card.why_not_text or "")
+        assert local.hour < 19 and card.booking_text is None
 
 
 def test_booking_is_on_by_default_when_the_model_exists(tmp_path: Any) -> None:

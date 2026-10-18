@@ -267,8 +267,6 @@ class KeptEngine:
         slot, checks, booked_note = self._book(ctx, best.action, slot, checks, X)
         proposal = self._proposal(ctx, best.action, tier, slot, sizing if best.action in _SIZED else None)
         why_not_line = why_not(best, ranked)
-        if booked_note:  # best-hour booking moved the call: say so, with the model's numbers
-            why_not_line = f"{why_not_line} {booked_note}" if why_not_line else booked_note
         return NBACard(
             case_id=ctx.case_id,
             golden_customer_id=ctx.golden_customer_id,
@@ -283,6 +281,7 @@ class KeptEngine:
             similar_cases_text=similar_cases(fv, best.action),
             legacy_text=legacy,
             why_not_text=why_not_line,
+            booking_text=booked_note,  # best-hour booking moved the call: say so, with the model's numbers
             checks=checks.get(best.action, ()),
             hardship_banner=self._banner(ctx),
         )
