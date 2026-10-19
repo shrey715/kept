@@ -51,10 +51,11 @@ read as "open"), a deterministic check fixes it without retuning a prompt. Score
 
 ## 9 · Explainability
 **Say:** the promise model's reliability curve sits near the diagonal; the case page shows every factor, both ways.
+**If asked "0.611 or 0.625?":** the headline is 0.625, the six-feature model against the bank's 0.702 on the same 12,820 promises (`evidence.md` §6). 0.611 is the calibrated model on its own later window (50,653 promises due after 15 Jul), which is why the slide shows only its Brier score.
 **How do you know?** `data/exports/reports/model_card.json`, from `scripts/model_card.py`, on promises the model never saw.
 
 ## 10 · Decisions
-**Say:** each choice, the alternative we rejected, and the measured number that decided it. Uplift finds 122 extra payers per 1,000 contacts in the top 30% against 81 for a propensity score. Local models are not cheaper: hosted Haiku 5.5 would cost less than our two GPUs, so the reason is privacy and regulation. Certified metrics and the router take the Ask from 36 to 81 of 93 right; the drafts and judge add one more, and confident wrong answers fall from 33 to 7. Two rows are open: hybrid policy search loses to dense-only (MRR 0.640 against 0.747), and we have not switched yet.
+**Say:** each choice, the alternative we rejected, and the measured number that decided it. On the clean outcome, the live uplift model finds 87 extra payers per 1,000 contacts in its top 30% against 64 for a response model (+23, 95% CI +5 to +39), but it is behind over the whole ranking, so no targeting gain is claimed. Local models are not cheaper: hosted Haiku 5.5 would cost less than our two GPUs, so the reason is privacy and regulation. Certified metrics and the router take the Ask from 36 to 81 of 93 right; the drafts and judge add one more, and confident wrong answers fall from 33 to 7. Two rows are open: hybrid policy search loses to dense-only (MRR 0.640 against 0.747), and we have not switched yet.
 **If asked "why local models only?":** customer words never leave the machine, which is what OSFI B-10 and E-23, PIPEDA and Quebec Law 25 ask of a third party; a quota can't stop a demo or a collector mid-shift (the free tier covers 500 requests a day, one night is 1,647 extractions). Not cost: `docs/reports/decisions.md` §B4.
 **If asked "why Qwen3.8-27B, and why llama.cpp?":** we measured. The 12B model kept missing conventions; tracing showed
 Ollama ran a 4k window under a 9k-token prompt. llama.cpp sets the window explicitly and runs two requests at once;
