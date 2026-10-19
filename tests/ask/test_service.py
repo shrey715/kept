@@ -161,6 +161,17 @@ def test_nearest_question_needs_shared_words(metrics) -> None:  # type: ignore[n
     assert nearest_question("draft metric please", {"d": metrics["draft_metric"]}) is None  # uncertified
 
 
+def test_every_certified_query_exposes_n_for_analysts() -> None:
+    import re
+
+    from kept.ask.certified import CERTIFIED_QUERIES
+    from kept.ask.templates import TEMPLATES
+
+    queries = [*CERTIFIED_QUERIES.values(), *(q for _, q in TEMPLATES.values())]
+    missing = [q.metric_id for q in queries if not re.search(r"\bAS n\b", q.sql_template, re.I)]
+    assert missing == []  # suppress_small_groups needs an `n` column or analysts are refused
+
+
 _FIVE_WAYS = [GOOD_SQL, *(f"SELECT count(*) + {k} AS n FROM silver.collections_cases" for k in range(1, 5))]
 
 

@@ -194,7 +194,7 @@ WHERE 1=1 {where} {group_by}""",
         ),
         CertifiedQuery(
             "open_cases",
-            """SELECT {group_by_select} count(*) AS open_cases
+            """SELECT {group_by_select} count(*) AS open_cases, count(*) AS n
 FROM silver.collections_cases WHERE outcome IS NULL {where} {group_by}""",
             (),
             _CASE_COLS,
@@ -213,7 +213,7 @@ FROM silver.collections_cases WHERE outcome IS NULL {where} {group_by}""",
         ),
         CertifiedQuery(
             "overdraft_past_due",
-            """SELECT {group_by_select} count(*) AS accounts
+            """SELECT {group_by_select} count(*) AS accounts, count(*) AS n
 FROM silver.deposit_accounts WHERE overdraft_dpd >= 1 {where} {group_by}""",
             (),
             frozenset({"product_type", "overdraft_dpd_bucket"}),
