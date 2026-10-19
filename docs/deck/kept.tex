@@ -220,7 +220,7 @@
         \foreach \px/\py in \Kreldots \fill[maple] (\px,\py) circle (1.4);
         \node[font=\tiny, text=muted] at (40,-11) {predicted chance kept};
       \end{tikzpicture}\\
-      {\scriptsize AUC \KpromiseAuc, Brier \KpromiseBrier\ on \KpromiseRows\ promises it never saw (isotonic calibration). Dashed: perfect.}
+      {\scriptsize Brier \KpromiseBrier\ on \KpromiseRows\ promises it never saw (logistic calibration on the last 14 days). Dashed: perfect.}
     \end{column}
     \begin{column}{0.48\textwidth}
       \textbf{\small What drives it (share of |TreeSHAP|)}\\[0.4em]
@@ -265,7 +265,7 @@
   \begin{columns}[T]
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A bigger local model}Gemma 4 26B on a 16 GB GPU: 24 s a note against 3 s, runaway replies, no better on held-out notes. Rejected; the dense Qwen3.8-27B fits and is faster.}\end{column}
     \begin{column}{0.31\textwidth}\kcard{\cardtitle{A tuned uplift model}40 candidates tuned on a validation window; the best lost to the champion on held-out decisions (Qini 0.0029 vs 0.0073). X- and DR-learners won some arms and lost others. The gate kept the champion. Also: the bank's recommendation field is look-ahead, not a baseline; the gate's noise understated seed spread (call Qini \KseedLo\ to \KseedHi).}\end{column}
-    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC 0.63. A wider model then matched the bank's (\KwideAuc\ vs \KbankAuc); averaged with it, \KblendAuc.}\end{column}
+    \begin{column}{0.31\textwidth}\kcard{\cardtitle{A leaky feature}amount\_ratio made AUC 0.92: it encoded the outcome. Dropped; honest AUC \KdecBnineSix. A wider model then matched the bank's (\KwideAuc\ vs \KbankAuc); averaged with it, \KblendAuc.}\end{column}
   \end{columns}
   \vspace{0.8em}
   {\small The rule: a change ships only if it beats what's live by more than the noise, on data it never saw.}

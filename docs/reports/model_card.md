@@ -4,7 +4,7 @@ Written by `scripts/model_card.py` on 2026-10-18 from held-out data the models n
 
 ## Promise model: will this promise be kept?
 
-LightGBM on six point-in-time features, isotonic-calibrated; trained on promises due before 2026-07-15, tested on the 50,653 due after.
+LightGBM on six point-in-time features, calibrated by a logistic map on the last 14 days; trained on promises due before 2026-07-15, tested on the 50,653 due after.
 
 | Measure | Value |
 |---|---:|
@@ -12,7 +12,7 @@ LightGBM on six point-in-time features, isotonic-calibrated; trained on promises
 | Brier score | 0.220 |
 | Kept rate in the test window | 35.4% |
 
-Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728, a gain of 2.5 AUC points [1.9, 3.3] on the same promises (`docs/reports/evidence.md` §6). A first version scored 0.92 because one feature, `amount_ratio`, encoded the outcome; it was removed. Read as published, the bank's score overstates the kept rate by about 24 points; recalibrated, it is as well calibrated as ours, so calibration is not our edge: ours exists when the promise is made, about 9 days before the bank's score, and adds to it (`evidence.md` §7).
+This window's AUC is the calibrated model on its own later promises; the headline 0.625 is the same six features on the 12,820 promises the bank scored before their outcome. Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728, a gain of 2.5 AUC points [1.9, 3.3] on the same promises (`docs/reports/evidence.md` §6). A first version scored 0.92 because one feature, `amount_ratio`, encoded the outcome; it was removed. Read as published, the bank's score overstates the kept rate by about 24 points; recalibrated, it is as well calibrated as ours, so calibration is not our edge: ours exists when the promise is made, about 9 days before the bank's score, and adds to it (`evidence.md` §7).
 
 **Calibration (predicted against observed, by score bin)**
 

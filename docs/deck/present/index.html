@@ -251,12 +251,12 @@ table.proof td{padding:9px 12px}table.proof td.mono{font-size:clamp(13px,.95vw,1
   <div class="eyebrow">Model choice · will this promise be kept?</div>
   <h2>A small, honest model that knows how sure it is.</h2>
   <div class="grid stagger" style="grid-template-columns:1fr 1fr 1fr;margin-top:3.5vh;align-items:start">
-    <div class="card"><h3>Leakage found and removed</h3><p class="small">The first model scored AUC 0.92. One feature, amount_ratio, encoded the outcome. Dropped: <b>honest AUC 0.63</b>.</p></div>
-    <div class="card"><h3>Calibrated, not just ranked</h3><p class="small">LightGBM on six point-in-time features, then isotonic calibration on the last 60 days, so "60%" means about 60%.</p></div>
+    <div class="card"><h3>Leakage found and removed</h3><p class="small">The first model scored AUC 0.92. One feature, amount_ratio, encoded the outcome. Dropped: <b>honest AUC 0.625</b>, against the bank's 0.702.</p></div>
+    <div class="card"><h3>Calibrated, not just ranked</h3><p class="small">LightGBM on six point-in-time features, then a logistic calibration on the last 14 days, so "60%" means about 60%.</p></div>
     <div class="card hot"><h3>Matched, then better together</h3><p class="small">A wider model on the bank's kinds of inputs: <b>0.697</b> vs the bank's <b>0.702</b> (gap -0.5, 95% CI -1.9 to +1.0). Averaged with the bank's score: <b>0.764</b>, +6.1 points (CI 5.1–6.9).</p></div>
   </div>
   <div class="grid stagger" style="grid-template-columns:1fr 1fr;margin-top:14px">
-    <div class="card"><h3>Reliability on 50,653 unseen promises</h3><svg id="rel" viewBox="0 0 300 200" style="width:100%;max-height:30vh"></svg><p class="small muted">AUC 0.611 · Brier 0.220 · dashed = perfect calibration</p></div>
+    <div class="card"><h3>Reliability on 50,653 unseen promises</h3><svg id="rel" viewBox="0 0 300 200" style="width:100%;max-height:30vh"></svg><p class="small muted">Brier 0.220 · dashed = perfect calibration</p></div>
     <div class="card"><h3>What drives it (share of |TreeSHAP|)</h3><div id="imp" style="margin-top:12px"></div></div>
   </div>
   <div class="foot"><span><b>Kept</b> · evidence.md §3, §6, §8 · model_card.json</span><span>7</span></div>

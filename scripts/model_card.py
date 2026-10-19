@@ -176,7 +176,7 @@ def to_markdown(card: dict) -> str:  # type: ignore[type-arg]
         "",
         "## Promise model: will this promise be kept?",
         "",
-        "LightGBM on six point-in-time features, isotonic-calibrated; trained on promises due before "
+        "LightGBM on six point-in-time features, calibrated by a logistic map on the last 14 days; trained on promises due before "
         f"{p['cutoff']}, tested on the {p['rows_test']:,} due after.",
         "",
         "| Measure | Value |",
@@ -185,6 +185,8 @@ def to_markdown(card: dict) -> str:  # type: ignore[type-arg]
         f"| Brier score | {p['brier']:.3f} |",
         f"| Kept rate in the test window | {p['kept_rate']:.1%} |",
         "",
+        "This window's AUC is the calibrated model on its own later promises; the headline 0.625 is the same six features on the "
+        "12,820 promises the bank scored before their outcome. "
         "Alone it ranks promises less well than the bank's own score (AUC 0.702); combined with it, 0.728, a gain of 2.5 AUC points [1.9, 3.3] on the same promises "
         "(`docs/reports/evidence.md` §6). A first version scored 0.92 because one feature, `amount_ratio`, encoded the "
         "outcome; it was removed. Read as published, the bank's score overstates the kept rate by about 24 points; recalibrated, "
